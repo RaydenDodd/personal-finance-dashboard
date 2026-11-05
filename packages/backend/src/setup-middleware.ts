@@ -163,6 +163,7 @@ export function setupMiddleware(app: Express) {
       '10mb': [
         `${API_PREFIX}/personal-finance/import/preview`,
         `${API_PREFIX}/personal-finance/import/commit`,
+        `${API_PREFIX}/personal-finance/bank-history/import`,
         `${API_PREFIX}/import/csv/parse`,
         `${API_PREFIX}/import/csv/extract-unique-values`,
         `${API_PREFIX}/import/csv/detect-duplicates`,
