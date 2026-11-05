@@ -176,3 +176,11 @@ __pycache__/
 
 # Cached pg_dump of the migrated e2e template DB (packages/backend/src/tests/setup-e2e-tests.sh)
 packages/backend/.e2e-template-cache/
+
+# Private finance configuration, imports, backups, and browser artifacts
+.env.pi.local
+.env.pi.local.tmp
+private/
+.preview/
+playwright-report/
+test-results/

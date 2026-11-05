@@ -1,3 +1,5 @@
+> **Personal Finance Dashboard fork:** preserves MoneyMatter's original interface and features, adding custom net-worth reporting categories, dated balance history imports, and contribution tracking. See [customizations and historical import](docs/PERSONAL-FINANCE.md) and [Raspberry Pi deployment](deploy/README.md). Upstream documentation follows below. Licensed under AGPL-3.0-only.
+
 <div align="center">
 
 <img src="packages/landing/public/img/logo.svg" width="72" alt="MoneyMatter logo">

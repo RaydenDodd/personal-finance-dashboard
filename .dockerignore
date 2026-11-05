@@ -43,3 +43,11 @@ coverage
 .dockerignore
 Dockerfile
 docker-compose*.yml
+
+# Financial records and local deployment secrets never enter build context
+.env.pi.local
+.env.pi.local.tmp
+private/
+.preview/
+playwright-report/
+test-results/
