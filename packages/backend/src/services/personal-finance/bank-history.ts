@@ -65,7 +65,7 @@ export async function getBankHistoryContext(userId: number): Promise<BankHistory
   const [dashboard, nativeStart] = await Promise.all([
     getFinanceDashboard(userId, { granularity: 'daily', mode: 'personal' }),
     read<{ liveFrom: string | null }>(
-      `SELECT MIN(("createdAt" AT TIME ZONE 'America/New_York')::date)::text AS "liveFrom" FROM "Accounts" WHERE "userId"=:userId AND "bankDataProviderConnectionId" IS NOT NULL`,
+      `SELECT MIN((c."createdAt" AT TIME ZONE 'America/New_York')::date)::text AS "liveFrom" FROM "BankDataProviderConnections" c WHERE c."userId"=:userId AND EXISTS (SELECT 1 FROM "Accounts" a WHERE a."bankDataProviderConnectionId"=c.id AND a."userId"=:userId)`,
       { userId },
     ),
   ]);
