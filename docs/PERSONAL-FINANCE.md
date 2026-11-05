@@ -21,6 +21,15 @@ The normalizer is intentionally specific to the existing workbook layout: record
 
 Upload the normalized JSON in the Personal finance import panel, map each historical account to the appropriate reporting account, review the preview, then import. Blank cells remain missing, while explicit numeric zero remains a real balance. Snapshot dates use the actual Sheets date serial, including its year, even when a year heading disagrees. Stable source-cell identifiers make repeated imports idempotent. Corrected values retain previous revisions.
 
+For the existing normalized export, an operator can also use the private CLI over an SSH tunnel. Keep `{ "email": "...", "password": "..." }` in ignored `private/owner-credentials.json`. The preparation command creates empty reporting account metadata and saves an exact private server preview; it imports no balances. Review that file before applying:
+
+```powershell
+node scripts/import-networth-history.mjs --prepare
+node scripts/import-networth-history.mjs --apply
+```
+
+The CLI never prints financial values, passwords, session cookies, or response bodies. Repeating it uses existing name/currency mappings and previews duplicates. For renamed or ambiguous account mappings, use the application's mapping interface instead.
+
 Some historical rows combine multiple accounts or change institutions over time. Preserve those rows as historical aggregates until dated evidence supports a split. Do not simultaneously include a combined historical row and its underlying accounts for the same valuation period. Renaming a historical row alone cannot reconstruct the original component balances.
 
 The initial read identified 16 account rows, 618 balance observations and 42 recorded dates from 2022-06-15 through 2026-09-01. No real balances or transactions are in this repository. One year-heading discrepancy is flagged in the private import preview.
@@ -40,5 +49,7 @@ Manual mode is fully independent of paid connectors. SimpleFIN remains upstream'
 ## Development and deployment
 
 Use the Node version pinned in `.nvmrc` when possible. Run `npm ci` at the repository root. See [the Pi deployment guide](../deploy/README.md) for the private ARM64 Compose project, local backups, restore and authenticated MCP configuration. The original [self-hosting guide](../self-hosting/README.md) remains available. Docker data and secrets must stay outside Git and Docker build contexts.
+
+On Windows, upstream's installation hooks need Git Bash. Before `npm.cmd ci`, set `$env:npm_config_script_shell = 'C:\Program Files\Git\bin\bash.exe'`. Once the Pi stack is running, `powershell -ExecutionPolicy Bypass -File deploy/start-local-dev.ps1` starts the frontend on `http://localhost:8110` and forwards the existing Pi API through SSH. Stop the dev command to close the tunnel it created. The Pi's `ALLOWED_ORIGINS` must include `http://localhost:8110`. Backend changes can use upstream's Docker development environment or rebuild just the isolated Pi backend after tests.
 
 For the standalone spreadsheet parser, run `node --test scripts/networth-sheet.test.mjs`. For the application, use upstream backend Jest unit/integration tests, frontend Vitest, TypeScript checks and a production build. Synthetic data must be used for screenshots and test fixtures. Integration tests need their own disposable PostgreSQL/Redis services; do not point them at production databases.

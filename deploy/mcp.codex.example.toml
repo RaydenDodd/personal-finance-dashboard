@@ -1,0 +1,6 @@
+# Merge into your Codex configuration, then use its MCP OAuth login flow.
+# An SSH tunnel must be active; request only finance:read and profile:read.
+[mcp_servers.moneymatter]
+url = "http://localhost:8095/mcp"
+startup_timeout_sec = 30
+scopes = ["finance:read", "profile:read"]

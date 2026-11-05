@@ -1,0 +1,162 @@
+# Keeps MoneyMatter's PostgreSQL/Redis/backend/nginx architecture. No database,
+# Redis, or backend port is published. Default access is an SSH tunnel.
+name: personal-finance-dashboard
+
+x-logging: &logging
+  driver: json-file
+  options: { max-size: '10m', max-file: '3' }
+
+services:
+  backend:
+    image: personal-finance-dashboard-backend:local
+    build:
+      context: .
+      dockerfile: self-hosting/backend/Dockerfile
+    restart: unless-stopped
+    env_file: .env.pi.local
+    environment:
+      IS_SELF_HOST: 'true'
+      SYSTEM_DEMO_DISABLED: 'true'
+      SYSTEM_MAX_SIGNUPS_ALLOWED: '1'
+      MCP_READ_ONLY: 'true'
+      ATTACHMENTS_DIR: /app/packages/backend/data/attachments
+      NODE_OPTIONS: --max-old-space-size=768
+      DB_QUERY_LOGGING: 'false'
+    volumes: [attachments:/app/packages/backend/data/attachments]
+    depends_on:
+      db: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      currency-rates-api: { condition: service_healthy }
+    healthcheck:
+      test: [CMD, wget, -q, --spider, 'http://127.0.0.1:8081/health']
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+    mem_limit: 1g
+    cpus: 1.5
+    logging: *logging
+    networks: [finance]
+
+  frontend:
+    image: personal-finance-dashboard-frontend:local
+    build:
+      context: .
+      dockerfile: self-hosting/frontend/Dockerfile
+      args:
+        NODE_BUILD_HEAP_MB: ${NODE_BUILD_HEAP_MB:-2048}
+    restart: unless-stopped
+    ports: ['${FINANCE_BIND_IP:-127.0.0.1}:${FINANCE_PORT:-8095}:8080']
+    environment:
+      IS_SELF_HOST: 'true'
+      SKIP_LANDING: 'true'
+      LISTEN_PORT: '8080'
+      API_HTTP: ''
+      API_VER: /api/v1
+      BACKEND_URL: http://backend:8081
+      MCP_BASE_URL: ${MCP_BASE_URL:-http://localhost:8095}
+    volumes:
+      - ./deploy/private-network.conf:/etc/nginx/includes/private-network.conf:ro
+    depends_on:
+      backend: { condition: service_healthy }
+    healthcheck:
+      test: [CMD, wget, -q, --spider, 'http://127.0.0.1:8080/sign-in']
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    mem_limit: 128m
+    logging: *logging
+    networks: [finance]
+
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${APPLICATION_DB_USERNAME:-finance}
+      POSTGRES_PASSWORD: ${APPLICATION_DB_PASSWORD:?Run deploy/initialize.sh first}
+      POSTGRES_DB: ${APPLICATION_DB_DATABASE:-finance}
+    command: [postgres, -c, shared_buffers=64MB, -c, max_connections=40]
+    volumes: [database:/var/lib/postgresql/data]
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    mem_limit: 384m
+    logging: *logging
+    networks: [finance]
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: [redis-server, --maxmemory, 64mb, --maxmemory-policy, allkeys-lru, --appendonly, 'yes']
+    volumes: [redis:/data]
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    mem_limit: 128m
+    logging: *logging
+    networks: [finance]
+
+  currency-rates-api:
+    image: letehaha/currency-rates-api:latest
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: 'sqlite:/app/data/currency_rates.db?mode=rwc'
+      HOST: 0.0.0.0
+      PORT: '8080'
+      DEFAULT_API_BASE: USD
+      SEED_ON_STARTUP: 'true'
+      SYNC_ON_STARTUP: 'true'
+      SYNC_CRON: '0 0 8,16 * * *'
+      RUST_LOG: warn
+    volumes: [exchange-rates:/app/data]
+    healthcheck:
+      test: [CMD, wget, -q, --spider, 'http://127.0.0.1:8080/health']
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    mem_limit: 128m
+    logging: *logging
+    networks: [finance]
+
+  backup:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    user: '${FINANCE_UID:-1000}:${FINANCE_GID:-1000}'
+    environment:
+      PGHOST: db
+      PGUSER: ${APPLICATION_DB_USERNAME:-finance}
+      PGPASSWORD: ${APPLICATION_DB_PASSWORD:?Run deploy/initialize.sh first}
+      PGDATABASE: ${APPLICATION_DB_DATABASE:-finance}
+      BACKUP_RETENTION_DAYS: '30'
+    entrypoint: [/bin/sh, /scripts/backup-loop.sh]
+    volumes:
+      - ./deploy/backup-loop.sh:/scripts/backup-loop.sh:ro
+      - ./private/backups:/backups
+    depends_on:
+      db: { condition: service_healthy }
+    healthcheck:
+      test: [CMD-SHELL, 'test -n "$$(find /backups -name "finance-*.dump" -mmin -1500 -print -quit)"']
+      interval: 1h
+      timeout: 5s
+      retries: 1
+      start_period: 5m
+    mem_limit: 128m
+    logging: *logging
+    networks: [finance]
+
+networks:
+  finance:
+    driver: bridge
+    ipam:
+      config: [{ subnet: 172.29.31.0/24 }]
+
+volumes:
+  database:
+  redis:
+  exchange-rates:
+  attachments:

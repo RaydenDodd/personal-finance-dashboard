@@ -1,0 +1,8 @@
+{
+  "servers": {
+    "moneymatter": {
+      "type": "http",
+      "url": "http://localhost:8095/mcp"
+    }
+  }
+}
