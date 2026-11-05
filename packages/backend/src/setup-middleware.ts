@@ -161,6 +161,8 @@ export function setupMiddleware(app: Express) {
         OFX_FULL_PATHS.execute,
       ],
       '10mb': [
+        `${API_PREFIX}/personal-finance/import/preview`,
+        `${API_PREFIX}/personal-finance/import/commit`,
         `${API_PREFIX}/import/csv/parse`,
         `${API_PREFIX}/import/csv/extract-unique-values`,
         `${API_PREFIX}/import/csv/detect-duplicates`,
@@ -218,7 +220,8 @@ export function setupMiddleware(app: Express) {
     express.urlencoded({ extended: false })(req, res, next);
   });
   if (process.env.NODE_ENV !== 'test') {
-    morgan.token<Request>('url', (req) => req.originalUrl.replace(/(\/reset-password\/)[^/?]+/, '$1[redacted]'));
+    // Query strings can contain OAuth codes and financial filter values.
+    morgan.token<Request>('url', (req) => req.path.replace(/(\/reset-password\/)[^/?]+/, '$1[redacted]'));
     app.use(morgan('dev'));
   }
   app.use(sessionMiddleware);

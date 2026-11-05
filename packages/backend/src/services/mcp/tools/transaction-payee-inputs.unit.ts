@@ -1,5 +1,5 @@
 import { Money } from '@common/types/money';
-import { beforeEach, describe, expect, it, jest } from '@jest/globals';
+import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 
@@ -39,11 +39,15 @@ const callTool = async ({ register, args }: { register: (server: McpServer) => v
 };
 
 describe('MCP transaction tools forward payeeId', () => {
+  let previousReadOnly: string | undefined;
   beforeEach(() => {
+    previousReadOnly = process.env.MCP_READ_ONLY;
+    process.env.MCP_READ_ONLY = 'false';
     jest.mocked(createTransaction).mockRejectedValue(new Error('stop'));
     jest.mocked(updateTransaction).mockRejectedValue(new Error('stop'));
     jest.mocked(bulkUpdate).mockRejectedValue(new Error('stop'));
   });
+  afterEach(() => { if (previousReadOnly === undefined) delete process.env.MCP_READ_ONLY; else process.env.MCP_READ_ONLY = previousReadOnly; });
 
   it.each([PAYEE_ID, null])('update_transaction forwards payeeId=%s', async (payeeId) => {
     await callTool({ register: registerUpdateTransaction, args: { id: ID, payeeId } });

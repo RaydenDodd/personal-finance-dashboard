@@ -61,9 +61,6 @@ export async function writeBankBalanceWithHistory({
     accountType: account.type,
     connectionId: account.bankDataProviderConnectionId ?? null,
     currency: account.currencyCode,
-    previousCents,
-    newCents,
-    refCents: refBalance.toCents(),
     signFlipped,
     newIsNegative: newCents < 0,
   });

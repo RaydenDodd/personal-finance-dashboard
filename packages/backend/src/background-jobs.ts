@@ -1,4 +1,5 @@
 import { logger } from '@js/utils/logger';
+import { personalFinanceMonthlyJob } from './crons/personal-finance-monthly';
 import { shutdownPostHog } from '@js/utils/posthog';
 import { accountSyncWorker } from '@services/bank-data-providers/sync/account-sync-queue';
 
@@ -49,6 +50,7 @@ const prodOnlyCrons = [
 ];
 
 export function initializeBackgroundJobs() {
+  if (process.env.NODE_ENV !== 'test') personalFinanceMonthlyJob.start();
   const isOfflineMode = process.env.OFFLINE_MODE === 'true';
   const isTestMode = process.env.NODE_ENV === 'test';
 
@@ -70,6 +72,7 @@ export function initializeBackgroundJobs() {
 }
 
 export async function shutdownBackgroundJobs() {
+  personalFinanceMonthlyJob.stop();
   for (const cron of [...allEnvCrons, ...prodOnlyCrons]) cron.stopCron();
   loadCurrencyRatesJob.stop();
   await accountSyncWorker.close();

@@ -43,6 +43,7 @@ import { registerDeleteTransactionGroup } from './tools/delete-transaction-group
 import { registerDetectSubscriptionCandidates } from './tools/detect-subscription-candidates';
 import { registerDismissSubscriptionCandidate } from './tools/dismiss-subscription-candidate';
 import { registerGetAccounts } from './tools/get-accounts';
+import { registerGetPersonalNetWorth } from './tools/get-personal-net-worth';
 import { registerGetBalanceHistory } from './tools/get-balance-history';
 import { registerGetCashFlow } from './tools/get-cash-flow';
 import { registerGetCategories } from './tools/get-categories';
@@ -158,6 +159,7 @@ export function createMcpServer(): McpServer {
   // Profile & accounts
   registerGetUserProfile(server);
   registerGetAccounts(server);
+  registerGetPersonalNetWorth(server);
   registerAdjustAccountBalance(server);
   registerArchiveAccount(server);
 

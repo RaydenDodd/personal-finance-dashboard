@@ -1,5 +1,5 @@
 import { type Entitlements, FEATURES, TRANSACTION_TRANSFER_NATURE, USER_ROLES } from '@bt/shared/types';
-import { describe, expect, it, jest } from '@jest/globals';
+import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals';
 import { getEntitlementsByUserId } from '@services/entitlements/resolve-entitlements.service';
 
 import { assertOriginalCurrencyArgs, requireFeature, requireScope } from './helpers';
@@ -31,6 +31,15 @@ const authInfoFor = ({ role, scopes, readOnly = false }: { role: string; scopes:
 });
 
 describe('requireScope', () => {
+  let previousReadOnly: string | undefined;
+  beforeEach(() => { previousReadOnly = process.env.MCP_READ_ONLY; process.env.MCP_READ_ONLY = 'false'; });
+  afterEach(() => { if (previousReadOnly === undefined) delete process.env.MCP_READ_ONLY; else process.env.MCP_READ_ONLY = previousReadOnly; });
+  it('defaults MCP writes to disabled even for fully authorized tokens', () => {
+    delete process.env.MCP_READ_ONLY;
+    const extra = authInfoFor({ role: USER_ROLES.common, scopes: ['finance:write', 'finance:delete'] });
+    expect(() => requireScope({ extra, scope: 'finance:write' })).toThrow(/disabled by the server/);
+    expect(() => requireScope({ extra, scope: 'finance:delete' })).toThrow(/disabled by the server/);
+  });
   it('blocks demo users from write tools even when the scope is granted', () => {
     const extra = authInfoFor({ role: USER_ROLES.demo, scopes: ['finance:read', 'finance:write', 'finance:delete'] });
 

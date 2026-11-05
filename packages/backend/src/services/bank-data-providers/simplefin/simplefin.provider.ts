@@ -946,6 +946,14 @@ export class SimplefinProvider extends BaseBankDataProvider {
       const accountSet = await apiClient.getAccounts(params);
       this.surfaceAccountSetErrors({ accountSet, quietBridgeWarnings });
       await this.resetAuthFailures(connectionId);
+      // Preserve the bridge's actual balance-date for explicitly linked custom
+      // reporting accounts. Never synthesize historical valuations from transactions.
+      try {
+        const { captureSimplefinValuations } = await import('@services/personal-finance');
+        await captureSimplefinValuations(connectionId, accountSet.accounts);
+      } catch {
+        logger.error('Personal finance provider valuation capture failed');
+      }
       return accountSet;
     } catch (error) {
       // Rate-limit (TooManyRequests) is NOT a ForbiddenError, so isAuthError

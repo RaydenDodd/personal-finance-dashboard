@@ -205,7 +205,7 @@ if (isPerfDebugEnabled) {
 }
 
 if (process.env.NODE_ENV === 'development') {
-  console.log('DBConfig', DBConfig);
+  console.log('DBConfig', { ...DBConfig, password: '[redacted]' });
 }
 
 connection.sequelize = sequelize;

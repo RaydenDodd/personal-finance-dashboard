@@ -41,6 +41,7 @@ import mcpRoutes from './routes/mcp.route';
 import notificationsRoutes from './routes/notifications.route';
 import { setupOAuthMetadataRoutes } from './routes/oauth-metadata.route';
 import payeesRoutes from './routes/payees.route';
+import personalFinanceRoutes from './routes/personal-finance.route';
 import resourceLeasesRoutes from './routes/resource-leases.route';
 import shareRoutes from './routes/share.route';
 import sseRoutes from './routes/sse.route';
@@ -175,6 +176,7 @@ export function setupRoutes(app: Express) {
 
   app.use(`${API_PREFIX}/user`, userRoutes);
   app.use(`${API_PREFIX}/accounts`, accountsRoutes);
+  app.use(`${API_PREFIX}/personal-finance`, personalFinanceRoutes);
   app.use(`${API_PREFIX}/transactions`, transactionsRoutes);
   app.use(`${API_PREFIX}/attachments`, attachmentsRoutes);
   app.use(`${API_PREFIX}/background-jobs`, backgroundJobsRoutes);

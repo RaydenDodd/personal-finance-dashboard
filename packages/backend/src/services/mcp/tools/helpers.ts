@@ -33,6 +33,9 @@ export function requireScope({
   extra: { authInfo?: { scopes?: string[]; extra?: { role?: string; readOnly?: boolean } } };
   scope: string;
 }): void {
+  if (process.env.MCP_READ_ONLY !== 'false') {
+    throw new Error('MCP write access is disabled by the server. Use the application for manual changes.');
+  }
   if (extra?.authInfo?.extra?.role === USER_ROLES.demo) {
     throw new Error('This action is not available in demo mode. Sign up for a free account to unlock all features.');
   }
