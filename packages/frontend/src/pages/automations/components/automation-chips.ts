@@ -123,6 +123,8 @@ const NOTE_ACTION_LABEL_KEY: Record<Extract<AutomationAction, { type: 'set_note'
 
 const buildActionChips = ({ action }: { action: AutomationAction }): AutomationChip[] => {
   switch (action.type) {
+    case 'mark_transfer':
+      return [{ kind: 'transactionType', labelKey: 'automations.actions.mark_transfer', tone: 'neutral' }];
     case 'set_category':
       return [
         {

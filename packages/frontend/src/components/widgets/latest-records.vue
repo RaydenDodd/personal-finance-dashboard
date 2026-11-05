@@ -38,14 +38,23 @@ import { useIncludePlannedConfig, useWidgetConfigFlag } from './use-include-plan
 // Days ahead threshold for "upcoming" payments shown in the widget.
 const UPCOMING_DAYS_WINDOW = 3;
 const MAX_DISPLAY = 20;
+const props = defineProps<{ selectedPeriod?: { from: Date; to: Date } }>();
 
 const { isAppInitialized } = storeToRefs(useRootStore());
 const { formatAmountByCurrencyCode, formatBaseCurrency } = useFormatCurrency();
 const widgetConfigRef = inject<Ref<DashboardWidgetConfig> | null>('dashboard-widget-config', null);
 
 const includeScheduled = computed(() => readLatestRecordsIncludeScheduled({ widgetConfig: widgetConfigRef?.value }));
+const isCurrentPeriod = computed(
+  () =>
+    !props.selectedPeriod ||
+    (props.selectedPeriod.from.getTime() <= Date.now() && props.selectedPeriod.to.getTime() >= Date.now()),
+);
 const exclusions = computed(() => readLatestRecordsExclusions({ widgetConfig: widgetConfigRef?.value }));
 const transferNatures = computed(() => buildLatestRecordsTransferNatures(exclusions.value));
+const selectedPeriodKey = computed(() =>
+  props.selectedPeriod ? `${props.selectedPeriod.from.getTime()}:${props.selectedPeriod.to.getTime()}` : 'latest',
+);
 const excludeBalanceAdjustments = computed(() => exclusions.value.excludeBalanceAdjustments);
 const { includePlanned } = useIncludePlannedConfig();
 const tagsVariant = computed(() => readLatestRecordsTagsVariant({ widgetConfig: widgetConfigRef?.value }));
@@ -55,7 +64,13 @@ const { isOn: showAccount } = useWidgetConfigFlag({
 });
 
 const { data: transactions, isFetching: isTxFetching } = useQuery({
-  queryKey: [...VUE_QUERY_CACHE_KEYS.widgetLatestRecords, transferNatures, excludeBalanceAdjustments, includePlanned],
+  queryKey: [
+    ...VUE_QUERY_CACHE_KEYS.widgetLatestRecords,
+    transferNatures,
+    excludeBalanceAdjustments,
+    includePlanned,
+    selectedPeriodKey,
+  ],
   queryFn: () =>
     // `to` keeps future-dated plans out of the page, so a backlog of them can't fill it
     // and blank the widget. Over-fetch accounts for deduplication and grouping.
@@ -68,7 +83,8 @@ const { data: transactions, isFetching: isTxFetching } = useQuery({
       transferNatures: transferNatures.value,
       excludeBalanceAdjustments: excludeBalanceAdjustments.value || undefined,
       ...(includePlanned.value ? {} : { isPlanned: false }),
-      to: new Date().toISOString(),
+      ...(props.selectedPeriod ? { from: props.selectedPeriod.from.toISOString() } : {}),
+      to: new Date(Math.min(props.selectedPeriod?.to.getTime() ?? Infinity, Date.now())).toISOString(),
     }),
   staleTime: Infinity,
   placeholderData: [],
@@ -78,12 +94,12 @@ const { data: transactions, isFetching: isTxFetching } = useQuery({
 // Fetched in parallel with transactions; only active when the toggle is on.
 const { data: subscriptions, isFetching: isScheduledFetching } = useSubscriptionsList({
   filter: { isActive: true },
-  enabled: computed(() => isAppInitialized.value && includeScheduled.value),
+  enabled: computed(() => isAppInitialized.value && includeScheduled.value && isCurrentPeriod.value),
 });
 
 // Subscriptions whose current period is overdue or due within the next UPCOMING_DAYS_WINDOW days.
 const scheduledItems = computed<SubscriptionListItem[]>(() => {
-  if (!includeScheduled.value || !subscriptions.value) return [];
+  if (!includeScheduled.value || !isCurrentPeriod.value || !subscriptions.value) return [];
   const today = new Date();
   return subscriptions.value.filter((sub) => {
     const period = sub.currentPeriod;

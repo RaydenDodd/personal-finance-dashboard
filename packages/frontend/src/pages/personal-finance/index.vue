@@ -285,7 +285,11 @@ const detailPoints = computed<FinanceHistoryPoint[]>(() => {
   }
   return history.value.map((p) => {
     const missingAccountIds = detailAccounts.value
-      .filter((a) => p.balances[a.id] === null || p.balances[a.id] === undefined || a.currencyCode !== currency.value)
+      .filter(
+        (a) =>
+          !p.inactiveAccountIds?.includes(a.id) &&
+          (p.balances[a.id] === null || p.balances[a.id] === undefined || a.currencyCode !== currency.value),
+      )
       .map((a) => a.id);
     const knownTotal =
       detailAccounts.value.reduce((sum, a) => {
@@ -349,6 +353,7 @@ async function reload() {
   error.value = '';
   try {
     const result = await getPersonalFinanceDashboard({
+      mode: 'personal',
       granularity: granularity.value,
       ...(period.value === 'all' ? {} : { from: format(subMonths(new Date(), Number(period.value)), 'yyyy-MM-dd') }),
     });
@@ -501,10 +506,13 @@ async function commitImport() {
   }
 }
 function downloadTemplate() {
+  const date = today().slice(0, 7) + '-01';
+  const escape = (value: string) => '"' + value.replaceAll('"', '""') + '"';
+  const rows = included.value.map((account) =>
+    [escape(account.name), date, '', account.currencyCode, account.id, 'personal-monthly-input-v1', 'true'].join(','),
+  );
   const blob = new Blob(
-    [
-      'account,date,balance,currencyCode,sourceKey,verified\nExample savings,2026-01-17,100.00,USD,example-savings-20260117,true\n',
-    ],
+    ['accountName,date,balance,currencyCode,accountId,sourceId,verified\n' + rows.join('\n') + '\n'],
     { type: 'text/csv' },
   );
   const url = URL.createObjectURL(blob);
@@ -536,9 +544,15 @@ const inputClass =
     <div class="flex flex-wrap items-start justify-between gap-4">
       <div>
         <h1 class="text-2xl font-semibold tracking-tight">Personal net worth</h1>
-        <p class="text-muted-foreground mt-1 text-sm">Your accounts, your categories, and your recorded history.</p>
+        <p class="text-muted-foreground mt-1 text-sm">
+          Your personal balance history and monthly backup. Automated bank balances and imported historical months are
+          on the Dashboard.
+        </p>
       </div>
       <div class="flex flex-wrap gap-2">
+        <Button as-child variant="outline" size="sm"
+          ><RouterLink :to="{ name: ROUTES_NAMES.dashboard }">Bank dashboard</RouterLink></Button
+        >
         <Button variant="outline" size="sm" :disabled="loading || busy" @click="reload"
           ><RefreshCwIcon class="size-4" />Refresh</Button
         >
@@ -1069,8 +1083,10 @@ const inputClass =
                 </td>
                 <td class="p-4 text-right font-medium whitespace-nowrap tabular-nums">
                   {{ money(account.latestBalance, account.currencyCode)
-                  }}<span v-if="account.latestBalance === null" class="text-warning-text mt-1 block text-xs font-normal"
-                    >Missing</span
+                  }}<span
+                    v-if="account.latestBalance === null"
+                    class="text-warning-text mt-1 block text-xs font-normal"
+                    >{{ detailPoint?.inactiveAccountIds?.includes(account.id) ? 'Not opened yet' : 'Missing' }}</span
                   >
                 </td>
                 <td class="p-4 text-xs whitespace-nowrap">
@@ -1316,7 +1332,12 @@ const inputClass =
                       v-if="
                         detailPoint?.balances[account.id] === null || detailPoint?.balances[account.id] === undefined
                       "
-                      class="text-warning-text block text-xs"
+                      :class="[
+                        'block text-xs',
+                        detailPoint?.inactiveAccountIds?.includes(account.id)
+                          ? 'text-muted-foreground'
+                          : 'text-warning-text',
+                      ]"
                       >Missing</span
                     >
                   </td>

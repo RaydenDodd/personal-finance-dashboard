@@ -133,6 +133,8 @@ const isSettled = ({
   const note = row.note ?? '';
   const source = row.categorizationMeta?.source;
   switch (action.type) {
+    case 'mark_transfer':
+      return row.transferNature !== TRANSACTION_TRANSFER_NATURE.not_transfer;
     case 'set_category':
       return (
         row.categoryId === action.categoryId ||

@@ -11,6 +11,7 @@ import { addDays, subDays } from 'date-fns';
 import { DatabaseError, Op, QueryTypes } from 'sequelize';
 
 import { getCounterpartyIban, hasSettledStatus } from '../enablebanking/utils/transaction-metadata';
+import { buildAccountSuffixes, maskedTransferReferenceRelation } from './masked-transfer-reference';
 import { TRANSFER_DATE_WINDOW_DAYS, normalizeIban } from './transfer-matching';
 
 /** Walutomat rows must not auto-link here: that provider's own FX/IBAN matchers own them. */
@@ -38,10 +39,12 @@ function ibanRelation({
   a,
   b,
   accountIbanById,
+  accountSuffixes,
 }: {
   a: Transactions;
   b: Transactions;
   accountIbanById: Map<RecordId, string>;
+  accountSuffixes: Map<string, string>;
 }): IbanRelation {
   let confirmed = false;
 
@@ -57,7 +60,9 @@ function ibanRelation({
     else return 'contradicted';
   }
 
-  return confirmed ? 'confirmed' : 'neutral';
+  const referenceRelation = maskedTransferReferenceRelation({ a, b, accountSuffixes });
+  if (referenceRelation === 'contradicted') return 'contradicted';
+  return confirmed || referenceRelation === 'confirmed' ? 'confirmed' : 'neutral';
 }
 
 async function findLinkableCandidates({
@@ -95,18 +100,23 @@ async function pickUniqueMatch({
   tx,
   userId,
   accountIbanById,
+  accountSuffixes,
   exclude,
   candidateExcludedTypes,
 }: {
   tx: Transactions;
   userId: number;
   accountIbanById: Map<RecordId, string>;
+  accountSuffixes: Map<string, string>;
   exclude: Set<RecordId>;
   candidateExcludedTypes: ACCOUNT_TYPES[];
 }): Promise<Transactions | null> {
   const relations = (await findLinkableCandidates({ tx, userId, excludedAccountTypes: candidateExcludedTypes }))
     .filter((c) => !exclude.has(c.id))
-    .map((candidate) => ({ candidate, relation: ibanRelation({ a: tx, b: candidate, accountIbanById }) }));
+    .map((candidate) => ({
+      candidate,
+      relation: ibanRelation({ a: tx, b: candidate, accountIbanById, accountSuffixes }),
+    }));
 
   const confirmed = relations.filter((r) => r.relation === 'confirmed');
   if (confirmed.length > 0) return confirmed.length === 1 ? confirmed[0]!.candidate : null;
@@ -133,7 +143,11 @@ const linkTransfersInTransaction = withTransaction(
         ? NEVER_MATCHABLE_ACCOUNT_TYPES
         : SEED_EXCLUDED_ACCOUNT_TYPES;
 
-      const accounts = await Accounts.findAll({ where: { userId }, attributes: ['id', 'type', 'externalData'] });
+      const accounts = await Accounts.findAll({
+        where: { userId },
+        attributes: ['id', 'name', 'type', 'externalData'],
+      });
+      const accountSuffixes = buildAccountSuffixes(accounts);
       const matchableAccounts = accounts.filter((account) => !candidateExcludedTypes.includes(account.type));
       if (matchableAccounts.length < 2) return consumed;
 
@@ -168,7 +182,14 @@ const linkTransfersInTransaction = withTransaction(
       for (const tx of linkableTxs) {
         if (consumed.has(tx.id)) continue;
 
-        const match = await pickUniqueMatch({ tx, userId, accountIbanById, exclude: consumed, candidateExcludedTypes });
+        const match = await pickUniqueMatch({
+          tx,
+          userId,
+          accountIbanById,
+          accountSuffixes,
+          exclude: consumed,
+          candidateExcludedTypes,
+        });
         if (!match) continue;
 
         // The pair must be unique from both sides. One leg can confirm on its single IBAN
@@ -178,6 +199,7 @@ const linkTransfersInTransaction = withTransaction(
           tx: match,
           userId,
           accountIbanById,
+          accountSuffixes,
           exclude: new Set<RecordId>(),
           candidateExcludedTypes,
         });

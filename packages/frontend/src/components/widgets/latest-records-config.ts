@@ -1,6 +1,6 @@
 import type { DashboardWidgetConfig } from '@/api/user-settings';
 import type { TagsIndicatorVariant } from '@/components/common/tags-indicator.vue';
-import { TRANSACTION_TRANSFER_NATURE } from '@bt/shared/types';
+import { isInternalTransfer, TRANSACTION_TRANSFER_NATURE } from '@bt/shared/types';
 
 interface LatestRecordsExclusions {
   excludeTransfers: boolean;
@@ -35,7 +35,7 @@ export const buildLatestRecordsTransferNatures = ({
 }: LatestRecordsExclusions): TRANSACTION_TRANSFER_NATURE[] | undefined => {
   const excluded: TRANSACTION_TRANSFER_NATURE[] = [];
 
-  if (excludeTransfers) excluded.push(TRANSACTION_TRANSFER_NATURE.common_transfer);
+  if (excludeTransfers) excluded.push(...Object.values(TRANSACTION_TRANSFER_NATURE).filter(isInternalTransfer));
   if (excludeOutOfWallet) excluded.push(TRANSACTION_TRANSFER_NATURE.transfer_out_wallet);
 
   if (!excluded.length) return undefined;

@@ -13,6 +13,7 @@ import UserExchangeRates from '@models/user-exchange-rates.model';
 import UsersCurrencies from '@models/users-currencies.model';
 import { withTransaction } from '@services/common/with-transaction';
 import { API_LAYER_BASE_CURRENCY_CODE } from '@services/exchange-rates/constants';
+import { getBankHistoryContext, mergeImportedBankHistory } from '@services/personal-finance/bank-history';
 import { buildUsdRateLookup } from '@services/stats/build-usd-rate-lookup';
 import { calculateVehiclesBalanceHistory } from '@services/stats/calculate-vehicles-balance-history';
 import { calculateVentureBalanceHistory } from '@services/stats/calculate-venture-balance-history';
@@ -356,7 +357,11 @@ export const getCombinedBalanceHistory = async ({
 }): Promise<CombinedBalanceHistoryItem[]> => {
   try {
     const maxDate = to || format(new Date(), 'yyyy-MM-dd');
-    const minDate = from ?? (await resolveOldestEventDate({ userId, fallback: maxDate }));
+    const importedHistory = await getBankHistoryContext(userId);
+    const nativeStart = from ?? (await resolveOldestEventDate({ userId, fallback: maxDate }));
+    const minDate = from ?? [nativeStart, importedHistory?.points[0]?.date ?? nativeStart].sort()[0]!;
+    if (importedHistory && maxDate < importedHistory.liveFrom)
+      return mergeImportedBankHistory([], importedHistory, minDate, maxDate);
 
     const uniqueDates = eachDayOfInterval({
       start: parseISO(minDate),
@@ -464,7 +469,9 @@ export const getCombinedBalanceHistory = async ({
       };
     });
 
-    return combinedHistory;
+    return importedHistory
+      ? mergeImportedBankHistory(combinedHistory, importedHistory, minDate, maxDate)
+      : combinedHistory;
   } catch (err) {
     console.error('Error getting optimized combined balance history:', err);
     throw err;

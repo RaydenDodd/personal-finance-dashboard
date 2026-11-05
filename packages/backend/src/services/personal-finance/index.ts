@@ -381,18 +381,24 @@ export async function commitFinanceImport(userId: number, input: ImportRequest) 
 
 export async function getFinanceDashboard(
   userId: number,
-  query: { from?: string; to?: string; granularity?: 'monthly' | 'daily' } = {},
+  query: { from?: string; to?: string; granularity?: 'monthly' | 'daily'; mode?: 'all' | 'personal' } = {},
 ) {
-  const [categories, accounts, snapshots, cashFlows] = await Promise.all([
+  const [categories, accounts, allSnapshots, cashFlows] = await Promise.all([
     getFinanceCategories(userId),
     getFinanceAccounts(userId),
     getSnapshots(userId),
     getCashFlows(userId),
   ]);
+  const snapshots =
+    query.mode === 'personal' ? allSnapshots.filter((s) => !['simplefin', 'plaid'].includes(s.source)) : allSnapshots;
+  const firstDates = new Map<string, string>();
+  for (const s of snapshots)
+    if (!firstDates.has(s.accountId) || s.date < firstDates.get(s.accountId)!) firstDates.set(s.accountId, s.date);
   const allHistory = buildHistory(
     accounts,
     snapshots.filter((s) => !query.to || s.date <= query.to),
     query.granularity ?? 'monthly',
+    firstDates,
   );
   const history = allHistory.filter((p) => (!query.from || p.date >= query.from) && (!query.to || p.date <= query.to));
   const selected = preferredSnapshots(snapshots).filter((s) => !query.to || s.date <= query.to);

@@ -77,4 +77,5 @@ export interface HistoryPoint {
   complete: boolean;
   balances: Record<string, number | null>;
   valuationDates: Record<string, string | null>;
+  inactiveAccountIds?: string[];
 }

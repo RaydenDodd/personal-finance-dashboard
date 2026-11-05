@@ -692,6 +692,7 @@ export const createTransaction = withTransaction(
             transactionId: baseTransaction!.id,
             userId: accountOwnerUserId,
             skipSetCategory: skipPayeeCategorization,
+            skipMarkTransfer: Boolean(paymentLegs?.length),
           });
           if (applied) {
             transactions[0] = applied;

@@ -108,6 +108,8 @@
       "equals": "equals"
     },
     "actions": {
+      "mark_transfer": "Mark as transfer",
+      "markTransferDescription": "Exclude this movement from spending without creating a matching transaction. Use for transfers to your own accounts when the other side is not imported.",
       "set_category": "Set category",
       "set_payee": "Set payee",
       "add_tags": "Add tags",

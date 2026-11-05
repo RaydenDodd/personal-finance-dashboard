@@ -38,9 +38,11 @@ const FIELD_WIDTH: Record<AutomationActionType, string> = {
   set_payee: '@xl/action:w-72',
   add_tags: '@xl/action:flex-1 @xl/action:max-w-xl',
   set_note: '@xl/action:flex-1 @xl/action:max-w-xl',
+  mark_transfer: '@xl/action:flex-1 @xl/action:max-w-xl',
 };
 
 const availableTypes = computed(() => {
+  if (props.modelValue.length >= AUTOMATION_LIMITS.maxActions) return [];
   const used = new Set(props.modelValue.map((action) => action.type));
   return ACTION_TYPES.filter((type) => !used.has(type));
 });
@@ -123,6 +125,9 @@ const addAction = ({ type, close }: { type: AutomationActionType; close: () => v
                 @update:model-value="(value) => replaceAt({ index, action: { ...action, value: String(value ?? '') } })"
               />
             </div>
+            <p v-else-if="action.type === 'mark_transfer'" class="text-muted-foreground text-sm">
+              {{ $t('automations.actions.markTransferDescription') }}
+            </p>
           </div>
 
           <DesktopOnlyTooltip :content="$t('automations.editor.removeAction')">

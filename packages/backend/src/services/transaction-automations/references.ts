@@ -74,6 +74,7 @@ export const collectAutomationRefs = ({ conditions, actions }: AutomationBody): 
         refs.push({ refType: 'payee', refId: action.payeeId, path });
         break;
       case 'set_note':
+      case 'mark_transfer':
         break;
       default:
         action satisfies never;

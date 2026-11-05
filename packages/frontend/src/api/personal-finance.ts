@@ -37,6 +37,7 @@ export interface FinanceHistoryPoint {
   knownTotal: number;
   categories: Record<string, number>;
   missingAccountIds: string[];
+  inactiveAccountIds?: string[];
   complete: boolean;
   balances: Record<string, number | null>;
   valuationDates?: Record<string, string | null>;
@@ -102,6 +103,7 @@ export const getPersonalFinanceDashboard = (query: {
   from?: string;
   to?: string;
   granularity: 'daily' | 'monthly';
+  mode?: 'all' | 'personal';
 }): Promise<FinanceDashboard> => api.get('/personal-finance/dashboard', query);
 export const saveFinanceCategories = (categories: FinanceCategory[]) =>
   api.put('/personal-finance/categories', { categories });

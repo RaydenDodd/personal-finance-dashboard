@@ -48,6 +48,8 @@ A confirmed pair still fails if a second confirmed candidate exists.
 
 ## Both-sides uniqueness
 
+An explicit bank description such as `Withdrawal to Savings XXXXXXX2222` or `Deposit from Checking XXXXXXX1111` can confirm the counterparty when its masked suffix uniquely identifies one of the owner's accounts. Conflicting suffixes veto a pair. Unmasked trailing numbers and merchant names provide no confirmation. Amount, currency, date-window and both-sides uniqueness checks still apply; an ambiguous pair is left for review.
+
 Without an IBAN confirmation, a pair links only when each leg has one possible partner.
 
 Account B receives `+PLN 100` on Tuesday. Account A holds one `-PLN 100` that week, so B's side sees one candidate. The matcher then flips perspective: from A's expense, how many `+PLN 100` incomes fit the window? If account C received `+PLN 100` the same week, the expense has two possible partners and nothing links.

@@ -178,6 +178,8 @@ export interface CombinedBalanceHistoryEntity {
   vehiclesBalance: number;
   loansBalance: number;
   totalBalance: number;
+  historySource?: 'imported';
+  complete?: boolean;
 }
 
 export const getCombinedBalanceHistory = async ({ from, to }: { from?: Date; to?: Date } = {}): Promise<

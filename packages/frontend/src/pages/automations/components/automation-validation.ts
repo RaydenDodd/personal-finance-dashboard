@@ -94,6 +94,8 @@ export const actionError = ({
   hasMissingRef?: HasMissingRef;
 }): AutomationValidationError | null => {
   switch (action.type) {
+    case 'mark_transfer':
+      return null;
     case 'set_category':
       if (!action.categoryId) return error('automations.editor.errors.categoryRequired');
       return hasMissingRef({ type: 'category', ids: [action.categoryId] })

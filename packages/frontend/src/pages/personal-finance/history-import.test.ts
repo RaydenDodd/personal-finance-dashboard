@@ -3,6 +3,14 @@ import { describe, expect, it } from 'vitest';
 import { isRecordedDate, mapHistoryRecords, parseHistoryFile } from './history-import';
 
 describe('historical balance file import', () => {
+  it('builds monthly record identities from the actual edited date and stable account id', () => {
+    const parsed = parseHistoryFile(
+      'accountName,accountId,date,balance,sourceId,sourceKey,verified\nSavings,account-a,2026-12-01,15.25,monthly-input,,true\n',
+      'new-month.csv',
+    );
+    expect(parsed.records[0]!.sourceKey).toBe('account-a:2026-12-01');
+    expect(parsed.sourceId).toBe('monthly-input');
+  });
   it('preserves actual recorded days, zero balances, formulas and historical names while skipping blanks', () => {
     const parsed = parseHistoryFile(
       JSON.stringify({

@@ -25,6 +25,10 @@
       </EmptyState>
     </template>
     <template v-else>
+      <p v-if="balanceHistory?.some((p) => p.historySource === 'imported')" class="text-muted-foreground mb-3 text-xs">
+        Imported historical snapshots at their recorded dates. Automated bank balances take over when the connection
+        starts.
+      </p>
       <!-- Stats row - two columns with space between -->
       <div class="max-xs:px-2 mb-4 flex items-start justify-between gap-4">
         <!-- Left: Primary value -->

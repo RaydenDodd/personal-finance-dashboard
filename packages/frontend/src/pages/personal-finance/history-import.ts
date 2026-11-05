@@ -64,7 +64,7 @@ export function parseHistoryFile(
       date,
       balance,
       currencyCode,
-      sourceKey: String(row.sourceKey ?? `${accountName || accountId}:${date}`),
+      sourceKey: String(row.sourceKey || `${accountId || accountName}:${date}`),
       sourceLabel: String(row.sourceLabel ?? accountName),
       ...(typeof row.formula === 'string' && row.formula ? { formula: row.formula } : {}),
       verified: row.verified === true || row.verified === 'true',

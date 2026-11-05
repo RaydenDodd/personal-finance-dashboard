@@ -79,9 +79,7 @@
             <div class="@container/account-tx flex items-center gap-2">
               <Tabs.TabsList class="min-w-0 flex-1 justify-start">
                 <Tabs.TabsTrigger value="records">{{ t('pages.account.rightPanel.transactions') }}</Tabs.TabsTrigger>
-                <Tabs.TabsTrigger disabled value="analytics">{{
-                  t('pages.account.rightPanel.analyticsSoon')
-                }}</Tabs.TabsTrigger>
+                <Tabs.TabsTrigger value="history">Balance history</Tabs.TabsTrigger>
               </Tabs.TabsList>
               <Button as-child variant="outline" size="sm" :aria-label="t('pages.account.rightPanel.viewAll')">
                 <router-link :to="{ name: ROUTES_NAMES.transactions, query: { accountIds: account.id } }">
@@ -103,6 +101,7 @@
                 </ScrollArea>
               </template>
             </Tabs.TabsContent>
+            <Tabs.TabsContent value="history"><BalanceHistory :account-id="account.id" /></Tabs.TabsContent>
           </Tabs.Tabs>
         </Card.CardContent>
       </Card.Card>
@@ -135,6 +134,7 @@ import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 
 import Header from './components/header.vue';
+import BalanceHistory from './components/balance-history.vue';
 import { isGenuineVehicleOrphan } from './is-vehicle-orphan';
 import BankConnectionView from './types/bank-connection/index.vue';
 import SystemAccount from './types/system/system.vue';

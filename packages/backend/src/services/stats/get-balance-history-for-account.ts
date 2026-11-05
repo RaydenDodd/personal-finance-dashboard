@@ -1,5 +1,7 @@
 import { RESOURCE_TYPES, SHARE_PERMISSIONS } from '@bt/shared/types';
+import { Money } from '@common/types/money';
 import * as Balances from '@models/balances.model';
+import { getBankAccountHistory } from '@services/personal-finance/bank-history';
 import { canUserAccessResource } from '@services/sharing/auth/can-user-access-resource.service';
 import { Op } from 'sequelize';
 
@@ -48,6 +50,11 @@ export const getBalanceHistoryForAccount = async ({
     if (!access.granted) {
       return data;
     }
+    const imported = await getBankAccountHistory(userId, accountId);
+    if (imported && !imported.grouped)
+      return imported.points
+        .filter((p) => (!from || p.date >= from.slice(0, 10)) && (!to || p.date <= to.slice(0, 10)))
+        .map((p) => ({ accountId, date: p.date, amount: Money.fromDecimal(p.balance) }) as unknown as Balances.default);
 
     const dataAttributes = ['date', 'amount'];
     const balancesInRange = await Balances.default.findAll({
@@ -106,7 +113,13 @@ export const getBalanceHistoryForAccount = async ({
       }
     }
 
-    return data;
+    return imported
+      ? data.filter(
+          (p) =>
+            (p.date instanceof Date ? p.date.toISOString().slice(0, 10) : String(p.date).slice(0, 10)) >=
+            imported.liveFrom,
+        )
+      : data;
   } catch (err) {
     console.log(err);
     throw err;

@@ -80,7 +80,7 @@ export const WIDGET_REGISTRY: Record<string, WidgetDefinition> = {
       { colSpan: 1, rowSpan: 2, label: '1×2' },
     ],
     component: () => import('@/components/widgets/latest-records.vue'),
-    needsPeriod: false,
+    needsPeriod: true,
   },
   'category-spending-tracker': {
     id: 'category-spending-tracker',

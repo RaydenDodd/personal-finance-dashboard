@@ -53,10 +53,12 @@ export const runTransactionAutomations = withTransaction(
     transactionId,
     userId,
     skipSetCategory,
+    skipMarkTransfer = false,
   }: {
     transactionId: RecordId;
     userId: number;
     skipSetCategory: boolean;
+    skipMarkTransfer?: boolean;
   }): Promise<Transactions.default | null> => {
     const rules = await TransactionAutomations.findAll({
       where: { userId, isEnabled: true },
@@ -86,7 +88,7 @@ export const runTransactionAutomations = withTransaction(
         continue;
       }
 
-      const applied = await applyActions({ transaction, rule, userId, skipSetCategory });
+      const applied = await applyActions({ transaction, rule, userId, skipSetCategory, skipMarkTransfer });
       if (!applied) continue;
 
       // ponytail: one autocommit UPDATE per matched row; accumulate per transaction in a

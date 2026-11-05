@@ -10,6 +10,9 @@ const amount = (operator: string, value: object) => [
 ];
 
 describe('transaction automations zod schemas', () => {
+  it('accepts an explicit transfer-classification action without requiring a fabricated destination', () => {
+    expect(actionsSchema.safeParse([{ type: 'mark_transfer' }]).success).toBe(true);
+  });
   it('accepts a text condition and rejects an empty keyword list', () => {
     expect(conditions([{ field: 'note', operator: 'contains_any', value: ['uber'] }]).success).toBe(true);
     expect(conditions([{ field: 'note', operator: 'contains_any', value: [] }]).success).toBe(false);

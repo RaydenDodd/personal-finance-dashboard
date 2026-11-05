@@ -107,6 +107,7 @@ export const actionsSchema = z
       z.object({ type: z.literal('set_category'), categoryId: recordId() }),
       z.object({ type: z.literal('add_tags'), tagIds: idList }),
       z.object({ type: z.literal('set_payee'), payeeId: recordId() }),
+      z.object({ type: z.literal('mark_transfer') }),
       z.object({
         type: z.literal('set_note'),
         mode: z.enum(AUTOMATION_NOTE_MODES),

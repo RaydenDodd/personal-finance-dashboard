@@ -52,8 +52,8 @@ export const dedupeTransferLegs = <
 
 /**
  * Splits amounts on `transactionType`, never on the sign: amounts are stored positive.
- * Internal transfers stay out of income, expense and net, since only one leg of a pair
- * is ever counted and either side would book a full-value amount that never happened.
+ * All transfer kinds stay out of income, expense and net. An out-of-wallet
+ * classification also records a movement of funds rather than a purchase.
  * Unit-agnostic: the result is in whatever unit `refAmount` carries.
  */
 export const sumTransactionTotals = (
@@ -64,7 +64,7 @@ export const sumTransactionTotals = (
   let transfers = 0;
 
   for (const row of rows) {
-    if (isInternalTransfer(row.transferNature)) transfers += row.refAmount;
+    if (row.transferNature !== TRANSACTION_TRANSFER_NATURE.not_transfer) transfers += row.refAmount;
     else if (row.transactionType === TRANSACTION_TYPES.income) income += row.refAmount;
     else expense += row.refAmount;
   }

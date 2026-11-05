@@ -74,7 +74,7 @@ describe('buildLatestRecordsTransferNatures', () => {
     expect(natures).not.toContain(TRANSACTION_TRANSFER_NATURE.transfer_out_wallet);
   });
 
-  it('drops both natures when both exclusions are on', () => {
+  it('drops all internal and out-of-wallet transfers when both exclusions are on', () => {
     const natures = buildLatestRecordsTransferNatures({
       excludeTransfers: true,
       excludeOutOfWallet: true,
@@ -84,7 +84,22 @@ describe('buildLatestRecordsTransferNatures', () => {
     expect(natures).not.toContain(TRANSACTION_TRANSFER_NATURE.common_transfer);
     expect(natures).not.toContain(TRANSACTION_TRANSFER_NATURE.transfer_out_wallet);
     expect(natures).toContain(TRANSACTION_TRANSFER_NATURE.not_transfer);
-    expect(natures).toContain(TRANSACTION_TRANSFER_NATURE.transfer_to_loan);
+    expect(natures).not.toContain(TRANSACTION_TRANSFER_NATURE.transfer_to_loan);
+    expect(natures).not.toContain(TRANSACTION_TRANSFER_NATURE.transfer_to_portfolio);
+    expect(natures).not.toContain(TRANSACTION_TRANSFER_NATURE.transfer_to_venture);
+    expect(natures).toEqual([TRANSACTION_TRANSFER_NATURE.not_transfer]);
+  });
+
+  it('keeps the independent out-of-wallet choice while hiding brokerage and other internal transfers', () => {
+    const natures = buildLatestRecordsTransferNatures({
+      excludeTransfers: true,
+      excludeOutOfWallet: false,
+      excludeBalanceAdjustments: false,
+    });
+    expect(natures).toEqual([
+      TRANSACTION_TRANSFER_NATURE.not_transfer,
+      TRANSACTION_TRANSFER_NATURE.transfer_out_wallet,
+    ]);
   });
 });
 

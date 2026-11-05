@@ -252,4 +252,16 @@ describe('automation editor', () => {
     expect(createMock).not.toHaveBeenCalled();
     expect(wrapper.text()).toContain('automations.editor.errors.nameRequired');
   });
+
+  it('edit: preserves an explicit transfer-classification rule without a destination transaction', async () => {
+    const rule = { ...RULE, actions: [{ type: 'mark_transfer' as const }] };
+    loadMock.mockResolvedValue([rule]);
+    const { wrapper } = await mountEditor({ path: `/transactions/automations/${rule.id}` });
+    expect(wrapper.text()).toContain('automations.actions.mark_transfer');
+    await clickButton({ wrapper, text: 'common.actions.save' });
+    expect(updateMock.mock.calls[0]![0]).toMatchObject({
+      id: rule.id,
+      payload: { actions: [{ type: 'mark_transfer' }] },
+    });
+  });
 });

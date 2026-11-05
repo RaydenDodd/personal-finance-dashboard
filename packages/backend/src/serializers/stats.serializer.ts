@@ -284,6 +284,8 @@ interface CombinedBalanceHistoryItemApiResponse {
   vehiclesBalance: number;
   loansBalance: number;
   totalBalance: number;
+  historySource?: 'imported';
+  complete?: boolean;
 }
 
 /**
@@ -300,6 +302,7 @@ export function serializeCombinedBalanceHistory(
     vehiclesBalance: centsToApiDecimal(item.vehiclesBalance),
     loansBalance: centsToApiDecimal(item.loansBalance),
     totalBalance: centsToApiDecimal(item.totalBalance),
+    ...(item.historySource ? { historySource: item.historySource, complete: item.complete } : {}),
   }));
 }
 

@@ -2,6 +2,7 @@ import { createController } from '@controllers/helpers/controller-factory';
 import { authenticateSession } from '@middlewares/better-auth';
 import { checkBaseCurrencyLock } from '@middlewares/check-base-currency-lock';
 import * as finance from '@services/personal-finance';
+import { configureBankHistory, getBankAccountHistory } from '@services/personal-finance/bank-history';
 import { Router } from 'express';
 import { z } from 'zod';
 
@@ -68,6 +69,38 @@ const importBody = z.object({
     .max(20000),
 });
 router.get(
+  '/bank-history/:id',
+  createController(z.object({ params: z.object({ id }) }), async ({ user, params }) => ({
+    data: await getBankAccountHistory(user.id, params.id),
+  })),
+);
+router.post(
+  '/bank-history/import',
+  checkBaseCurrencyLock,
+  createController(
+    z.object({
+      body: importBody.extend({
+        mappings: z
+          .array(
+            z.object({
+              id: z.string().min(1).max(100),
+              label: z.string().min(1).max(200),
+              sourceAccountIds: z.array(id).min(1).max(50),
+              nativeAccountIds: z.array(id).max(50),
+            }),
+          )
+          .min(1)
+          .max(50),
+      }),
+    }),
+    async ({ user, body }) => {
+      const imported = await finance.commitFinanceImport(user.id, body);
+      const configured = await configureBankHistory(user.id, body.mappings);
+      return { data: { imported, ...configured } };
+    },
+  ),
+);
+router.get(
   '/dashboard',
   createController(
     z.object({
@@ -76,6 +109,7 @@ router.get(
           from: date.optional(),
           to: date.optional(),
           granularity: z.enum(['monthly', 'daily']).default('monthly'),
+          mode: z.enum(['all', 'personal']).default('all'),
         })
         .refine((q) => !q.from || !q.to || q.from <= q.to, 'Start date must precede end date'),
     }),
