@@ -40,11 +40,11 @@ After claiming the owner account, edit these values in `.env.pi.local`:
 ```dotenv
 FINANCE_BIND_IP=192.168.0.32
 FINANCE_PORT=8095
-BETTER_AUTH_URL=http://192.168.0.32:8095
-AUTH_ORIGIN=http://192.168.0.32:8095
-ALLOWED_ORIGINS=http://192.168.0.32:8095
-MCP_BASE_URL=http://192.168.0.32:8095
-AUTH_RP_ID=192.168.0.32
+BETTER_AUTH_URL=http://localhost:8095
+AUTH_ORIGIN=http://localhost:8095
+ALLOWED_ORIGINS=http://localhost:8095,http://localhost:8110,http://192.168.0.32:8095
+MCP_BASE_URL=http://localhost:8095
+AUTH_RP_ID=localhost
 ```
 
 Recreate only this stack with the changed origin:
@@ -53,7 +53,12 @@ Recreate only this stack with the changed origin:
 docker compose --env-file .env.pi.local -f docker-compose.pi.yml up -d --wait
 ```
 
-The dashboard is then `http://192.168.0.32:8095`. Nginx permits only the existing
+The dashboard is then `http://192.168.0.32:8095`. The canonical OAuth origin stays
+localhost for native MCP clients that require HTTPS or loopback HTTP metadata;
+the explicit LAN allowed origin preserves normal email/password sign-in there.
+For the final LAN binding, the encrypted tunnel command is
+`ssh -N -L 8095:192.168.0.32:8095 cardgames-pi`.
+Nginx permits only the existing
 `192.168.0.0/24` LAN, `10.192.80.0/24` WireGuard subnet, loopback and this
 stack's host gateway. Binding to the Pi's IPv4 LAN address avoids wildcard
 IPv6 exposure. Database, Redis, and backend have no host-published ports.
@@ -184,9 +189,10 @@ scope checks. The ordinary app can still edit your records.
 
 Use `mcp.codex.example.toml` as a snippet in your private Codex configuration,
 or `mcp.vscode.example.json` in VS Code's MCP configuration. Both examples
-assume the SSH tunnel and a matching localhost app origin. For direct VPN
-access, change the URL to `http://192.168.0.32:8095/mcp` and ensure the app's
-configured origin is that LAN origin too.
+assume the SSH tunnel and matching localhost OAuth origin. Use the existing
+WireGuard route to SSH to the Pi when away from home; keep the client's MCP URL
+at `http://localhost:8095/mcp`. The API remains authenticated and is never public.
+This avoids introducing certificates, a public OAuth service or port forwarding.
 
 ```sh
 codex mcp add moneymatter --url http://localhost:8095/mcp

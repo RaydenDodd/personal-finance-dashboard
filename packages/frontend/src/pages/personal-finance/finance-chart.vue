@@ -183,7 +183,7 @@ function render() {
         .ticks(w < 420 ? 4 : 8)
         .tickSize(0)
         .tickPadding(14)
-        .tickFormat((date) => d3.utcFormat(maxDate - minDate < 45 * 86400000 ? '%b %d' : '%Y-%m')(date as Date)),
+        .tickFormat((date) => d3.utcFormat(maxDate - minDate < 180 * 86400000 ? '%b %d' : '%b %Y')(date as Date)),
     );
   } else {
     xAxis.call(

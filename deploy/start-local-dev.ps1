@@ -12,7 +12,7 @@ if (-not (Test-Path -LiteralPath (Join-Path $projectDirectory 'node_modules'))) 
 $ownedTunnel = $null
 try {
   if (-not (Get-NetTCPConnection -State Listen -LocalPort $TunnelPort -ErrorAction SilentlyContinue)) {
-    $ownedTunnel = Start-Process -FilePath 'ssh.exe' -ArgumentList @('-N', '-o', 'BatchMode=yes', '-o', 'ExitOnForwardFailure=yes', '-L', "${TunnelPort}:127.0.0.1:8095", $SshHost) -WindowStyle Hidden -PassThru
+    $ownedTunnel = Start-Process -FilePath 'ssh.exe' -ArgumentList @('-N', '-o', 'BatchMode=yes', '-o', 'ExitOnForwardFailure=yes', '-L', "${TunnelPort}:192.168.0.32:8095", $SshHost) -WindowStyle Hidden -PassThru
     Start-Sleep -Seconds 1
     if ($ownedTunnel.HasExited) { throw 'SSH tunnel failed. Verify the existing SSH alias and Pi service.' }
   }

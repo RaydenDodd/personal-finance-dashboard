@@ -95,7 +95,11 @@ const accountById = (id: string) => data.value?.accounts.find((a) => a.id === id
 const changePercent = (value: FinanceDashboard['monthlyChange']) =>
   typeof value === 'object' && value !== null ? value.percent : null;
 const addCategory = () =>
-  categoryDraft.value.push({ id: `category-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`, name: 'New category', color: '#3b82f6' });
+  categoryDraft.value.push({
+    id: `category-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
+    name: 'New category',
+    color: '#3b82f6',
+  });
 const chartOptions = [
   ['total', 'Total net worth'],
   ['categories', 'Category history'],
@@ -123,10 +127,19 @@ const chartModel = computed(
   (): { rows: ChartRow[]; series: ChartSeries[]; mode: 'line' | 'stacked' | 'bar' | 'donut'; percentage?: boolean } => {
     const categories = data.value?.categories ?? [];
     const catSeries = categories.map((c) => ({ id: c.id, name: c.name, color: c.color }));
-  const rows = history.value.map((p) => ({ label: p.date, values: Object.fromEntries(categories.map(c => {
-    const categoryAccounts = included.value.filter(a => a.categoryId === c.id);
-    return [c.id, categoryAccounts.some(a => p.missingAccountIds.includes(a.id)) ? null : p.categories[c.id] ?? 0];
-  })), partial: !p.complete }));
+    const rows = history.value.map((p) => ({
+      label: p.date,
+      values: Object.fromEntries(
+        categories.map((c) => {
+          const categoryAccounts = included.value.filter((a) => a.categoryId === c.id);
+          return [
+            c.id,
+            categoryAccounts.some((a) => p.missingAccountIds.includes(a.id)) ? null : (p.categories[c.id] ?? 0),
+          ];
+        }),
+      ),
+      partial: !p.complete,
+    }));
     if (chart.value === 'categories') return { rows, series: catSeries, mode: 'stacked' };
     if (chart.value === 'allocation') return { rows: rows.slice(-1), series: catSeries, mode: 'donut' };
     if (chart.value === 'savings') {
@@ -189,26 +202,30 @@ const chartModel = computed(
       const flows = (data.value?.cashFlows ?? [])
         .filter((f) => f.accountId === selectedAccount.value || f.toAccountId === selectedAccount.value)
         .sort((a, b) => a.date.localeCompare(b.date));
-    const recorded = (data.value?.snapshots ?? []).filter(s => s.accountId === selectedAccount.value);
-    const buckets = new Map<string, typeof recorded[number]>();
-    recorded.forEach(s => {
-      const key = granularity.value === 'monthly' ? s.date.slice(0, 7) : s.date;
-      const prior = buckets.get(key);
-      if (!prior || s.date > prior.date) buckets.set(key, s);
-    });
-    const from = period.value === 'all' ? null : format(subMonths(new Date(), Number(period.value)), 'yyyy-MM-dd');
-    const accountRows: ChartRow[] = [...buckets.values()].filter(s => !from || s.date >= from).sort((a, b) => a.date.localeCompare(b.date)).map((p) => {
-      const dated = flows.filter((f) => f.date <= p.date);
-        const opening = dated.findIndex((f) => f.accountId === selectedAccount.value && f.opening);
-        let principal: number | null = null;
-        if (opening >= 0)
-          principal = dated.slice(opening).reduce((total, f) => {
-            if (f.type === 'interest' || f.type === 'dividend') return total;
-            if (f.type === 'transfer') return total + (f.toAccountId === selectedAccount.value ? f.amount : -f.amount);
-            return total + (f.type === 'withdrawal' ? -f.amount : f.amount);
-          }, 0);
-      return { label: p.date, values: { value: p.balance, principal } };
+      const recorded = (data.value?.snapshots ?? []).filter((s) => s.accountId === selectedAccount.value);
+      const buckets = new Map<string, (typeof recorded)[number]>();
+      recorded.forEach((s) => {
+        const key = granularity.value === 'monthly' ? s.date.slice(0, 7) : s.date;
+        const prior = buckets.get(key);
+        if (!prior || s.date > prior.date) buckets.set(key, s);
       });
+      const from = period.value === 'all' ? null : format(subMonths(new Date(), Number(period.value)), 'yyyy-MM-dd');
+      const accountRows: ChartRow[] = [...buckets.values()]
+        .filter((s) => !from || s.date >= from)
+        .sort((a, b) => a.date.localeCompare(b.date))
+        .map((p) => {
+          const dated = flows.filter((f) => f.date <= p.date);
+          const opening = dated.findIndex((f) => f.accountId === selectedAccount.value && f.opening);
+          let principal: number | null = null;
+          if (opening >= 0)
+            principal = dated.slice(opening).reduce((total, f) => {
+              if (f.type === 'interest' || f.type === 'dividend') return total;
+              if (f.type === 'transfer')
+                return total + (f.toAccountId === selectedAccount.value ? f.amount : -f.amount);
+              return total + (f.type === 'withdrawal' ? -f.amount : f.amount);
+            }, 0);
+          return { label: p.date, values: { value: p.balance, principal } };
+        });
       return {
         rows: accountRows,
         series: [
@@ -358,7 +375,10 @@ async function previewImport() {
   error.value = '';
   preview.value = null;
   try {
-      const payload = { ...mapHistoryRecords(sourceId.value, importRecords.value, importMapping), source: /\.csv$/i.test(fileName.value) ? 'csv' as const : 'google-sheets' as const };
+    const payload = {
+      ...mapHistoryRecords(sourceId.value, importRecords.value, importMapping),
+      source: /\.csv$/i.test(fileName.value) ? ('csv' as const) : ('google-sheets' as const),
+    };
     preview.value = await previewFinanceImport(payload);
     previewPayload.value = payload;
   } catch (e) {
@@ -1025,6 +1045,13 @@ const inputClass =
           :to="{ name: ROUTES_NAMES.analyticsInvestmentContributions }"
           class="hover:text-foreground underline underline-offset-4"
           >Portfolio contributions & returns</RouterLink
+        >
+        <a
+          href="https://github.com/RaydenDodd/personal-finance-dashboard"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="hover:text-foreground underline underline-offset-4"
+          >MoneyMatter fork source · AGPL-3.0</a
         >
       </div>
     </template>

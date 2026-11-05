@@ -11,7 +11,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, resolve, sep } from 'node:path';
 
 const base = (process.env.MCP_HTTP_BASE_URL || 'http://localhost:8095').replace(/\/$/, '');
-const origin = (process.env.MCP_ORIGIN || 'http://192.168.0.32:8095').replace(/\/$/, '');
+const origin = (process.env.MCP_ORIGIN || 'http://localhost:8095').replace(/\/$/, '');
 const resource = `${origin}/mcp`;
 const scopes = ['finance:read', 'profile:read'];
 const sessionPath = resolve(process.env.MCP_SESSION_FILE || 'private/mcp-session.json');
