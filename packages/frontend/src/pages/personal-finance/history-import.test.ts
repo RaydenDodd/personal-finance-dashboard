@@ -53,6 +53,17 @@ describe('historical balance file import', () => {
     ).toHaveLength(1);
   });
 
+  it('keeps the original source identity when a Sheet export is renamed', () => {
+    const csv =
+      'accountName,date,balance,sourceId,sourceKey,verified\nSavings,2026-11-01,10.25,sheet:synthetic,B5,true\n';
+    const parsed = parseHistoryFile(csv, 'renamed-copy.csv');
+    expect(parsed.sourceId).toBe('sheet:synthetic');
+    expect(parsed.records[0]).toMatchObject({ sourceKey: 'B5', verified: true, balance: 10.25 });
+    expect(() => parseHistoryFile(csv + 'Cash,2026-11-01,1.00,sheet:other,B6,true\n', 'mixed.csv')).toThrow(
+      'multiple source identities',
+    );
+  });
+
   it('rejects impossible or inferred dates and invalid financial values', () => {
     expect(isRecordedDate('2026-02-30')).toBe(false);
     expect(isRecordedDate('2024-02-29')).toBe(true);

@@ -59,7 +59,7 @@ const accountForm = reactive({
   categoryId: 'spendable',
   included: true,
   balanceKind: 'asset' as 'asset' | 'liability',
-  nativeAccountId: '',
+  nativeAccountIds: [] as string[],
   preferredSource: 'manual',
 });
 const snapshotForm = reactive({ accountId: '', date: today(), balance: '', description: '' });
@@ -384,7 +384,10 @@ function editAccount(account?: FinanceAccount) {
   Object.assign(
     accountForm,
     account
-      ? { ...account, nativeAccountId: account.nativeAccountId ?? '' }
+      ? {
+          ...account,
+          nativeAccountIds: account.nativeAccountIds ?? (account.nativeAccountId ? [account.nativeAccountId] : []),
+        }
       : {
           id: '',
           name: '',
@@ -392,7 +395,7 @@ function editAccount(account?: FinanceAccount) {
           categoryId: data.value?.categories[0]?.id ?? 'spendable',
           included: true,
           balanceKind: 'asset',
-          nativeAccountId: '',
+          nativeAccountIds: [],
           preferredSource: 'manual',
         },
   );
@@ -408,7 +411,7 @@ async function submitAccount() {
         categoryId: accountForm.categoryId,
         included: accountForm.included,
         balanceKind: accountForm.balanceKind,
-        nativeAccountId: accountForm.nativeAccountId || null,
+        nativeAccountIds: accountForm.nativeAccountIds,
         preferredSource: accountForm.preferredSource,
       }),
     'Account reporting settings saved.',
@@ -667,14 +670,26 @@ const inputClass =
               maxlength="3"
               required
           /></label>
-          <label class="grid gap-1.5 text-sm"
-            >Link existing MoneyMatter account<select v-model="accountForm.nativeAccountId" :class="inputClass">
-              <option value="">Manual / historical account</option>
-              <option v-for="account in nativeAccounts" :key="account.id" :value="account.id">
-                {{ account.name }}
-              </option>
-            </select></label
-          >
+          <fieldset class="grid gap-1.5 text-sm">
+            <legend class="mb-1.5">Linked MoneyMatter accounts</legend>
+            <div class="max-h-44 space-y-2 overflow-y-auto rounded-md border p-3">
+              <label v-for="account in nativeAccounts" :key="account.id" class="flex items-start gap-2">
+                <input
+                  v-model="accountForm.nativeAccountIds"
+                  type="checkbox"
+                  :value="account.id"
+                  class="accent-primary mt-0.5 size-4 shrink-0"
+                />
+                <span>{{ account.name }}</span>
+              </label>
+              <p v-if="!nativeAccounts.length" class="text-muted-foreground text-xs">
+                No existing MoneyMatter accounts.
+              </p>
+            </div>
+            <p class="text-muted-foreground text-xs">
+              Select every account included in this history row. Leave empty for manual history.
+            </p>
+          </fieldset>
           <label class="grid gap-1.5 text-sm"
             >Preferred source<select v-model="accountForm.preferredSource" :class="inputClass">
               <option value="manual">Manual verified balances</option>
@@ -688,8 +703,8 @@ const inputClass =
             net worth</label
           >
           <p class="text-muted-foreground text-xs sm:col-span-2">
-            Category follows your choice, independent of the bank's account type. Link one canonical account for a bank
-            account seen through multiple providers.
+            Category follows your choice, independent of the bank's account type. Linked balances are combined only when
+            all selected accounts have a valuation on the same day. Each bank account can belong to one history row.
           </p>
           <div class="sm:col-span-2 lg:col-span-3">
             <Button type="submit" :disabled="busy">{{ busy ? 'Saving…' : 'Save account' }}</Button>
@@ -1031,6 +1046,17 @@ const inputClass =
                   <p class="text-muted-foreground mt-1 text-xs">
                     {{ account.balanceKind === 'liability' ? 'Liability' : 'Asset' }} ·
                     {{ account.included ? 'Included' : 'Excluded from net worth' }}
+                  </p>
+                  <p v-if="account.nativeAccountIds?.length" class="text-muted-foreground mt-1 max-w-80 text-xs">
+                    Linked:
+                    <template v-for="(nativeId, index) in account.nativeAccountIds" :key="nativeId">
+                      <span v-if="index">, </span>
+                      <RouterLink
+                        :to="{ name: ROUTES_NAMES.account, params: { id: nativeId } }"
+                        class="hover:underline"
+                        >{{ nativeAccounts.find((a) => a.id === nativeId)?.name ?? 'MoneyMatter account' }}</RouterLink
+                      >
+                    </template>
                   </p>
                 </td>
                 <td class="p-4 whitespace-nowrap">

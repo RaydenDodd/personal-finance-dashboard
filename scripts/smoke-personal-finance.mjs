@@ -45,6 +45,7 @@ const accounts = categories.map((c, i) => ({
   included: true,
   balanceKind: 'asset',
   nativeAccountId: null,
+  nativeAccountIds: i === 0 ? ['native-0', 'native-1'] : [],
   preferredSource: 'manual',
   latestBalance: [2500, 5000, 1200, 8000][i],
   valuationDate: '2026-11-01',
@@ -113,6 +114,7 @@ const dashboard = {
   complete: true,
 };
 const errors = [];
+const nativeAccounts = [0, 1, 2].map((i) => ({ id: `native-${i}`, name: `Synthetic bank ${i}`, currencyCode: 'USD' }));
 const calls = [];
 const browser = await chromium.launch({
   channel: process.env.PLAYWRIGHT_CHANNEL || (process.platform === 'win32' ? 'msedge' : undefined),
@@ -132,7 +134,7 @@ try {
       calls.push({ method: req.method(), path, body });
       let response;
       if (path === '/personal-finance/dashboard') response = dashboard;
-      else if (path === '/accounts') response = [];
+      else if (path === '/accounts') response = nativeAccounts;
       else if (path === '/personal-finance/import/preview')
         response = {
           previewToken: 'synthetic-preview',
@@ -246,6 +248,17 @@ try {
     amount: 100,
     opening: false,
   });
+  const accountRow = page
+    .getByRole('row')
+    .filter({ has: page.getByRole('button', { name: 'View Synthetic Spendable Money balance history', exact: true }) });
+  await expect(accountRow.getByRole('link', { name: 'Synthetic bank 0', exact: true })).toBeVisible();
+  await accountRow.getByRole('button', { name: 'Edit', exact: true }).click();
+  await expect(page.getByRole('checkbox', { name: 'Synthetic bank 0', exact: true })).toBeChecked();
+  await expect(page.getByRole('checkbox', { name: 'Synthetic bank 1', exact: true })).toBeChecked();
+  await page.getByRole('checkbox', { name: 'Synthetic bank 2', exact: true }).check();
+  await page.getByRole('button', { name: 'Save account', exact: true }).click();
+  const accountCall = calls.find((c) => c.path === '/personal-finance/accounts/account-0' && c.method === 'PUT');
+  expect(accountCall.body.nativeAccountIds).toEqual(['native-0', 'native-1', 'native-2']);
   await page.getByRole('button', { name: 'Import history', exact: true }).click();
   await page.getByLabel('Choose historical balance file').setInputFiles({
     name: 'synthetic-history.csv',
@@ -289,6 +302,7 @@ try {
         partialHistory: true,
         hoverGuide: true,
         categoryAndAccountDetails: true,
+        groupedAccountLinks: true,
         snapshot: true,
         transfer: true,
         previewAndCommit: true,

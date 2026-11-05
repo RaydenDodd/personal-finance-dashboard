@@ -6,6 +6,10 @@ This is an AGPL-3.0-only fork of [MoneyMatter](https://github.com/letehaha/money
 
 The upstream application already provides manual accounts and transactions, account groups, native transfer matching/overrides, credit-card transfer handling, net-worth history, portfolio contributions/transfers, annualized portfolio returns using dated flows, CSV/OFX imports, provider synchronization, session authentication, encrypted credentials, and MCP OAuth scopes. These remain available. The additional Personal finance report handles custom reporting categories and independently recorded balance snapshots; historical valuations never become spending transactions or inferred investment contributions.
 
+A reporting account can link to several existing MoneyMatter accounts when a worksheet row records their combined balance. Select its linked accounts under Edit; the linked names also open their original MoneyMatter account pages. A bank account can belong to only one reporting row. SimpleFIN captures a combined valuation only when every linked component has a value on the same actual valuation day. Missing components or mixed days leave the group unavailable instead of creating a partial sum. Existing verified historical values retain priority on the same date.
+
+Historical CSV files can include `sourceId`, `sourceKey`, `formula` and `verified` to retain the original Sheet provenance and duplicate detection, along with `accountName`, `accountId`, `date`, `balance` and `currencyCode`. Use Personal net worth → Import history for balance snapshots. The upstream transaction CSV importer expects individual income/spending records.
+
 The four initial reporting categories are Spendable Money, Savings, Investments, and Retirement. Account category selection is independent of its banking account type. Each reporting account can be included or excluded and marked as an asset or liability. Link a bank account to its canonical reporting account rather than creating another reporting account when a second provider connects. A regular Vanguard brokerage account is never enabled automatically.
 
 ## Historical Google Sheets import

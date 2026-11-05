@@ -13,6 +13,7 @@ export interface FinanceAccount {
   included: boolean;
   balanceKind: 'asset' | 'liability';
   nativeAccountId: string | null;
+  nativeAccountIds?: string[];
   preferredSource: string;
   latestBalance: number | null;
   valuationDate: string | null;

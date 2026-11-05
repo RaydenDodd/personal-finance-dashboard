@@ -33,6 +33,10 @@ export function parseHistoryFile(
     const parsed = Papa.parse<Record<string, unknown>>(text, { header: true, skipEmptyLines: 'greedy' });
     if (parsed.errors.length) throw new Error(`CSV could not be read: ${parsed.errors[0]!.message}`);
     rows = parsed.data;
+    const sourceIds = [...new Set(rows.map((row) => String(row.sourceId ?? '').trim()).filter(Boolean))];
+    if (sourceIds.length > 1)
+      throw new Error('CSV contains multiple source identities; import each source separately.');
+    if (sourceIds.length === 1) sourceId = sourceIds[0]!;
   }
   let skippedBlank = 0;
   const records: UnmappedHistoryRecord[] = [];
