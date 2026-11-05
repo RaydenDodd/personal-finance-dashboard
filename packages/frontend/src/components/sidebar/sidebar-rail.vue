@@ -16,6 +16,7 @@ import {
   PanelLeftIcon,
   RocketIcon,
   TrendingUpIcon,
+  WalletIcon,
 } from '@lucide/vue';
 import { type Component, computed, provide, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
@@ -91,6 +92,7 @@ interface RailNavItem {
 
 const navItems = computed<RailNavItem[]>(() => [
   { routeName: ROUTES_NAMES.home, icon: LayoutDashboardIcon, label: t('navigation.dashboard') },
+  { routeName: ROUTES_NAMES.personalFinance, icon: WalletIcon, label: t('navigation.personalNetWorth') },
   {
     routeName: ROUTES_NAMES.accounts,
     icon: LayersIcon,

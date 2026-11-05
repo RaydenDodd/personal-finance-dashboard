@@ -6,6 +6,7 @@ const ROUTER_LAYOUTS = Object.freeze({
 export const ROUTES_NAMES = Object.freeze({
   dashboard: ROUTER_LAYOUTS.dashboard,
   home: `${ROUTER_LAYOUTS.dashboard}.home`,
+  personalFinance: `${ROUTER_LAYOUTS.dashboard}.personal-finance`,
   accounts: `${ROUTER_LAYOUTS.dashboard}.accounts`,
   account: `${ROUTER_LAYOUTS.dashboard}.account`,
   accountsVehicleDetails: `${ROUTER_LAYOUTS.dashboard}.accounts.vehicle-details`,

@@ -9,6 +9,7 @@ import {
   CreditCardIcon,
   LayersIcon,
   LayoutDashboardIcon,
+  WalletIcon,
 } from '@lucide/vue';
 import { watch } from 'vue';
 
@@ -62,6 +63,18 @@ watch(
     >
       <LayoutDashboardIcon :class="[navIconBase, isActive && navIconActive]" />
       <span :class="{ 'max-sm:hidden': bottomNav }"> {{ $t('navigation.dashboard') }} </span>
+    </ui-button>
+  </router-link>
+
+  <router-link v-if="!bottomNav" v-slot="{ isActive }" :to="{ name: ROUTES_NAMES.personalFinance }">
+    <ui-button
+      variant="ghost"
+      as="span"
+      :class="[navItemBase, 'justify-start', isActive && navItemActive]"
+      size="default"
+    >
+      <WalletIcon :class="[navIconBase, isActive && navIconActive]" />
+      <span>{{ $t('navigation.personalNetWorth') }}</span>
     </ui-button>
   </router-link>
 

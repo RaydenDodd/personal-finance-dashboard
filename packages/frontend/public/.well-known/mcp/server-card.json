@@ -43,6 +43,10 @@
   },
   "tools": [
     {
+      "name": "get_personal_net_worth",
+      "description": "Read custom net worth categories, included accounts, dated snapshots, contribution principal and gains, historical changes and missing valuations. Read-only."
+    },
+    {
       "name": "get_user_profile",
       "description": "Retrieve the authenticated user's profile (name, email, default currency)."
     },

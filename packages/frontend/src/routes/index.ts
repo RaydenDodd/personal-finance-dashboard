@@ -24,6 +24,11 @@ const routes: RouteRecordRaw[] = [
     },
     children: [
       {
+        path: '/personal-finance',
+        name: ROUTES_NAMES.personalFinance,
+        component: () => import('@/pages/personal-finance/index.vue'),
+      },
+      {
         path: '/dashboard',
         name: ROUTES_NAMES.home,
         component: () => import('@/pages/dashboard/dashboard.vue'),

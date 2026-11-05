@@ -1,6 +1,7 @@
 {
   "navigation": {
     "dashboard": "Dashboard",
+    "personalNetWorth": "Personal net worth",
     "accounts": "Accounts",
     "accountsList": "All accounts",
     "investments": "Investments",
