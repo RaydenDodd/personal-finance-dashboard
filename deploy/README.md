@@ -71,8 +71,16 @@ The inspected Pi has `wg0` at `10.192.80.1/24`, IPv4 forwarding enabled,
 and a route for `192.168.0.0/24`. A remote WireGuard client must include
 `192.168.0.0/24` (or `192.168.0.32/32`) in its peer `AllowedIPs` to route the
 same LAN address. Client configurations cannot be verified from the server;
-verify while connected from outside the LAN. No WireGuard keys or settings
-need to be printed, committed or changed for this deployment.
+verify while connected from outside the LAN. During the routing check, the saved
+phone endpoint was stale and the server's forwarding/NAT rules were missing.
+The saved phone endpoint was updated privately (not in Git), UFW now permits
+forwarding from `10.192.80.0/24` on `wg0` to `eth0`, and a subnet-scoped MASQUERADE
+rule supports LAN/internet return traffic for the existing full-tunnel clients.
+That NAT rule is persisted with PostUp/PostDown hooks in the existing `wg0.conf`,
+whose prior version was backed up. SSH is allowed only from the VPN subnet on
+`wg0` in addition to the previous LAN rule. No keys, peer identities, router
+port forwards, or other service configurations were changed; WireGuard was not
+restarted. Verify the actual client page loads as well as its recent handshake.
 
 ## Data, logs and backups
 

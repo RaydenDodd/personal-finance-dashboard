@@ -12,6 +12,7 @@ import {
   type FinanceAccount,
   type FinanceCategory,
   type FinanceDashboard,
+  type FinanceHistoryPoint,
   type HistoryImportPayload,
   type HistoryImportPreview,
 } from '@/api/personal-finance';
@@ -19,6 +20,7 @@ import PageWrapper from '@/components/common/page-wrapper.vue';
 import { Button } from '@/components/lib/ui/button';
 import { Callout } from '@/components/lib/ui/callout';
 import { Card } from '@/components/lib/ui/card';
+import { Dialog, DialogScrollContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/lib/ui/dialog';
 import { ROUTES_NAMES } from '@/routes/constants';
 import {
   ArrowDownUpIcon,
@@ -36,6 +38,7 @@ import { computed, onMounted, reactive, ref, watch } from 'vue';
 
 import FinanceChart, { type ChartRow, type ChartSeries } from './finance-chart.vue';
 import { mapHistoryRecords, parseHistoryFile, type UnmappedHistoryRecord } from './history-import';
+import { recordedCategoryBalance, recordedNetWorth } from './history-display';
 
 const data = ref<FinanceDashboard | null>(null);
 const loading = ref(true);
@@ -89,7 +92,9 @@ const pct = (value: number | null | undefined) =>
 const changeAmount = (value: FinanceDashboard['monthlyChange']) =>
   typeof value === 'number' ? value : (value?.amount ?? null);
 const history = computed(() => data.value?.history ?? []);
-const allMissing = computed(() => included.value.filter((a) => a.latestBalance === null));
+const allMissing = computed(() =>
+  included.value.filter((a) => history.value.at(-1)?.missingAccountIds.includes(a.id) || a.latestBalance === null),
+);
 const categoryById = (id: string) => data.value?.categories.find((c) => c.id === id);
 const accountById = (id: string) => data.value?.accounts.find((a) => a.id === id);
 const changePercent = (value: FinanceDashboard['monthlyChange']) =>
@@ -116,13 +121,11 @@ const chartCurrency = computed(() =>
   accountIsRequired.value ? (accountById(selectedAccount.value)?.currencyCode ?? currency.value) : currency.value,
 );
 const categoryTotal = (id: string) => {
-  const accounts = included.value.filter((a) => a.categoryId === id);
-  if (accounts.some((a) => a.latestBalance === null || a.currencyCode !== currency.value)) return null;
-  return accounts.reduce(
-    (sum, a) => sum + (a.balanceKind === 'liability' ? -Math.abs(a.latestBalance!) : a.latestBalance!),
-    0,
-  );
+  const point = history.value.at(-1);
+  return point ? recordedCategoryBalance(point, included.value, id) : null;
 };
+const categoryPartial = (id: string) =>
+  included.value.some((a) => a.categoryId === id && history.value.at(-1)?.missingAccountIds.includes(a.id));
 const chartModel = computed(
   (): { rows: ChartRow[]; series: ChartSeries[]; mode: 'line' | 'stacked' | 'bar' | 'donut'; percentage?: boolean } => {
     const categories = data.value?.categories ?? [];
@@ -131,11 +134,7 @@ const chartModel = computed(
       label: p.date,
       values: Object.fromEntries(
         categories.map((c) => {
-          const categoryAccounts = included.value.filter((a) => a.categoryId === c.id);
-          return [
-            c.id,
-            categoryAccounts.some((a) => p.missingAccountIds.includes(a.id)) ? null : (p.categories[c.id] ?? 0),
-          ];
+          return [c.id, recordedCategoryBalance(p, included.value, c.id)];
         }),
       ),
       partial: !p.complete,
@@ -238,12 +237,110 @@ const chartModel = computed(
       };
     }
     return {
-      rows: history.value.map((p) => ({ label: p.date, values: { total: p.total }, partial: !p.complete })),
+      rows: history.value.map((p) => ({ label: p.date, values: { total: recordedNetWorth(p) }, partial: !p.complete })),
       series: [{ id: 'total', name: 'Net worth', color: 'var(--primary)' }],
       mode: 'line',
     };
   },
 );
+
+const detailOpen = ref(false);
+const detailScope = ref<'all' | 'category' | 'account'>('all');
+const detailId = ref('');
+const detailDate = ref('');
+const detailTitle = computed(() =>
+  detailScope.value === 'account'
+    ? `${accountById(detailId.value)?.name ?? 'Account'} history`
+    : detailScope.value === 'category'
+      ? `${categoryById(detailId.value)?.name ?? 'Category'} details`
+      : 'Net worth details',
+);
+const detailAccounts = computed(() =>
+  (data.value?.accounts ?? []).filter((a) =>
+    detailScope.value === 'account'
+      ? a.id === detailId.value
+      : a.included && (detailScope.value === 'all' || a.categoryId === detailId.value),
+  ),
+);
+const detailPoints = computed<FinanceHistoryPoint[]>(() => {
+  if (detailScope.value === 'account') {
+    const buckets = new Map<string, NonNullable<FinanceDashboard['snapshots']>[number]>();
+    for (const s of data.value?.snapshots ?? []) {
+      if (s.accountId !== detailId.value) continue;
+      const key = granularity.value === 'monthly' ? s.date.slice(0, 7) : s.date;
+      if (!buckets.has(key) || buckets.get(key)!.date < s.date) buckets.set(key, s);
+    }
+    return [...buckets.values()]
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .map((s) => ({
+        date: s.date,
+        total: s.balance,
+        knownTotal: s.balance,
+        complete: true,
+        missingAccountIds: [],
+        balances: { [s.accountId]: s.balance },
+        valuationDates: { [s.accountId]: s.date },
+        categories: {},
+      }));
+  }
+  return history.value.map((p) => {
+    const missingAccountIds = detailAccounts.value
+      .filter((a) => p.balances[a.id] === null || p.balances[a.id] === undefined || a.currencyCode !== currency.value)
+      .map((a) => a.id);
+    const knownTotal =
+      detailAccounts.value.reduce((sum, a) => {
+        const value = p.balances[a.id];
+        return (
+          sum +
+          (value === null || value === undefined || a.currencyCode !== currency.value
+            ? 0
+            : Math.round((a.balanceKind === 'liability' ? -Math.abs(value) : value) * 100))
+        );
+      }, 0) / 100;
+    return {
+      ...p,
+      knownTotal,
+      total: missingAccountIds.length ? null : knownTotal,
+      missingAccountIds,
+      complete: !missingAccountIds.length,
+    };
+  });
+});
+const detailPoint = computed(
+  () => detailPoints.value.find((p) => p.date === detailDate.value) ?? detailPoints.value.at(-1),
+);
+const detailChartRows = computed<ChartRow[]>(() =>
+  detailPoints.value.map((p) => ({
+    label: p.date,
+    values: {
+      balance: detailAccounts.value.some((a) => p.balances[a.id] !== null && p.balances[a.id] !== undefined)
+        ? recordedNetWorth(p)
+        : null,
+    },
+    partial: !p.complete,
+  })),
+);
+const detailCurrency = computed(() =>
+  detailScope.value === 'account' ? (detailAccounts.value[0]?.currencyCode ?? currency.value) : currency.value,
+);
+function openDetails(scope: 'all' | 'category' | 'account', id = '', date = '') {
+  detailScope.value = scope;
+  detailId.value = id;
+  detailDate.value = date;
+  detailOpen.value = true;
+}
+function selectChartPoint(row: ChartRow) {
+  const account = data.value?.accounts.find((a) => a.name === row.label);
+  if (account) {
+    openDetails('account', account.id);
+    return;
+  }
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(row.label)
+    ? row.label
+    : history.value.find((p) => p.date.slice(0, 7) === row.label)?.date;
+  if (!date) return;
+  openDetails(accountIsRequired.value ? 'account' : 'all', accountIsRequired.value ? selectedAccount.value : '', date);
+}
 
 let requestId = 0;
 async function reload() {
@@ -456,13 +553,24 @@ const inputClass =
       <div v-for="i in 4" :key="i" class="bg-muted h-28 animate-pulse rounded-lg" />
     </div>
     <template v-if="data">
-      <Card class="p-5 sm:p-6">
+      <Card
+        as="button"
+        type="button"
+        class="focus-visible:ring-ring w-full cursor-pointer p-5 text-left focus-visible:ring-2 focus-visible:outline-none sm:p-6"
+        aria-label="View total net worth balances and history"
+        @click="openDetails('all')"
+      >
         <div class="flex flex-wrap items-start justify-between gap-5">
           <div>
             <p class="text-muted-foreground text-sm">
               Total net worth <span v-if="!data.complete" class="text-warning-text">· partial</span>
             </p>
-            <p class="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">{{ money(data.total) }}</p>
+            <p class="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">
+              {{ money(data.asOf ? (data.total ?? data.knownTotal) : null) }}
+            </p>
+            <p v-if="!data.complete && data.asOf" class="text-warning-text mt-1 text-xs">
+              Recorded subtotal · unavailable balances are excluded
+            </p>
             <p class="text-muted-foreground mt-2 text-xs">
               {{ included.length }} included accounts · {{ data.snapshotCount }} preserved valuations
               <span v-if="data.asOf"> · last snapshot {{ data.asOf }}</span>
@@ -487,14 +595,24 @@ const inputClass =
         </div>
       </Card>
       <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Card v-for="category in data.categories" :key="category.id" class="p-4">
+        <Card
+          v-for="category in data.categories"
+          :key="category.id"
+          as="button"
+          type="button"
+          class="hover:border-primary/50 focus-visible:ring-ring w-full cursor-pointer p-4 text-left transition-colors focus-visible:ring-2 focus-visible:outline-none"
+          :aria-label="`View ${category.name} balances and history`"
+          @click="openDetails('category', category.id)"
+        >
           <div class="text-muted-foreground flex items-center gap-2 text-sm">
             <span class="size-2.5 rounded-full" :style="{ backgroundColor: category.color }" />{{ category.name }}
           </div>
           <p class="mt-2 text-xl font-semibold">{{ money(categoryTotal(category.id)) }}</p>
           <p class="text-muted-foreground mt-1 text-xs">
             {{ included.filter((a) => a.categoryId === category.id).length }} included accounts
+            <span v-if="categoryPartial(category.id)" class="text-warning-text"> · partial subtotal</span>
           </p>
+          <p class="text-muted-foreground mt-2 text-xs">View balances & history →</p>
         </Card>
       </div>
       <Callout v-if="allMissing.length" variant="warning" title="Some balances are missing"
@@ -839,12 +957,17 @@ const inputClass =
           </div>
         </div>
         <div :class="{ 'opacity-50': loading }">
+          <p v-if="/^\d{4}-\d{2}/.test(chartModel.rows[0]?.label ?? '')" class="text-muted-foreground mb-3 text-xs">
+            Recorded range: {{ chartModel.rows[0]?.label }} – {{ chartModel.rows.at(-1)?.label }} ·
+            {{ chartModel.rows.length }} observations
+          </p>
           <FinanceChart
             :rows="chartModel.rows"
             :series="chartModel.series"
             :mode="chartModel.mode"
             :percentage="chartModel.percentage"
             :currency="chartCurrency"
+            @select="selectChartPoint"
           />
         </div>
         <p class="text-muted-foreground mt-4 text-xs">
@@ -853,7 +976,7 @@ const inputClass =
               ? 'Gain = current value − net contributed principal. This is a contribution-based gain, not annualized performance. No gain is shown without a known opening basis.'
               : chart === 'allocation'
                 ? 'Allocation shows positive included asset balances. Liabilities remain included in total net worth.'
-                : 'Charts use recorded valuations on their actual dates. Missing records leave gaps; changes between incomplete or nonadjacent months are omitted.'
+                : 'Every recorded date is shown, including partial subtotals (open dots and dashed lines). Missing accounts stay missing. Lines join recorded observations; no balances are inferred between them. Move across the chart or click a date for details.'
           }}
         </p>
       </Card>
@@ -897,7 +1020,14 @@ const inputClass =
                 :class="['border-t', !account.included && 'opacity-60']"
               >
                 <td class="p-4">
-                  <p class="font-medium whitespace-nowrap">{{ account.name }}</p>
+                  <button
+                    type="button"
+                    class="cursor-pointer text-left font-medium whitespace-nowrap hover:underline focus-visible:underline"
+                    :aria-label="`View ${account.name} balance history`"
+                    @click="openDetails('account', account.id)"
+                  >
+                    {{ account.name }}
+                  </button>
                   <p class="text-muted-foreground mt-1 text-xs">
                     {{ account.balanceKind === 'liability' ? 'Liability' : 'Asset' }} ·
                     {{ account.included ? 'Included' : 'Excluded from net worth' }}
@@ -967,7 +1097,10 @@ const inputClass =
                     {{ pct(account.moneyWeightedReturnPercent) }} annualized XIRR
                   </p>
                 </td>
-                <td class="p-3"><Button variant="ghost" size="sm" @click="editAccount(account)">Edit</Button></td>
+                <td class="p-3 whitespace-nowrap">
+                  <Button variant="ghost" size="sm" @click="openDetails('account', account.id)">History</Button
+                  ><Button variant="ghost" size="sm" @click="editAccount(account)">Edit</Button>
+                </td>
               </tr>
             </tbody>
           </table>
@@ -987,8 +1120,19 @@ const inputClass =
             </thead>
             <tbody>
               <tr v-for="point in [...history].reverse()" :key="point.date" class="border-t">
-                <td class="p-3">{{ point.date }}</td>
-                <td class="p-3 text-right tabular-nums">{{ money(point.total) }}</td>
+                <td class="p-3">
+                  <button
+                    type="button"
+                    class="cursor-pointer hover:underline"
+                    @click="openDetails('all', '', point.date)"
+                  >
+                    {{ point.date }}
+                  </button>
+                </td>
+                <td class="p-3 text-right tabular-nums">
+                  {{ money(recordedNetWorth(point))
+                  }}<span v-if="!point.complete" class="text-warning-text block">Recorded subtotal</span>
+                </td>
                 <td :class="['p-3', point.complete ? 'text-app-income-color' : 'text-warning-text']">
                   {{ point.complete ? 'Complete' : 'Partial' }}
                 </td>
@@ -1055,5 +1199,160 @@ const inputClass =
         >
       </div>
     </template>
+    <Dialog v-model:open="detailOpen">
+      <DialogScrollContent class="max-w-5xl">
+        <DialogHeader>
+          <DialogTitle>{{ detailTitle }}</DialogTitle>
+          <DialogDescription
+            >Recorded balances and their actual valuation dates. Blank entries remain missing; partial totals include
+            only available balances.</DialogDescription
+          >
+        </DialogHeader>
+        <template v-if="data">
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <Button
+              v-if="detailScope === 'account'"
+              variant="outline"
+              size="sm"
+              @click="openDetails('category', detailAccounts[0]?.categoryId ?? '')"
+              >Back to category</Button
+            >
+            <label class="grid gap-1 text-sm"
+              >Snapshot date<select
+                :value="detailPoint?.date"
+                :class="inputClass"
+                aria-label="Detail snapshot date"
+                @change="detailDate = ($event.target as HTMLSelectElement).value"
+              >
+                <option v-for="point in [...detailPoints].reverse()" :key="point.date" :value="point.date">
+                  {{ point.date }}{{ point.complete ? '' : ' · partial' }}
+                </option>
+              </select></label
+            >
+            <div class="text-right">
+              <p class="text-2xl font-semibold">
+                {{
+                  money(
+                    detailPoint && detailAccounts.some((a) => typeof detailPoint!.balances[a.id] === 'number')
+                      ? recordedNetWorth(detailPoint)
+                      : null,
+                    detailCurrency,
+                  )
+                }}
+              </p>
+              <p class="text-muted-foreground text-xs">
+                {{ detailPoint?.date ?? 'No recorded valuations'
+                }}{{ detailPoint && !detailPoint.complete ? ' · recorded subtotal' : '' }}
+              </p>
+            </div>
+          </div>
+          <FinanceChart
+            :rows="detailChartRows"
+            :series="[
+              {
+                id: 'balance',
+                name: detailScope === 'account' ? 'Account balance' : 'Recorded balances',
+                color: 'var(--primary)',
+              },
+            ]"
+            :currency="detailCurrency"
+            @select="(row) => (detailDate = row.label)"
+          />
+          <div class="overflow-x-auto rounded-md border">
+            <table class="w-full text-left text-sm" aria-label="Snapshot account balances">
+              <thead class="bg-muted/50 text-muted-foreground text-xs">
+                <tr>
+                  <th class="p-3">Account</th>
+                  <th class="p-3 text-right">Balance</th>
+                  <th class="p-3">Valuation date</th>
+                  <th class="p-3">Source</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="account in detailAccounts" :key="account.id" class="border-t">
+                  <td class="p-3">
+                    <button
+                      type="button"
+                      class="cursor-pointer text-left font-medium hover:underline"
+                      :aria-label="`View ${account.name} history from details`"
+                      @click="openDetails('account', account.id)"
+                    >
+                      {{ account.name }}
+                    </button>
+                    <p class="text-muted-foreground text-xs">
+                      {{ account.balanceKind === 'liability' ? 'Liability' : 'Asset'
+                      }}{{ account.included ? '' : ' · excluded from net worth' }}
+                    </p>
+                  </td>
+                  <td class="p-3 text-right whitespace-nowrap tabular-nums">
+                    {{ money(detailPoint?.balances[account.id], account.currencyCode)
+                    }}<span
+                      v-if="
+                        detailPoint?.balances[account.id] === null || detailPoint?.balances[account.id] === undefined
+                      "
+                      class="text-warning-text block text-xs"
+                      >Missing</span
+                    >
+                  </td>
+                  <td class="p-3 whitespace-nowrap">
+                    {{
+                      detailPoint?.valuationDates?.[account.id] ??
+                      (typeof detailPoint?.balances[account.id] === 'number' ? detailPoint.date : '—')
+                    }}
+                  </td>
+                  <td class="text-muted-foreground p-3 text-xs">
+                    {{
+                      (data.snapshots ?? []).find(
+                        (s) =>
+                          s.accountId === account.id &&
+                          s.date === (detailPoint?.valuationDates?.[account.id] ?? detailPoint?.date),
+                      )?.source ?? '—'
+                    }}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="max-h-72 overflow-auto rounded-md border">
+            <table class="w-full text-left text-xs" aria-label="Detail balance history">
+              <thead class="bg-muted/50 text-muted-foreground sticky top-0">
+                <tr>
+                  <th class="p-3">Recorded date</th>
+                  <th class="p-3 text-right">{{ detailScope === 'account' ? 'Balance' : 'Recorded total' }}</th>
+                  <th class="p-3">Completeness</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="point in [...detailPoints].reverse()" :key="point.date" class="border-t">
+                  <td class="p-3">
+                    <button
+                      type="button"
+                      class="cursor-pointer hover:underline"
+                      :aria-label="`View snapshot ${point.date}`"
+                      @click="detailDate = point.date"
+                    >
+                      {{ point.date }}
+                    </button>
+                  </td>
+                  <td class="p-3 text-right tabular-nums">
+                    {{
+                      money(
+                        detailAccounts.some((a) => typeof point.balances[a.id] === 'number')
+                          ? recordedNetWorth(point)
+                          : null,
+                        detailCurrency,
+                      )
+                    }}
+                  </td>
+                  <td class="p-3" :class="point.complete ? 'text-app-income-color' : 'text-warning-text'">
+                    {{ point.complete ? 'Complete' : `Partial · ${point.missingAccountIds.length} missing` }}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </template>
+      </DialogScrollContent>
+    </Dialog>
   </PageWrapper>
 </template>

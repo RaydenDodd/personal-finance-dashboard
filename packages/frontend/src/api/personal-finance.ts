@@ -33,10 +33,12 @@ export interface FinanceAccount {
 export interface FinanceHistoryPoint {
   date: string;
   total: number | null;
+  knownTotal: number;
   categories: Record<string, number>;
   missingAccountIds: string[];
   complete: boolean;
   balances: Record<string, number | null>;
+  valuationDates?: Record<string, string | null>;
 }
 export type CashFlowType = 'contribution' | 'withdrawal' | 'transfer' | 'adjustment' | 'interest' | 'dividend';
 export interface FinanceCashFlow {
@@ -58,7 +60,15 @@ export interface FinanceDashboard {
   accounts: FinanceAccount[];
   history: FinanceHistoryPoint[];
   cashFlows: FinanceCashFlow[];
-  snapshots?: Array<{ accountId: string; date: string; balance: number; currencyCode: string }>;
+  snapshots?: Array<{
+    accountId: string;
+    date: string;
+    balance: number;
+    currencyCode: string;
+    source?: string;
+    verified?: boolean;
+    formula?: string | null;
+  }>;
   snapshotCount: number;
   total: number | null;
   highest: number | null;

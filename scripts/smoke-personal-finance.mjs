@@ -72,8 +72,19 @@ const history = dates.map((date, j) => ({
     accounts.map((a, i) => [a.id, [2500, 4500 + j * 250, 1000 + j * 100, 6500 + j * 750][i]]),
   ),
 }));
+history.unshift({
+  date: '2022-06-15',
+  total: null,
+  knownTotal: 125.25,
+  categories: { spendable: 125.25 },
+  missingAccountIds: accounts.slice(1).map((a) => a.id),
+  complete: false,
+  balances: { [accounts[0].id]: 125.25, ...Object.fromEntries(accounts.slice(1).map((a) => [a.id, null])) },
+});
 const snapshots = history.flatMap((p) =>
-  accounts.map((a) => ({ accountId: a.id, date: p.date, balance: p.balances[a.id], currencyCode: 'USD' })),
+  accounts
+    .filter((a) => typeof p.balances[a.id] === 'number')
+    .map((a) => ({ accountId: a.id, date: p.date, balance: p.balances[a.id], currencyCode: 'USD' })),
 );
 const cashFlows = accounts.map((a) => ({
   id: `flow-${a.id}`,
@@ -150,11 +161,44 @@ try {
   const datedPointPositions = await page
     .locator('svg[aria-label="Financial history chart"] circle')
     .evaluateAll((points) => points.map((point) => Number(point.getAttribute('cx'))));
-  expect(datedPointPositions).toHaveLength(3);
+  expect(datedPointPositions).toHaveLength(4);
+  expect(await page.locator('circle[data-recorded-date="2022-06-15"][data-partial="true"]').count()).toBe(1);
+  const lastThree = datedPointPositions.slice(-3);
   // Sep 17 -> Oct 12 spans 25 days; Oct 12 -> Nov 1 spans 20 days.
-  expect(
-    (datedPointPositions[1] - datedPointPositions[0]) / (datedPointPositions[2] - datedPointPositions[1]),
-  ).toBeCloseTo(1.25, 2);
+  expect((lastThree[1] - lastThree[0]) / (lastThree[2] - lastThree[1])).toBeCloseTo(1.25, 2);
+  const surface = page.getByTestId('finance-chart-surface');
+  const bounds = await surface.boundingBox();
+  await page.mouse.move(bounds.x + 1, bounds.y + bounds.height / 2);
+  await expect(
+    page.getByText('Partial snapshot · subtotal of recorded balances; missing accounts are excluded'),
+  ).toBeVisible();
+  const guide = page.getByTestId('finance-hover-guide');
+  const firstX = Number(await guide.getAttribute('x1'));
+  await page.mouse.move(bounds.x + bounds.width - 1, bounds.y + bounds.height / 2);
+  expect(Number(await guide.getAttribute('x1'))).toBeGreaterThan(firstX);
+  await surface.click({ position: { x: bounds.width - 2, y: bounds.height / 2 } });
+  let dialog = page.getByRole('dialog');
+  await expect(dialog.getByRole('heading', { name: 'Net worth details', exact: true })).toBeVisible();
+  await expect(dialog.getByLabel('Detail snapshot date')).toHaveValue('2026-11-01');
+  await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+  await page.getByRole('button', { name: 'View Savings balances and history', exact: true }).click();
+  dialog = page.getByRole('dialog');
+  await expect(dialog.getByRole('heading', { name: 'Savings details', exact: true })).toBeVisible();
+  await expect(dialog).toHaveCSS('opacity', '1');
+  await page.screenshot({ path: resolve(out, 'category-details-synthetic.png') });
+  await expect(dialog.getByRole('table', { name: 'Snapshot account balances' }).getByRole('row')).toHaveCount(2);
+  await dialog.getByRole('button', { name: 'View Synthetic Savings history from details', exact: true }).click();
+  await expect(dialog.getByRole('heading', { name: 'Synthetic Savings history', exact: true })).toBeVisible();
+  await expect(dialog).toHaveCSS('opacity', '1');
+  await page.screenshot({ path: resolve(out, 'account-history-synthetic.png') });
+  await expect(dialog.getByRole('table', { name: 'Detail balance history' }).locator('tbody tr')).toHaveCount(3);
+  await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+  await page.getByRole('button', { name: 'View Synthetic Spendable Money balance history', exact: true }).click();
+  dialog = page.getByRole('dialog');
+  await expect(
+    dialog.getByRole('table', { name: 'Detail balance history' }).getByText('2022-06-15', { exact: true }),
+  ).toBeVisible();
+  await dialog.getByRole('button', { name: 'Close', exact: true }).click();
   for (const metric of [
     'total',
     'categories',
@@ -242,6 +286,9 @@ try {
       {
         passed: true,
         charts: 9,
+        partialHistory: true,
+        hoverGuide: true,
+        categoryAndAccountDetails: true,
         snapshot: true,
         transfer: true,
         previewAndCommit: true,

@@ -27,6 +27,7 @@ const props = withDefaults(
   }>(),
   { mode: 'line', percentage: false, currency: 'USD' },
 );
+const emit = defineEmits<{ select: [row: ChartRow] }>();
 const container = ref<HTMLDivElement | null>(null);
 const svg = ref<SVGSVGElement | null>(null);
 const width = ref(700);
@@ -37,7 +38,8 @@ const formatValue = (n: number) =>
     : new Intl.NumberFormat(undefined, {
         style: 'currency',
         currency: props.currency,
-        maximumFractionDigits: 0,
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
       }).format(n);
 const hasValues = computed(() =>
   props.rows.some((r) => props.series.some((s) => r.values[s.id] !== null && r.values[s.id] !== undefined)),
@@ -85,6 +87,7 @@ function render() {
       .attr('stroke', colors.card)
       .attr('stroke-width', 3)
       .on('mousemove', (event) => showTooltip(event, row))
+      .on('click', () => emit('select', row))
       .on('mouseleave', () => (tooltip.visible = false));
     root
       .append('text')
@@ -211,13 +214,12 @@ function render() {
       .area<d3.SeriesPoint<ChartRow>>()
       .x((d) => x(d.data.label)!)
       .y0((d) => y(d[0]))
-      .y1((d) => y(d[1]))
-      .defined((d) => props.series.every((s) => d.data.values[s.id] !== null && d.data.values[s.id] !== undefined));
+      .y1((d) => y(d[1]));
     plot
       .selectAll('.area')
       .data(stack(props.rows))
       .join('path')
-      .attr('d', area)
+      .attr('d', (series) => area.defined((point) => typeof point.data.values[series.key] === 'number')(series))
       .attr('fill', (s) => props.series.find((v) => v.id === s.key)!.color)
       .attr('fill-opacity', 0.75);
   } else if (props.mode === 'bar') {
@@ -236,20 +238,36 @@ function render() {
     });
   } else {
     props.series.forEach((series) => {
+      const available = (r: ChartRow) => r.values[series.id] !== null && r.values[series.id] !== undefined;
+      const line = d3
+        .line<ChartRow>()
+        .x((r) => x(r.label))
+        .y((r) => y(r.values[series.id]!));
       plot
         .append('path')
         .datum(props.rows)
         .attr(
           'd',
-          d3
-            .line<ChartRow>()
-            .defined((r) => r.values[series.id] !== null && r.values[series.id] !== undefined)
-            .x((r) => x(r.label)!)
-            .y((r) => y(r.values[series.id]!)),
+          line.defined((r) => available(r) && !r.partial),
         )
         .attr('fill', 'none')
         .attr('stroke', series.color)
         .attr('stroke-width', 2.5);
+      plot
+        .selectAll(`.partial-segment-${props.series.indexOf(series)}`)
+        .data(
+          props.rows
+            .slice(1)
+            .map((r, i) => [props.rows[i]!, r])
+            .filter((pair) => pair.every(available) && pair.some((r) => r.partial)),
+        )
+        .join('path')
+        .attr('class', 'partial-segment')
+        .attr('d', (pair) => line.defined(available)(pair))
+        .attr('fill', 'none')
+        .attr('stroke', series.color)
+        .attr('stroke-width', 2.5)
+        .attr('stroke-dasharray', '5 4');
       if (props.rows.length <= 70)
         plot
           .selectAll(`circle.series-${series.id}`)
@@ -257,9 +275,55 @@ function render() {
           .join('circle')
           .attr('cx', (r) => x(r.label)!)
           .attr('cy', (r) => y(r.values[series.id]!))
-          .attr('r', 3)
-          .attr('fill', series.color);
+          .attr('r', (r) => (r.partial ? 4 : 3))
+          .attr('fill', (r) => (r.partial ? colors.card : series.color))
+          .attr('stroke', series.color)
+          .attr('stroke-width', 1.5)
+          .attr('data-recorded-date', (r) => r.label)
+          .attr('data-partial', (r) => String(Boolean(r.partial)));
     });
+  }
+  const hover = plot.append('g').attr('pointer-events', 'none').attr('display', 'none');
+  const guide = hover
+    .append('line')
+    .attr('data-testid', 'finance-hover-guide')
+    .attr('y1', 0)
+    .attr('y2', plotH)
+    .attr('stroke', colors.foreground)
+    .attr('stroke-opacity', 0.7)
+    .attr('stroke-width', 1)
+    .attr('stroke-dasharray', '4 3');
+  function activate(row: ChartRow, event?: PointerEvent) {
+    hover.attr('display', null);
+    guide.attr('x1', x(row.label)).attr('x2', x(row.label));
+    hover
+      .selectAll('circle')
+      .data(props.series.filter((s) => typeof row.values[s.id] === 'number'))
+      .join('circle')
+      .attr('cx', x(row.label))
+      .attr('cy', (s) => y(row.values[s.id]!))
+      .attr('r', 5)
+      .attr('fill', colors.card)
+      .attr('stroke', (s) => s.color)
+      .attr('stroke-width', 2);
+    if (event) showTooltip(event, row);
+    else {
+      tooltip.row = row;
+      tooltip.x = Math.max(4, Math.min(x(row.label), width.value - 235));
+      tooltip.y = 10;
+      tooltip.visible = true;
+    }
+  }
+  function dismiss() {
+    tooltip.visible = false;
+    hover.attr('display', 'none');
+  }
+  function nearest(event: PointerEvent): ChartRow {
+    const [px] = d3.pointer(event, plot.node());
+    return props.rows.reduce(
+      (best, row) => (Math.abs(x(row.label) - px) < Math.abs(x(best.label) - px) ? row : best),
+      props.rows[0]!,
+    );
   }
   const hitW = Math.max(8, plotW / Math.max(1, props.rows.length));
   plot
@@ -271,21 +335,34 @@ function render() {
     .attr('width', hitW)
     .attr('height', plotH)
     .attr('fill', 'transparent')
+    .attr('pointer-events', 'none')
     .attr('tabindex', 0)
     .attr(
       'aria-label',
       (r) =>
         `${r.label}: ${props.series.map((s) => `${s.name} ${r.values[s.id] === null ? 'missing' : formatValue(r.values[s.id] ?? 0)}`).join(', ')}`,
     )
-    .on('mousemove', (event, row) => showTooltip(event, row))
-    .on('mouseleave', () => (tooltip.visible = false))
-    .on('focus', (_, row) => {
-      tooltip.row = row;
-      tooltip.x = Math.max(4, Math.min(x(row.label)!, w - 235));
-      tooltip.y = 10;
-      tooltip.visible = true;
+    .on('focus', (_, row) => activate(row))
+    .on('keydown', (event: KeyboardEvent, row) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        emit('select', row);
+      }
     })
-    .on('blur', () => (tooltip.visible = false));
+    .on('blur', dismiss);
+  plot
+    .append('rect')
+    .attr('class', 'chart-interaction-surface')
+    .attr('data-testid', 'finance-chart-surface')
+    .attr('width', plotW)
+    .attr('height', plotH)
+    .attr('fill', 'transparent')
+    .attr('cursor', 'crosshair')
+    .attr('aria-hidden', 'true')
+    .on('pointermove', (event: PointerEvent) => activate(nearest(event), event))
+    .on('pointerdown', (event: PointerEvent) => activate(nearest(event), event))
+    .on('pointerleave', dismiss)
+    .on('click', (event: PointerEvent) => emit('select', nearest(event)));
 }
 useResizeObserver(container, (entries) => {
   width.value = entries[0]!.contentRect.width;
@@ -324,12 +401,15 @@ onMounted(render);
             "
           />
           <p v-if="tooltip.row.partial" class="text-warning-text mt-2 text-xs">
-            Partial snapshot · some balances are missing
+            Partial snapshot · subtotal of recorded balances; missing accounts are excluded
           </p>
         </ChartTooltip>
       </div>
     </div>
     <div class="mt-4 flex flex-wrap justify-center gap-x-5 gap-y-2 text-xs">
+      <span v-if="rows.some((row) => row.partial)" class="text-warning-text"
+        >○ Dashed / open points: partial recorded subtotal</span
+      >
       <span v-for="series in props.series" :key="series.id" class="text-muted-foreground flex items-center gap-2"
         ><span class="size-2.5 rounded-sm" :style="{ backgroundColor: series.color }" />{{ series.name }}</span
       >

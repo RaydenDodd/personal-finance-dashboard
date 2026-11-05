@@ -34,7 +34,9 @@ The CLI never prints financial values, passwords, session cookies, or response b
 
 Some historical rows combine multiple accounts or change institutions over time. Preserve those rows as historical aggregates until dated evidence supports a split. Do not simultaneously include a combined historical row and its underlying accounts for the same valuation period. Renaming a historical row alone cannot reconstruct the original component balances.
 
-The initial read identified 16 account rows, 618 balance observations and 42 recorded dates from 2022-06-15 through 2026-09-01. No real balances or transactions are in this repository. One year-heading discrepancy is flagged in the private import preview.
+The refreshed read contains 16 account rows, 648 balance observations and 44 recorded dates from 2022-06-15 through 2026-11-01, including October and November 2026. No real balances or transactions are in this repository. One year-heading discrepancy is flagged in the private import preview.
+
+The category cards and total card open balance/history details, and account names or History buttons open an account's individual timeline. The chart shows every recorded observation. Earlier incomplete months use their recorded subtotal with open points and dashed line segments; missing accounts remain missing rather than zero. A vertical guide snaps to the nearest actual observation as the pointer moves, and clicking an observation opens its dated account breakdown.
 
 ## Accounting conventions
 
