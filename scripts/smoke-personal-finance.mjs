@@ -147,10 +147,14 @@ try {
   await page.goto(`${previewOrigin}/__qa-personal-finance.html`);
   await expect(page.getByRole('heading', { name: 'Personal net worth', exact: true })).toBeVisible({ timeout: 60000 });
   await expect(page.getByText('Synthetic Spendable Money', { exact: true }).first()).toBeVisible({ timeout: 30000 });
-  const datedPointPositions = await page.locator('svg[aria-label="Financial history chart"] circle').evaluateAll(points => points.map(point => Number(point.getAttribute('cx'))));
+  const datedPointPositions = await page
+    .locator('svg[aria-label="Financial history chart"] circle')
+    .evaluateAll((points) => points.map((point) => Number(point.getAttribute('cx'))));
   expect(datedPointPositions).toHaveLength(3);
   // Sep 17 -> Oct 12 spans 25 days; Oct 12 -> Nov 1 spans 20 days.
-  expect((datedPointPositions[1] - datedPointPositions[0]) / (datedPointPositions[2] - datedPointPositions[1])).toBeCloseTo(1.25, 2);
+  expect(
+    (datedPointPositions[1] - datedPointPositions[0]) / (datedPointPositions[2] - datedPointPositions[1]),
+  ).toBeCloseTo(1.25, 2);
   for (const metric of [
     'total',
     'categories',
@@ -199,13 +203,11 @@ try {
     opening: false,
   });
   await page.getByRole('button', { name: 'Import history', exact: true }).click();
-  await page
-    .getByLabel('Choose historical balance file')
-    .setInputFiles({
-      name: 'synthetic-history.csv',
-      mimeType: 'text/csv',
-      buffer: Buffer.from('account,date,balance,currencyCode\nLegacy synthetic account,2022-06-15,100,USD\n'),
-    });
+  await page.getByLabel('Choose historical balance file').setInputFiles({
+    name: 'synthetic-history.csv',
+    mimeType: 'text/csv',
+    buffer: Buffer.from('account,date,balance,currencyCode\nLegacy synthetic account,2022-06-15,100,USD\n'),
+  });
   await page.getByLabel('Legacy synthetic account').selectOption('account-0');
   await page.getByRole('button', { name: 'Preview import', exact: true }).click();
   await expect(page.getByText('Preview ready', { exact: true })).toBeVisible();

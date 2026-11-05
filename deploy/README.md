@@ -129,6 +129,26 @@ This uses the same upstream nginx runtime and skips the optional marketing
 landing page, as configured by `SKIP_LANDING=true`. The artifact build context
 contains no source records, environment files, or credentials.
 
+For the backend, compile locally with its normal Vite build and prepare a
+second small artifact directory containing `backend-dist/`, the source
+`migrations/` directory, and the root `package-lock.json`. Transfer it to
+`private/backend-build/`, then run:
+
+```sh
+sh deploy/build-prebuilt-backend.sh private/backend-build
+SKIP_BUILD=true sh deploy/deploy.sh
+```
+
+The helper retains the first working ARM64 image as
+`personal-finance-dashboard-backend:dependencies-base`. It compares the
+artifact lockfile hash with `/app/package-lock.json` inside that image before
+copying the new bundle and migrations. Native dependencies stay ARM64; no
+TypeScript compiler or dependency installation runs on the Pi. If dependencies
+change, supply a newly built matching runtime through `BACKEND_RUNTIME_BASE`.
+The Dockerfile's published upstream fallback also requires an exactly matching
+lockfile; an arbitrary `latest` image cannot safely supply different dependencies.
+The deployment script refuses source builds with less than 3 GB available RAM.
+
 For a rollback, first retain the failing deployment's logs and a fresh backup.
 Restore the previous source commit and rebuild. A code rollback cannot undo
 database migrations; restore a matching backup into a **separate database**
