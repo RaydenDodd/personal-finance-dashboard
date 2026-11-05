@@ -109,11 +109,22 @@ function render() {
   const plotW = w - margin.left - margin.right,
     plotH = h - margin.top - margin.bottom;
   const plot = root.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
-  const x = d3
+  const categoricalX = d3
     .scalePoint<string>()
     .domain(props.rows.map((r) => r.label))
     .range([0, plotW])
     .padding(0.35);
+  const isDated = props.rows.every((r) => /^\d{4}-\d{2}(-\d{2})?$/.test(r.label));
+  const timestamp = (label: string) => Date.parse(`${label.length === 7 ? `${label}-01` : label}T12:00:00Z`);
+  const timestamps = isDated ? props.rows.map((r) => timestamp(r.label)) : [];
+  const minDate = Math.min(...timestamps),
+    maxDate = Math.max(...timestamps);
+  const datePadding = Math.max(86400000, (maxDate - minDate) * 0.03);
+  const temporalX = d3
+    .scaleUtc()
+    .domain([new Date(minDate - datePadding), new Date(maxDate + datePadding)])
+    .range([0, plotW]);
+  const x = (label: string): number => (isDated ? temporalX(new Date(timestamp(label))) : categoricalX(label)!);
   const values = props.rows.flatMap((r) =>
     props.mode === 'stacked'
       ? [
@@ -164,19 +175,29 @@ function render() {
     .attr('color', colors.text)
     .attr('font-size', 11);
   const tickEvery = Math.max(1, Math.ceil(props.rows.length / (w < 420 ? 4 : 8)));
-  plot
-    .append('g')
-    .attr('transform', `translate(0,${plotH})`)
-    .call(
+  const xAxis = plot.append('g').attr('transform', `translate(0,${plotH})`);
+  if (isDated) {
+    xAxis.call(
       d3
-        .axisBottom(x)
+        .axisBottom(temporalX)
+        .ticks(w < 420 ? 4 : 8)
+        .tickSize(0)
+        .tickPadding(14)
+        .tickFormat((date) => d3.utcFormat(maxDate - minDate < 45 * 86400000 ? '%b %d' : '%Y-%m')(date as Date)),
+    );
+  } else {
+    xAxis.call(
+      d3
+        .axisBottom(categoricalX)
         .tickValues(props.rows.filter((_, i) => i % tickEvery === 0).map((r) => r.label))
         .tickSize(0)
         .tickPadding(14)
         .tickFormat((label) =>
           /^\d{4}-\d{2}-\d{2}$/.test(label) ? label.slice(0, 7) : label.length > 14 ? `${label.slice(0, 12)}…` : label,
         ),
-    )
+    );
+  }
+  xAxis
     .call((g) => g.select('.domain').remove())
     .attr('color', colors.text)
     .attr('font-size', 10);

@@ -76,6 +76,9 @@ describe('MCP transaction tools forward payeeId', () => {
 });
 
 describe('MCP transaction tools forward paymentLegs', () => {
+  let previousReadOnly: string | undefined;
+  beforeEach(() => { previousReadOnly = process.env.MCP_READ_ONLY; process.env.MCP_READ_ONLY = 'false'; });
+  afterEach(() => { if (previousReadOnly === undefined) delete process.env.MCP_READ_ONLY; else process.env.MCP_READ_ONLY = previousReadOnly; });
   beforeEach(() => {
     jest.mocked(createTransaction).mockRejectedValue(new Error('stop'));
     jest.mocked(updateTransaction).mockRejectedValue(new Error('stop'));

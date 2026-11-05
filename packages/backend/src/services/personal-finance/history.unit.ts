@@ -3,7 +3,7 @@ import { connection } from '@models/index';
 
 jest.mock('@models/index', () => ({ connection: { sequelize: { query: jest.fn(), transaction: jest.fn() } } }));
 
-import { addFinanceSnapshot, commitFinanceImport, getFinanceDashboard, getFinanceRevisions, previewFinanceImport } from './index';
+import { addFinanceSnapshot, commitFinanceImport, getFinanceDashboard, getFinanceRevisions, previewFinanceImport, saveFinanceAccount } from './index';
 
 // An in-memory persistence boundary, not a replacement for the real PostgreSQL
 // migration check. It exercises the service review/commit/revision behavior.
@@ -74,5 +74,11 @@ describe('historical review, import and immutable corrections', () => {
     const preview = await previewFinanceImport(1, importRequest);
     await addFinanceSnapshot(1, { accountId: 'a', date: '2022-06-15', balance: 200, verified: true });
     await expect(commitFinanceImport(1, { ...importRequest, previewToken: preview.previewToken })).rejects.toThrow(/preview/);
+  });
+  it('rejects updating another user’s reporting account or linking an unowned native account', async () => {
+    await expect(saveFinanceAccount(2, { name: 'Unauthorized edit' }, 'a')).rejects.toThrow(/not found/);
+    await expect(saveFinanceAccount(1, { name: 'Synthetic', categoryId: 'investments', nativeAccountId: 'foreign-native' })).rejects.toThrow(/belong to this user/);
+    await expect(addFinanceSnapshot(2, { accountId: 'a', date: '2026-01-01', balance: 1, verified: true })).rejects.toThrow(/not found/);
+    expect(saved).toHaveLength(0);
   });
 });
