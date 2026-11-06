@@ -66,6 +66,28 @@ const buildPoint = ({
 };
 
 describe('kindsWithActivity', () => {
+  it('keeps missing historical debt unavailable and excludes it from average debt and comparable net-worth changes', () => {
+    const raw = {
+      ...buildPoint({ date: '2022-06-15', assets: 100 }),
+      liabilitiesTotal: null,
+      netWorth: null,
+      liabilitiesAvailable: false,
+    };
+    const [historical] = buildDisplayPoints({
+      points: [raw],
+      selectedAssetKinds: ['cash'],
+      selectedLiabilityKinds: ['credit-card'],
+    });
+    expect(historical?.assetsTotal).toBe(100);
+    expect(historical?.liabilitiesAvailable).toBe(false);
+    const [current] = buildDisplayPoints({
+      points: [buildPoint({ date: '2026-11-05', assets: 1000, creditCard: -200 })],
+      selectedAssetKinds: ['cash'],
+      selectedLiabilityKinds: ['credit-card'],
+    });
+    expect(averageOwedLiabilities({ points: [historical!, current!] })).toBe(200);
+    expect(computePeriodChange({ points: [historical!, current!] })).toEqual({ amount: 0, pct: null });
+  });
   it('keeps only kinds with a nonzero balance somewhere in the series', () => {
     const kinds = kindsWithActivity({
       points: [

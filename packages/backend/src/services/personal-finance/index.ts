@@ -10,6 +10,7 @@ import {
   moneyWeightedReturn,
   preferredSnapshots,
   principalFor,
+  latestKnownSummary,
   sourceRank,
 } from './calculations';
 import { combinedProviderValuation, type LinkedProviderAccount, type ProviderValuation } from './provider-valuation';
@@ -176,7 +177,7 @@ export async function saveFinanceAccount(userId: number, data: Partial<FinanceAc
 }
 async function getSnapshots(userId: number, transaction?: Transaction): Promise<FinanceSnapshot[]> {
   const result = await rows<Row>(
-    'SELECT * FROM "PersonalFinanceSnapshots" WHERE "userId"=:userId ORDER BY date,"createdAt",id',
+    'SELECT * FROM "PersonalFinanceSnapshots" WHERE "userId"=:userId AND "accountId" IS NOT NULL ORDER BY date,"createdAt",id',
     { userId },
     transaction,
   );
@@ -189,7 +190,7 @@ async function getSnapshots(userId: number, transaction?: Transaction): Promise<
 }
 export async function getCashFlows(userId: number, transaction?: Transaction): Promise<FinanceCashFlow[]> {
   const result = await rows<Row>(
-    'SELECT * FROM "PersonalFinanceCashFlows" WHERE "userId"=:userId AND "supersededAt" IS NULL AND verified ORDER BY date,"createdAt",id',
+    'SELECT * FROM "PersonalFinanceCashFlows" WHERE "userId"=:userId AND "supersededAt" IS NULL AND (verified OR evidence->>\'ownerAccepted\'=\'true\') ORDER BY date,"createdAt",id',
     { userId },
     transaction,
   );
@@ -448,7 +449,20 @@ export async function getFinanceDashboard(
   );
   const accountSummaries = accounts.map((a) => {
     const latest = selected.filter((s) => s.accountId === a.id).at(-1);
-    const principal = principalFor(a.id, cashFlows, latest?.date ?? query.to ?? new Date().toISOString().slice(0, 10));
+    let principal = principalFor(a.id, cashFlows, latest?.date ?? query.to ?? localDate());
+    const acceptedOpening = cashFlows.find(
+      (f) => f.accountId === a.id && f.opening && f.evidence?.ownerAcceptedLegacy === true,
+    );
+    if (!query.to && principal.principal === null && acceptedOpening && latest) {
+      principal = {
+        ...principalFor(a.id, cashFlows, [latest.date, acceptedOpening.date].sort().at(-1)!),
+        basisDate: null,
+        principalEstimated: true,
+        principalDatesIncomplete: true,
+      };
+    }
+    if (latest?.balance === 0 && principal.knownPrincipal === null)
+      principal = { ...principal, principal: 0, knownPrincipal: 0, principalComplete: true };
     const gain =
       latest && principal.principal !== null ? money(cents(latest.balance) - cents(principal.principal)) : null;
     const linkedStatuses = (a.nativeAccountIds ?? []).map((id) => nativeStatuses.find((s) => s.id === id));
@@ -487,7 +501,7 @@ export async function getFinanceDashboard(
           ? (gain / principal.principal) * 100
           : null,
       moneyWeightedReturnPercent:
-        latest && principal.principalComplete
+        latest && principal.principalComplete && !principal.principalEstimated && !principal.principalDatesIncomplete
           ? moneyWeightedReturn(a.id, cashFlows, latest.balance, latest.date)
           : null,
       returnMethod:
@@ -527,6 +541,7 @@ export async function getFinanceDashboard(
     yearlyChange: comparable(12),
     currencyCode: 'USD',
     snapshots: selected,
+    currentSummary: latestKnownSummary(accounts, selected),
     monthlyRuns: (
       await rows<Row>(
         'SELECT month,"missingAccountIds","createdAt" FROM "PersonalFinanceMonthlyRuns" WHERE "userId"=:userId ORDER BY month',
@@ -573,6 +588,38 @@ export async function recordFinanceMonthlyRuns(date = localDate()) {
 /** Read-only provider adapter; the same canonical native account can only map once.
  * A provider without an actual valuation timestamp contributes no snapshot. */
 export async function captureSimplefinValuations(connectionId: string, values: ProviderValuation[]) {
+  // Native charts need the provider's actual valuation date, not a transaction
+  // replay or the time the sync happened. Keep this evidence in the same snapshot store.
+  const native = await rows<{ id: string; userId: number; name: string; externalId: string; currencyCode: string }>(
+    'SELECT id,"userId",name,"externalId","currencyCode" FROM "Accounts" WHERE "bankDataProviderConnectionId"=:connectionId',
+    { connectionId },
+  );
+  for (const account of native) {
+    const valuation = combinedProviderValuation(
+      [{ nativeAccountId: account.id, externalId: account.externalId, nativeCurrencyCode: account.currencyCode }],
+      values,
+      account.currencyCode,
+    );
+    if (!valuation) continue;
+    const fingerprint = hash({ date: valuation.date, balance: valuation.balance, keys: valuation.keys });
+    await execute(
+      `INSERT INTO "PersonalFinanceSnapshots" (id,"userId","accountId","nativeAccountId",date,"balanceCents","currencyCode",source,verified,"sourceId","sourceKey",fingerprint,"sourceLabel",formula,description)
+      VALUES (:id,:userId,NULL,:nativeAccountId,:date,:balanceCents,:currencyCode,'simplefin',true,:sourceId,:sourceKey,:fingerprint,:sourceLabel,NULL,'Actual provider valuation; independent of transaction-derived balance history.')
+      ON CONFLICT ("userId","sourceId","sourceKey",fingerprint) DO NOTHING`,
+      {
+        id: randomUUID(),
+        userId: account.userId,
+        nativeAccountId: account.id,
+        date: valuation.date,
+        balanceCents: cents(valuation.balance),
+        currencyCode: account.currencyCode,
+        sourceId: `native-simplefin:${connectionId}`,
+        sourceKey: `native:${account.id}:${hash(valuation.keys)}`,
+        fingerprint,
+        sourceLabel: account.name,
+      },
+    );
+  }
   const mapped = await rows<FinanceAccount & LinkedProviderAccount & { linkedCount: number }>(
     `SELECT p.*,a."externalId",a.id AS "nativeAccountId",a."currencyCode" AS "nativeCurrencyCode",
     (SELECT COUNT(*) FROM "PersonalFinanceAccountLinks" all_links WHERE all_links."accountId"=p.id) AS "linkedCount" FROM "PersonalFinanceAccounts" p

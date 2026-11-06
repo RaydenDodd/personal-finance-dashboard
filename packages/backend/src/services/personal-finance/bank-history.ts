@@ -183,7 +183,7 @@ export async function getBankAccountHistory(userId: number, nativeAccountId: str
     ];
   });
   const bankRows = await read<{ date: string; amount: number; accountId: string }>(
-    `SELECT b.date::text,b.amount,b."accountId" FROM "Balances" b JOIN "Accounts" a ON a.id=b."accountId" WHERE a."userId"=:userId AND a.id IN (:ids) AND b.date>=:liveFrom ORDER BY b.date`,
+    `SELECT DISTINCT ON (s."nativeAccountId",s.date) s.date::text,s."balanceCents" AS amount,s."nativeAccountId" AS "accountId" FROM "PersonalFinanceSnapshots" s JOIN "Accounts" a ON a.id=s."nativeAccountId" WHERE a."userId"=:userId AND s."userId"=:userId AND a.id IN (:ids) AND s.date>=:liveFrom AND s.verified ORDER BY s."nativeAccountId",s.date,s."createdAt" DESC,s.id DESC`,
     { userId, ids: mapping.nativeAccountIds, liveFrom: context.liveFrom },
   );
   const dates = [...new Set(bankRows.map((b) => b.date))];

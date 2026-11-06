@@ -22,7 +22,9 @@ export interface CombinedBalanceHistoryItem {
   /** Sum of loan balances (stored negative), so adding it to totalBalance subtracts liabilities. */
   loansBalance: number;
   totalBalance: number;
-  historySource?: 'imported' | 'manual';
+  historySource?: 'imported' | 'manual' | 'recorded';
+  liabilitiesAvailable?: boolean;
+  valuationDates?: Record<string, string>;
   complete?: boolean;
 }
 

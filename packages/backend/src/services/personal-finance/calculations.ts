@@ -105,12 +105,55 @@ export function buildHistory(
       };
     });
 }
+/** A current as-of summary is distinct from a recorded historical observation.
+ * It retains each component's real date and never creates a snapshot or chart point. */
+export function latestKnownSummary(accounts: FinanceAccount[], snapshots: FinanceSnapshot[]) {
+  const latest = new Map<string, FinanceSnapshot>();
+  for (const s of preferredSnapshots(snapshots, accounts)) latest.set(s.accountId, s);
+  const included = accounts.filter((a) => a.included),
+    balances: Record<string, number | null> = {},
+    valuationDates: Record<string, string | null> = {},
+    categories: Record<string, number> = {},
+    missingAccountIds: string[] = [];
+  let total = 0;
+  for (const a of included) {
+    const s = latest.get(a.id);
+    balances[a.id] = s?.balance ?? null;
+    valuationDates[a.id] = s?.date ?? null;
+    if (!s || s.currencyCode !== 'USD') {
+      missingAccountIds.push(a.id);
+      continue;
+    }
+    const value = a.balanceKind === 'liability' ? -Math.abs(cents(s.balance)) : cents(s.balance);
+    total += value;
+    categories[a.categoryId] = (categories[a.categoryId] ?? 0) + value;
+  }
+  const dates = Object.values(valuationDates)
+    .filter((d): d is string => Boolean(d))
+    .sort();
+  return {
+    date: dates.at(-1) ?? '',
+    earliestValuationDate: dates[0] ?? null,
+    balances,
+    valuationDates,
+    categories: Object.fromEntries(Object.entries(categories).map(([id, value]) => [id, money(value)])),
+    knownTotal: money(total),
+    total: missingAccountIds.length ? null : money(total),
+    complete: !missingAccountIds.length,
+    missingAccountIds,
+    assetsOnly: !included.some((a) => a.balanceKind === 'liability'),
+    isAsOfSummary: true as const,
+  };
+}
 
 export function principalFor(accountId: string, flows: FinanceCashFlow[], valuationDate: string) {
   const relevant = flows
     .filter(
       (f) =>
-        f.verified !== false && f.date <= valuationDate && (f.accountId === accountId || f.toAccountId === accountId),
+        f.evidence?.dateUnknown !== true &&
+        (f.verified !== false || f.evidence?.ownerAccepted === true) &&
+        f.date <= valuationDate &&
+        (f.accountId === accountId || f.toAccountId === accountId),
     )
     .sort((a, b) => a.date.localeCompare(b.date) || a.createdAt.localeCompare(b.createdAt));
   const opening = relevant.find((f) => f.accountId === accountId && f.opening);
@@ -144,7 +187,12 @@ export function principalFor(accountId: string, flows: FinanceCashFlow[], valuat
   }
   const coverage = opening?.evidence?.principalValidThrough;
   const principalValidThrough = typeof coverage === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(coverage) ? coverage : null;
-  const complete = Boolean(opening) && (!principalValidThrough || valuationDate <= principalValidThrough);
+  const acceptedStale = opening?.evidence?.ownerAcceptedLegacy === true;
+  const complete =
+    Boolean(opening) && (!principalValidThrough || valuationDate <= principalValidThrough || acceptedStale);
+  const principalEstimated =
+    basisFlows.some((f) => f.evidence?.estimated === true) ||
+    (Boolean(acceptedStale) && Boolean(principalValidThrough && valuationDate > principalValidThrough));
   const kindTotal = (kind: 'employee' | 'employer') =>
     money(
       relevant
@@ -163,6 +211,11 @@ export function principalFor(accountId: string, flows: FinanceCashFlow[], valuat
   return {
     principal: complete ? money(principalCents) : null,
     principalComplete: complete,
+    principalEstimated,
+    principalDatesIncomplete:
+      opening?.evidence?.ownerAcceptedLegacy === true &&
+      Array.isArray(opening?.evidence?.undatedComponents) &&
+      opening.evidence.undatedComponents.length > 0,
     knownPrincipal: opening ? money(principalCents) : null,
     basisDate: opening?.date ?? null,
     principalValidThrough,
@@ -195,7 +248,9 @@ export function moneyWeightedReturn(
       terminalDate > own[0].evidence.principalValidThrough) ||
     own[0].type !== 'contribution' ||
     own[0].accountId !== accountId ||
-    own.some((f) => f.type === 'adjustment')
+    own.some(
+      (f) => f.type === 'adjustment' || f.evidence?.estimated === true || f.evidence?.ownerAcceptedLegacy === true,
+    )
   )
     return null;
   const start = Date.parse(own[0].date);

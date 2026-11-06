@@ -37,6 +37,10 @@ export const NET_WORTH_ASSET_KIND_LABEL_KEYS: Record<NetWorthAssetKind, string> 
 };
 
 export interface NetWorthDisplayPoint {
+  liabilitiesAvailable?: boolean;
+  complete?: boolean;
+  historySource?: 'imported' | 'recorded';
+  valuationDates?: Record<string, string>;
   /** yyyy-MM-dd bucket-end date the snapshot is taken at. */
   date: string;
   /** Signed per-kind values for the selected asset kinds only, for the stacked bars and tooltip. */
@@ -99,6 +103,12 @@ export const buildDisplayPoints = ({
 
     return {
       date: point.date,
+      ...(point.liabilitiesAvailable !== undefined || point.liabilitiesTotal === null
+        ? { liabilitiesAvailable: point.liabilitiesAvailable ?? false }
+        : {}),
+      ...(point.complete === undefined ? {} : { complete: point.complete }),
+      ...(point.historySource === undefined ? {} : { historySource: point.historySource }),
+      ...(point.valuationDates ? { valuationDates: point.valuationDates } : {}),
       assetsByKind,
       assetsTotal,
       liabilitiesByKind,
@@ -112,6 +122,7 @@ export const buildDisplayPoints = ({
  * A non-negative mean (paid-off or overpaid on average) reads as owing nothing.
  */
 export const averageOwedLiabilities = ({ points }: { points: NetWorthDisplayPoint[] }): number => {
+  points = points.filter((p) => p.liabilitiesAvailable !== false);
   if (points.length === 0) return 0;
   const mean = points.reduce((sum, point) => sum + point.liabilitiesTotal, 0) / points.length;
   return mean < 0 ? -mean : 0;
@@ -179,6 +190,13 @@ export const computePeriodChange = ({
   const first = points[0];
   const last = points[points.length - 1];
   if (!first || !last) return { amount: 0, pct: null };
+  if (
+    first.liabilitiesAvailable === false ||
+    last.liabilitiesAvailable === false ||
+    first.complete === false ||
+    last.complete === false
+  )
+    return { amount: 0, pct: null };
 
   const amount = last.netWorth - first.netWorth;
   const pct = first.netWorth !== 0 ? (amount / Math.abs(first.netWorth)) * 100 : null;
@@ -201,6 +219,13 @@ export const annualizedGrowthPct = ({ points }: { points: NetWorthDisplayPoint[]
   const first = points[0];
   const last = points[points.length - 1];
   if (!first || !last || first === last) return null;
+  if (
+    first.liabilitiesAvailable === false ||
+    last.liabilitiesAvailable === false ||
+    first.complete === false ||
+    last.complete === false
+  )
+    return null;
   if (first.netWorth <= 0 || last.netWorth <= 0) return null;
 
   const years = differenceInCalendarDays(parseISO(last.date), parseISO(first.date)) / DAYS_PER_YEAR;

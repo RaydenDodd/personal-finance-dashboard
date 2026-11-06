@@ -28,6 +28,7 @@ export interface SheetSyncConfig {
   sheetId: number;
   mirrorSimplefin: boolean;
   mappings: SheetMapping[];
+  acceptedLegacyPrincipalCells?: Array<{ row: number; column: number; cents: number; note: string }>;
 }
 export function assertMappedRows(grid: SheetGrid, config: SheetSyncConfig): void {
   const normalize = (text: string) => text.trim().replace(/\s+/g, ' ').toLowerCase();
@@ -72,6 +73,11 @@ export function headerDate(cell: SheetCell): string | null {
 }
 /** Only a fully specified date is authoritative. Yearless notes need review. */
 export function contributionDate(note: string): string | null {
+  const firstLine = /^(\d{1,2})\/(\d{1,2})\/(20\d{2})(?:\s|$)/.exec(note.trim());
+  if (firstLine) {
+    const date = `${firstLine[3]}-${firstLine[1]!.padStart(2, '0')}-${firstLine[2]!.padStart(2, '0')}`;
+    if (validDate(date)) return date;
+  }
   const explicit = /^(?:Contribution date:\s*|Date:\s*)?(20\d{2}-\d{2}-\d{2})(?:\s|$)/.exec(note.trim());
   if (explicit && validDate(explicit[1]!)) return explicit[1]!;
   const dates = new Set<string>();

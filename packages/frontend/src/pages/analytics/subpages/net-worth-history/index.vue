@@ -61,7 +61,8 @@
       </Callout>
 
       <SummaryRows v-if="hasData" :items="summaryRows" class="@md/net-worth-history:hidden">
-        <i18n-t v-if="averageOwed > 0" keypath="netWorthHistory.cards.averageLiabilities" tag="p" class="text-sm">
+        <p v-if="allLiabilitiesUnknown" class="text-muted-foreground text-sm">Historical liabilities unavailable</p>
+        <i18n-t v-else-if="averageOwed > 0" keypath="netWorthHistory.cards.averageLiabilities" tag="p" class="text-sm">
           <template #amount>
             <span class="text-app-expense-color font-semibold">{{ formatBaseCurrency(averageOwed) }}</span>
           </template>
@@ -73,7 +74,15 @@
       </SummaryRows>
 
       <div v-if="hasData" class="hidden grid-cols-2 gap-4 @md/net-worth-history:grid @xl/net-worth-history:grid-cols-3">
-        <SummaryCard :title="$t('netWorthHistory.cards.currentNetWorth')" :value="currentNetWorth" />
+        <div>
+          <SummaryCard
+            :title="netWorthAvailable ? $t('netWorthHistory.cards.currentNetWorth') : 'Recorded assets'"
+            :value="netWorthAvailable ? currentNetWorth : currentAssets"
+          />
+          <p v-if="!netWorthAvailable" class="text-muted-foreground mt-2 text-xs">
+            Historical liabilities unavailable; net worth is unknown.
+          </p>
+        </div>
 
         <div class="border-border bg-card rounded-lg border p-4">
           <div class="text-muted-foreground mb-1 text-sm whitespace-nowrap">
@@ -83,8 +92,10 @@
             class="text-lg font-semibold @xl/net-worth-history:text-2xl"
             :class="periodChange.amount >= 0 ? 'text-app-income-color' : 'text-app-expense-color'"
           >
-            {{ formattedPeriodChange }}
-            <span v-if="periodChange.pct !== null" class="text-sm font-medium"> ({{ formattedPeriodChangePct }}) </span>
+            {{ periodComparable ? formattedPeriodChange : 'Unavailable' }}
+            <span v-if="periodComparable && periodChange.pct !== null" class="text-sm font-medium">
+              ({{ formattedPeriodChangePct }})
+            </span>
           </div>
           <div v-if="formattedAnnualizedGrowth" class="text-muted-foreground mt-0.5 text-xs">
             {{ $t('netWorthHistory.cards.annualized', { pct: formattedAnnualizedGrowth }) }}
@@ -105,6 +116,10 @@
       </div>
 
       <div class="border-border bg-card space-y-3 rounded-lg border p-3">
+        <p v-if="points.some((p) => p.liabilitiesAvailable === false)" class="text-muted-foreground text-xs">
+          Historical bars use actual recorded asset values. Dates without balances are omitted. Missing historical
+          liabilities are unavailable, not zero; net-worth lines appear only where both sides are known.
+        </p>
         <div v-if="!hasData" class="flex h-72 flex-col items-center justify-center gap-2 text-center">
           <ChartLineIcon class="text-muted-foreground size-8" />
           <p class="text-muted-foreground text-sm">{{ $t('netWorthHistory.states.noData') }}</p>
@@ -255,6 +270,20 @@ const hasData = computed(() => points.value.some((point) => point.assetsTotal !=
 const { t } = useI18n();
 const { formatBaseCurrency } = useFormatCurrency();
 
+const netWorthAvailable = computed(
+  () => displayPoints.value.at(-1)?.liabilitiesAvailable !== false && displayPoints.value.at(-1)?.complete !== false,
+);
+const currentAssets = computed(() => displayPoints.value.at(-1)?.assetsTotal ?? 0);
+const allLiabilitiesUnknown = computed(
+  () => displayPoints.value.length > 0 && displayPoints.value.every((p) => p.liabilitiesAvailable === false),
+);
+const periodComparable = computed(
+  () =>
+    displayPoints.value.length > 1 &&
+    [displayPoints.value[0], displayPoints.value.at(-1)].every(
+      (p) => p?.liabilitiesAvailable !== false && p?.complete !== false,
+    ),
+);
 const currentNetWorth = computed(() => displayPoints.value[displayPoints.value.length - 1]?.netWorth ?? 0);
 
 const periodChange = computed(() => computePeriodChange({ points: displayPoints.value }));
@@ -280,10 +309,15 @@ const formattedAnnualizedGrowth = computed(() => {
 });
 
 const summaryRows = computed<SummaryRowItem[]>(() => [
-  { label: t('netWorthHistory.cards.currentNetWorth'), value: formatBaseCurrency(currentNetWorth.value) },
+  {
+    label: netWorthAvailable.value
+      ? t('netWorthHistory.cards.currentNetWorth')
+      : 'Recorded assets · net worth unavailable',
+    value: formatBaseCurrency(netWorthAvailable.value ? currentNetWorth.value : currentAssets.value),
+  },
   {
     label: t('netWorthHistory.cards.periodChange'),
-    value: formattedPeriodChange.value,
+    value: periodComparable.value ? formattedPeriodChange.value : 'Unavailable',
     valueClass: periodChange.value.amount >= 0 ? 'text-app-income-color' : 'text-app-expense-color',
     hint: [
       periodChange.value.pct === null ? '' : `(${formattedPeriodChangePct.value})`,

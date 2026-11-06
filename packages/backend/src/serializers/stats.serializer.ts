@@ -284,7 +284,9 @@ interface CombinedBalanceHistoryItemApiResponse {
   vehiclesBalance: number;
   loansBalance: number;
   totalBalance: number;
-  historySource?: 'imported' | 'manual';
+  historySource?: 'imported' | 'manual' | 'recorded';
+  liabilitiesAvailable?: boolean;
+  valuationDates?: Record<string, string>;
   complete?: boolean;
 }
 
@@ -302,7 +304,14 @@ export function serializeCombinedBalanceHistory(
     vehiclesBalance: centsToApiDecimal(item.vehiclesBalance),
     loansBalance: centsToApiDecimal(item.loansBalance),
     totalBalance: centsToApiDecimal(item.totalBalance),
-    ...(item.historySource ? { historySource: item.historySource, complete: item.complete } : {}),
+    ...(item.historySource
+      ? {
+          historySource: item.historySource,
+          complete: item.complete,
+          liabilitiesAvailable: item.liabilitiesAvailable,
+          valuationDates: item.valuationDates,
+        }
+      : {}),
   }));
 }
 
@@ -376,8 +385,16 @@ export function serializeNetWorthHistory(result: NetWorthHistoryResultCents): Ge
       assets: decimalizeValues(point.assets),
       assetsTotal: centsToApiDecimal(point.assetsTotal),
       liabilities: decimalizeValues(point.liabilities),
-      liabilitiesTotal: centsToApiDecimal(point.liabilitiesTotal),
-      netWorth: centsToApiDecimal(point.netWorth),
+      liabilitiesTotal: point.liabilitiesTotal === null ? null : centsToApiDecimal(point.liabilitiesTotal),
+      netWorth: point.netWorth === null ? null : centsToApiDecimal(point.netWorth),
+      ...(point.liabilitiesAvailable === undefined
+        ? {}
+        : {
+            liabilitiesAvailable: point.liabilitiesAvailable,
+            complete: point.complete,
+            historySource: point.historySource,
+            valuationDates: point.valuationDates,
+          }),
     })),
     // Kept off the response entirely when the service reports nothing degraded: the
     // contract lets a client decide on `degraded` alone whether to warn, and a

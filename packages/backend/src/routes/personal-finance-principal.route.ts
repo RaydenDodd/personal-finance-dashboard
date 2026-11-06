@@ -7,6 +7,7 @@ import {
   reconcileFinanceTransfers,
   savePrincipalTransferRule,
   recordPrincipalReview,
+  acknowledgePrincipalHistory,
 } from '@services/personal-finance/principal';
 import { isRecordedDate, PRINCIPAL_AUTOMATION_START } from '@services/personal-finance/principal-matching';
 import { Router } from 'express';
@@ -39,6 +40,20 @@ const record = z.object({
   transactionIds: z.array(id).max(5).optional(),
   evidence: z.record(z.string(), z.unknown()).optional(),
 });
+router.post(
+  '/acknowledgements',
+  checkBaseCurrencyLock,
+  createController(
+    z.object({
+      body: z.object({
+        basis: z.array(z.object({ id, validThrough: date.optional() })).max(100),
+        reviewIds: z.array(id).max(1000),
+        undatedFlowIds: z.array(id).max(3000).optional(),
+      }),
+    }),
+    async ({ user, body }) => ({ data: await acknowledgePrincipalHistory(user.id, body) }),
+  ),
+);
 router.get(
   '/',
   createController(z.object({}), async ({ user }) => ({ data: await getPrincipalState(user.id) })),

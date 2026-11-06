@@ -43,6 +43,8 @@ const { formatBaseCurrency } = useFormatCurrency();
 const { widgetConfigRef, settings, persistSettings, isUpdating } = useNetWorthConfig();
 
 const {
+  isAssetsOnly,
+  mixedLiabilityScope,
   startNetWorth,
   endNetWorth,
   currentDelta,
@@ -123,7 +125,7 @@ const trendBars = computed(() => {
   <WidgetWrapper :is-fetching="isFetching">
     <template #title>
       <span class="inline-flex items-center gap-1">
-        {{ $t('dashboard.widgets.netWorth.title') }}
+        {{ isAssetsOnly ? 'Recorded assets' : $t('dashboard.widgets.netWorth.title') }}
 
         <ResponsiveTooltip
           :content="$t('dashboard.widgets.netWorth.description')"
@@ -185,6 +187,10 @@ const trendBars = computed(() => {
 
     <template v-else>
       <div class="flex h-full flex-col gap-3">
+        <p v-if="isAssetsOnly || mixedLiabilityScope" class="text-muted-foreground text-xs">
+          Historical assets use actual recorded dates. Historical liabilities are unavailable; changes between
+          assets-only and net-worth values are not compared.
+        </p>
         <div class="mb-4">
           <div class="flex items-start justify-between gap-2">
             <div>

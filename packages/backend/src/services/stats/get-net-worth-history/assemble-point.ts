@@ -49,7 +49,7 @@ export const assembleNetWorthPoint = ({
   portfolioCents: Cents;
   vehicleCents: Cents;
   ventureCents: Cents;
-}): NetWorthHistoryPointCents => {
+}): NetWorthHistoryPointCents & { liabilitiesTotal: Cents; netWorth: Cents } => {
   const overdraftOwedCents = asCents(overdraft.owedCents + assetAccounts.owedCents);
 
   const assets: Record<NetWorthAssetKind, Cents> = {

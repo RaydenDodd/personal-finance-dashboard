@@ -174,6 +174,7 @@ try {
   await page.goto(`${previewOrigin}/__qa-personal-finance.html`);
   await expect(page.getByRole('heading', { name: 'Personal net worth', exact: true })).toBeVisible({ timeout: 60000 });
   await expect(page.getByText('Synthetic Spendable Money', { exact: true }).first()).toBeVisible({ timeout: 30000 });
+  await page.locator('#finance-tools > summary').click();
   await expect(page.getByLabel('Balance sources', { exact: true })).toHaveValue('all');
   await page.getByLabel('Balance sources', { exact: true }).selectOption('personal');
   await expect
@@ -185,6 +186,7 @@ try {
     .poll(() => calls.filter((c) => c.path === '/personal-finance/dashboard' && c.query.to === '2025-01-15').length)
     .toBeGreaterThan(0);
   await page.getByRole('button', { name: 'Latest balances', exact: true }).click();
+  await page.locator('#finance-tools > summary').click();
   const datedPointPositions = await page
     .locator('svg[aria-label="Financial history chart"] circle')
     .evaluateAll((points) => points.map((point) => Number(point.getAttribute('cx'))));
@@ -247,6 +249,49 @@ try {
     if (marks === 0) throw new Error(`No chart marks for ${metric}`);
   }
   await page.locator('#finance-chart').selectOption('categories');
+  let areaBounds = await page.getByTestId('finance-chart-surface').boundingBox();
+  await page.mouse.move(areaBounds.x + areaBounds.width - 1, areaBounds.y + areaBounds.height / 2);
+  const stackedDots = await page
+    .locator('circle[data-hover-series]')
+    .evaluateAll((nodes) =>
+      nodes.map((node) => ({
+        id: node.getAttribute('data-hover-series'),
+        raw: Number(node.getAttribute('data-hover-value')),
+        plotted: Number(node.getAttribute('data-plotted-value')),
+      })),
+    );
+  let cumulative = 0;
+  for (const dot of stackedDots) {
+    cumulative += dot.raw;
+    expect(dot.plotted).toBe(cumulative);
+  }
+  await page.getByLabel('Category display', { exact: true }).selectOption('overlay');
+  areaBounds = await page.getByTestId('finance-chart-surface').boundingBox();
+  await page.mouse.move(areaBounds.x + areaBounds.width - 1, areaBounds.y + areaBounds.height / 2);
+  const overlayDots = await page
+    .locator('circle[data-hover-series]')
+    .evaluateAll((nodes) =>
+      nodes.map((node) => ({
+        raw: Number(node.getAttribute('data-hover-value')),
+        plotted: Number(node.getAttribute('data-plotted-value')),
+      })),
+    );
+  for (const dot of overlayDots) expect(dot.plotted).toBe(dot.raw);
+  await page.getByLabel('Show Total Net Worth', { exact: true }).check();
+  await page.getByLabel('Category filter', { exact: true }).selectOption('savings');
+  await expect(page.getByRole('button', { name: 'Toggle Savings', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Toggle Investments', exact: true })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Toggle Savings', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Toggle Savings', exact: true })).toHaveAttribute(
+    'aria-pressed',
+    'false',
+  );
+  await page.getByRole('button', { name: 'Toggle Savings', exact: true }).click();
+  await page.locator('#finance-chart').selectOption('account');
+  await expect(page.getByLabel('Chart account', { exact: true }).locator('option')).toHaveCount(1);
+  await page.getByLabel('Category filter', { exact: true }).selectOption('all');
+  await page.locator('#finance-chart').selectOption('categories');
+  await page.getByLabel('Category display', { exact: true }).selectOption('stacked');
   await page.screenshot({ path: resolve(out, 'desktop-dark.png'), fullPage: true });
   await page.getByRole('button', { name: 'Record balance', exact: true }).click();
   await page.getByLabel('Balance', { exact: true }).fill('2575.25');

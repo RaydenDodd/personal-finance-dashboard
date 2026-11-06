@@ -12,7 +12,7 @@ import { DatabaseError, Op, QueryTypes } from 'sequelize';
 
 import { getCounterpartyIban, hasSettledStatus } from '../enablebanking/utils/transaction-metadata';
 import { buildAccountSuffixes, maskedTransferReferenceRelation } from './masked-transfer-reference';
-import { TRANSFER_DATE_WINDOW_DAYS, normalizeIban } from './transfer-matching';
+import { TRANSFER_DATE_WINDOW_DAYS, normalizeIban, hasExplicitTransferDescription } from './transfer-matching';
 
 /** Walutomat rows must not auto-link here: that provider's own FX/IBAN matchers own them. */
 const NEVER_MATCHABLE_ACCOUNT_TYPES: ACCOUNT_TYPES[] = [ACCOUNT_TYPES.walutomat];
@@ -121,7 +121,12 @@ async function pickUniqueMatch({
   const confirmed = relations.filter((r) => r.relation === 'confirmed');
   if (confirmed.length > 0) return confirmed.length === 1 ? confirmed[0]!.candidate : null;
 
-  const neutral = relations.filter((r) => r.relation === 'neutral');
+  const neutral = relations.filter(
+    (r) =>
+      r.relation === 'neutral' &&
+      hasExplicitTransferDescription(tx.note) &&
+      hasExplicitTransferDescription(r.candidate.note),
+  );
   return neutral.length === 1 ? neutral[0]!.candidate : null;
 }
 

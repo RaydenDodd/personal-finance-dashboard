@@ -11,6 +11,9 @@
       >
         <ChartTooltip>
           <ChartTooltipHeader>{{ tooltip.periodLabel }}</ChartTooltipHeader>
+          <p v-if="tooltip.valuationRange" class="text-card-tooltip-muted mb-2 text-xs">
+            Component valuation dates: {{ tooltip.valuationRange }}
+          </p>
 
           <ChartTooltipSection
             :label="$t('netWorthHistory.chart.assets')"
@@ -25,7 +28,10 @@
             :value="formatBaseCurrency(entry.value)"
           />
 
-          <template v-if="tooltip.liabilityKinds.length">
+          <p v-if="!tooltip.liabilitiesAvailable" class="text-card-tooltip-muted mt-2 text-xs">
+            Historical liabilities unavailable
+          </p>
+          <template v-else-if="tooltip.liabilityKinds.length">
             <ChartTooltipSection
               :label="$t('netWorthHistory.chart.liabilities')"
               :value="formatLiabilityValue(tooltip.liabilitiesTotal)"
@@ -45,7 +51,9 @@
           <ChartTooltipRow
             total
             :label="$t('netWorthHistory.chart.netWorth')"
-            :value="formatBaseCurrency(tooltip.netWorth)"
+            :value="
+              tooltip.liabilitiesAvailable && tooltip.complete ? formatBaseCurrency(tooltip.netWorth) : 'Unavailable'
+            "
             :value-class="tooltip.netWorth >= 0 ? 'text-app-income-color' : 'text-app-expense-color'"
           />
         </ChartTooltip>
@@ -162,6 +170,9 @@ const tooltip = reactive({
   liabilitiesTotal: 0,
   liabilityKinds: [] as TooltipLiabilityEntry[],
   netWorth: 0,
+  liabilitiesAvailable: true,
+  complete: true,
+  valuationRange: '',
 });
 
 const { updateTooltipPosition } = useChartTooltipPosition({ containerRef, tooltipRef, tooltip });
@@ -534,8 +545,12 @@ const renderChart = () => {
   }
 
   // All-time-high marker: a hollow ring on the net-worth line at its peak bucket.
-  if (points.length >= 2) {
-    const peak = points.reduce((best, point) => (point.netWorth > best.netWorth ? point : best), points[0]!);
+  const valuedPoints = points.filter((point) => point.liabilitiesAvailable !== false && point.complete !== false);
+  if (valuedPoints.length >= 2) {
+    const peak = valuedPoints.reduce(
+      (best, point) => (point.netWorth > best.netWorth ? point : best),
+      valuedPoints[0]!,
+    );
     g.append('circle')
       .attr('class', 'net-worth-peak')
       .attr('cx', bandCenter(peak))
@@ -584,9 +599,19 @@ const renderChart = () => {
 
       const cx = bandCenter(point);
       hoverLine.attr('x1', cx).attr('x2', cx);
-      hoverDot.attr('cx', cx).attr('cy', yFor(point.netWorth));
+      hoverDot
+        .attr('cx', cx)
+        .attr('cy', yFor(point.netWorth))
+        .style('opacity', point.liabilitiesAvailable === false || point.complete === false ? 0 : 1);
+      tooltip.liabilitiesAvailable = point.liabilitiesAvailable !== false;
+      tooltip.complete = point.complete !== false;
+      const valuationDates = Object.values(point.valuationDates ?? {}).sort();
+      tooltip.valuationRange =
+        valuationDates.length && valuationDates[0] !== valuationDates.at(-1)
+          ? `${valuationDates[0]} – ${valuationDates.at(-1)}`
+          : '';
 
-      tooltip.periodLabel = formatTooltipPeriodLabel(point.date);
+      tooltip.periodLabel = point.historySource === 'imported' ? point.date : formatTooltipPeriodLabel(point.date);
       tooltip.assetsTotal = point.assetsTotal;
       tooltip.assetKinds = NET_WORTH_ASSET_KINDS.filter((kind) => point.assetsByKind[kind] !== undefined).map(
         (kind) => ({ kind, value: point.assetsByKind[kind] ?? 0 }),

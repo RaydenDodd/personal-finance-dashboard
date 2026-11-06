@@ -60,8 +60,31 @@ const sourceView = ref<'all' | 'personal'>('all');
 const throughDate = ref('');
 const granularity = ref<'daily' | 'monthly'>('monthly');
 const chart = ref('total');
+const categoryFilter = ref('all');
+const categoryDisplay = ref<'stacked' | 'overlay'>('stacked');
+const showTotalComparison = ref(false);
+const toolPanel = ref<HTMLElement | null>(null);
+const filteredAccounts = computed(() =>
+  (data.value?.accounts ?? []).filter((a) => categoryFilter.value === 'all' || a.categoryId === categoryFilter.value),
+);
+async function openPanel(panel: NonNullable<typeof activePanel.value>) {
+  activePanel.value = panel;
+  await nextTick();
+  toolPanel.value?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  toolPanel.value?.querySelector<HTMLElement>('input,select,button')?.focus({ preventScroll: true });
+}
+watch(categoryFilter, () => {
+  if (!filteredAccounts.value.some((a) => a.id === selectedAccount.value))
+    selectedAccount.value = filteredAccounts.value[0]?.id ?? '';
+});
 const selectedAccount = ref('');
 const activePanel = ref<'accounts' | 'snapshot' | 'cashflow' | 'import' | 'categories' | null>(null);
+watch(activePanel, async (value) => {
+  if (value) {
+    await nextTick();
+    toolPanel.value?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+});
 const nativeAccounts = ref<Array<{ id: string; name: string; currencyCode: string }>>([]);
 const today = () => format(new Date(), 'yyyy-MM-dd');
 const periodAnchor = () => (throughDate.value ? new Date(`${throughDate.value}T12:00:00`) : new Date());
@@ -113,8 +136,11 @@ const pct = (value: number | null | undefined) =>
 const changeAmount = (value: FinanceDashboard['monthlyChange']) =>
   typeof value === 'number' ? value : (value?.amount ?? null);
 const history = computed(() => data.value?.history ?? []);
+const summaryPoint = computed(() =>
+  !throughDate.value && data.value?.currentSummary ? data.value.currentSummary : history.value.at(-1),
+);
 const allMissing = computed(() =>
-  included.value.filter((a) => history.value.at(-1)?.missingAccountIds.includes(a.id) || a.latestBalance === null),
+  included.value.filter((a) => summaryPoint.value?.missingAccountIds.includes(a.id) || a.latestBalance === null),
 );
 const categoryById = (id: string) => data.value?.categories.find((c) => c.id === id);
 const accountById = (id: string) => data.value?.accounts.find((a) => a.id === id);
@@ -142,13 +168,18 @@ const chartCurrency = computed(() =>
   accountIsRequired.value ? (accountById(selectedAccount.value)?.currencyCode ?? currency.value) : currency.value,
 );
 const categoryTotal = (id: string) => {
-  const point = history.value.at(-1);
+  const point = summaryPoint.value;
   return point ? recordedCategoryBalance(point, included.value, id) : null;
 };
 const categoryPartial = (id: string) =>
-  included.value.some((a) => a.categoryId === id && history.value.at(-1)?.missingAccountIds.includes(a.id));
+  included.value.some((a) => a.categoryId === id && summaryPoint.value?.missingAccountIds.includes(a.id));
 const chartModel = computed(
-  (): { rows: ChartRow[]; series: ChartSeries[]; mode: 'line' | 'stacked' | 'bar' | 'donut'; percentage?: boolean } => {
+  (): {
+    rows: ChartRow[];
+    series: ChartSeries[];
+    mode: 'line' | 'overlay' | 'stacked' | 'bar' | 'donut';
+    percentage?: boolean;
+  } => {
     const categories = data.value?.categories ?? [];
     const catSeries = categories.map((c) => ({ id: c.id, name: c.name, color: c.color }));
     const rows = history.value.map((p) => ({
@@ -160,7 +191,20 @@ const chartModel = computed(
       ),
       partial: !p.complete,
     }));
-    if (chart.value === 'categories') return { rows, series: catSeries, mode: 'stacked' };
+    if (chart.value === 'categories') {
+      const series = catSeries.filter((c) => categoryFilter.value === 'all' || c.id === categoryFilter.value);
+      const compare = categoryDisplay.value === 'overlay' && showTotalComparison.value;
+      return {
+        rows: rows.map((row, i) => ({ ...row, values: { ...row.values, total: recordedNetWorth(history.value[i]!) } })),
+        series: [
+          ...series,
+          ...(compare
+            ? [{ id: 'total', name: 'Total net worth (recorded accounts)', color: 'var(--foreground)', lineOnly: true }]
+            : []),
+        ],
+        mode: categoryDisplay.value,
+      };
+    }
     if (chart.value === 'allocation') return { rows: rows.slice(-1), series: catSeries, mode: 'donut' };
     if (chart.value === 'savings') {
       const savings = categories.find((c) => c.id === 'savings');
@@ -323,9 +367,31 @@ const detailPoints = computed<FinanceHistoryPoint[]>(() => {
     };
   });
 });
-const detailPoint = computed(
-  () => detailPoints.value.find((p) => p.date === detailDate.value) ?? detailPoints.value.at(-1),
-);
+const detailPoint = computed<FinanceHistoryPoint | undefined>(() => {
+  if (detailDate.value === 'latest' && data.value?.currentSummary) {
+    const current = data.value.currentSummary;
+    const balances = Object.fromEntries(detailAccounts.value.map((a) => [a.id, current.balances[a.id] ?? null]));
+    const missing = detailAccounts.value.filter((a) => balances[a.id] === null).map((a) => a.id);
+    const sum =
+      detailAccounts.value.reduce(
+        (total, a) =>
+          total +
+          (balances[a.id] === null
+            ? 0
+            : Math.round((a.balanceKind === 'liability' ? -Math.abs(balances[a.id]!) : balances[a.id]!) * 100)),
+        0,
+      ) / 100;
+    return {
+      ...current,
+      balances,
+      knownTotal: sum,
+      total: missing.length ? null : sum,
+      missingAccountIds: missing,
+      complete: !missing.length,
+    };
+  }
+  return detailPoints.value.find((p) => p.date === detailDate.value) ?? detailPoints.value.at(-1);
+});
 const detailChartRows = computed<ChartRow[]>(() =>
   detailPoints.value.map((p) => ({
     label: p.date,
@@ -343,7 +409,7 @@ const detailCurrency = computed(() =>
 function openDetails(scope: 'all' | 'category' | 'account', id = '', date = '') {
   detailScope.value = scope;
   detailId.value = id;
-  detailDate.value = date;
+  detailDate.value = date || (!throughDate.value && scope !== 'account' && data.value?.currentSummary ? 'latest' : '');
   detailOpen.value = true;
 }
 function selectChartPoint(row: ChartRow) {
@@ -644,56 +710,14 @@ const inputClass =
         <Button variant="outline" size="sm" :disabled="loading || busy" @click="reload"
           ><RefreshCwIcon class="size-4" />Refresh</Button
         >
-        <Button variant="outline" size="sm" @click="activePanel = activePanel === 'import' ? null : 'import'"
+        <Button variant="outline" size="sm" @click="openPanel('import')"
           ><UploadIcon class="size-4" />Import history</Button
         >
-        <Button size="sm" @click="activePanel = activePanel === 'snapshot' ? null : 'snapshot'"
-          ><PlusIcon class="size-4" />Record balance</Button
-        >
+        <Button size="sm" @click="openPanel('snapshot')"><PlusIcon class="size-4" />Record balance</Button>
       </div>
     </div>
     <Callout v-if="error" variant="destructive" title="Couldn't complete this action" role="alert">{{ error }}</Callout>
     <Callout v-if="notice" variant="success" title="Saved" role="status">{{ notice }}</Callout>
-    <div class="flex flex-wrap items-end gap-3">
-      <label class="grid gap-1 text-sm"
-        >Balance sources
-        <select v-model="sourceView" :class="inputClass" aria-label="Balance sources">
-          <option value="all">Automatic + personal records</option>
-          <option value="personal">Personal records only</option>
-        </select>
-      </label>
-      <label class="grid gap-1 text-sm"
-        >Through date
-        <input
-          v-model="throughDate"
-          :class="inputClass"
-          type="date"
-          :max="today()"
-          aria-label="Balances through date"
-        />
-      </label>
-      <Button v-if="throughDate" variant="ghost" size="sm" @click="throughDate = ''">Latest balances</Button>
-      <p class="text-muted-foreground max-w-2xl text-xs">
-        Before November 5, 2026, recorded Sheet history is primary. From that date, connected accounts can use automatic
-        balances; dated manual corrections and fallback records remain available.
-      </p>
-    </div>
-    <SheetsSyncPanel
-      :accounts="data?.accounts ?? []"
-      @updated="refreshBalances"
-      @review-principal="reviewPrincipalLedger"
-    />
-    <PrincipalReviewPanel
-      :accounts="data?.accounts ?? []"
-      @updated="refreshBalances"
-      @record="
-        (accountId, date) => {
-          recordCashFlow();
-          flowForm.accountId = accountId;
-          if (date) flowForm.date = date;
-        }
-      "
-    />
     <div v-if="loading && !data" class="grid grid-cols-2 gap-4 lg:grid-cols-4">
       <div v-for="i in 4" :key="i" class="bg-muted h-28 animate-pulse rounded-lg" />
     </div>
@@ -708,17 +732,25 @@ const inputClass =
         <div class="flex flex-wrap items-start justify-between gap-5">
           <div>
             <p class="text-muted-foreground text-sm">
-              Total net worth <span v-if="!data.complete" class="text-warning-text">· partial</span>
+              {{ !throughDate && data.currentSummary?.assetsOnly ? 'Tracked assets' : 'Total net worth' }}
+              <span v-if="!summaryPoint?.complete" class="text-warning-text">· partial</span>
             </p>
             <p class="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">
-              {{ money(data.asOf ? (data.total ?? data.knownTotal) : null) }}
+              {{ money(summaryPoint ? (summaryPoint.total ?? summaryPoint.knownTotal) : null) }}
             </p>
-            <p v-if="!data.complete && data.asOf" class="text-warning-text mt-1 text-xs">
+            <p v-if="!summaryPoint?.complete && summaryPoint?.date" class="text-warning-text mt-1 text-xs">
               Recorded subtotal · unavailable balances are excluded
             </p>
             <p class="text-muted-foreground mt-2 text-xs">
               {{ included.length }} included accounts · {{ data.snapshotCount }} preserved valuations
-              <span v-if="data.asOf"> · last snapshot {{ data.asOf }}</span>
+              <span v-if="summaryPoint?.date"> · latest valuation {{ summaryPoint.date }}</span>
+            </p>
+            <p v-if="!throughDate && data.currentSummary" class="text-muted-foreground mt-2 text-xs">
+              Latest known balances, dated individually. {{ data.currentSummary.earliestValuationDate }} –
+              {{ data.currentSummary.date }}.<span v-if="data.currentSummary.assetsOnly">
+                This Sheet/tracked-account view excludes untracked credit-card debt; native Net Worth History shows
+                assets minus known liabilities.</span
+              >
             </p>
           </div>
           <div class="grid grid-cols-2 gap-x-8 gap-y-3 text-sm sm:grid-cols-3">
@@ -763,341 +795,6 @@ const inputClass =
       <Callout v-if="allMissing.length" variant="warning" title="Some balances are missing"
         >{{ allMissing.map((a) => a.name).join(', ') }}. Missing balances are never treated as zero.</Callout
       >
-      <Card v-if="activePanel" class="p-4 sm:p-5">
-        <div class="mb-5 flex items-center justify-between">
-          <h2 class="font-semibold">
-            {{
-              {
-                accounts: accountForm.id ? 'Edit reporting account' : 'Add reporting account',
-                snapshot: 'Record a verified balance',
-                cashflow: flowCorrectionId ? 'Correct a principal record' : 'Record principal or growth',
-                import: 'Import historical balances',
-                categories: 'Customize categories',
-              }[activePanel]
-            }}
-          </h2>
-          <Button variant="ghost" size="sm" @click="activePanel = null">Close</Button>
-        </div>
-        <form
-          v-if="activePanel === 'accounts'"
-          class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
-          @submit.prevent="submitAccount"
-        >
-          <label class="grid gap-1.5 text-sm"
-            >Account name<input
-              v-model="accountForm.name"
-              :class="inputClass"
-              required
-              maxlength="200"
-              placeholder="Capital One Safe Checking"
-          /></label>
-          <label class="grid gap-1.5 text-sm"
-            >Reporting category<select v-model="accountForm.categoryId" :class="inputClass">
-              <option v-for="category in data.categories" :key="category.id" :value="category.id">
-                {{ category.name }}
-              </option>
-            </select></label
-          >
-          <label class="grid gap-1.5 text-sm"
-            >Balance represents<select v-model="accountForm.balanceKind" :class="inputClass">
-              <option value="asset">Asset</option>
-              <option value="liability">Liability (amount owed)</option>
-            </select></label
-          >
-          <label class="grid gap-1.5 text-sm"
-            >Currency<input
-              v-model="accountForm.currencyCode"
-              :class="inputClass"
-              pattern="[A-Za-z]{3}"
-              maxlength="3"
-              required
-          /></label>
-          <fieldset class="grid gap-1.5 text-sm">
-            <legend class="mb-1.5">Linked MoneyMatter accounts</legend>
-            <div class="max-h-44 space-y-2 overflow-y-auto rounded-md border p-3">
-              <label v-for="account in nativeAccounts" :key="account.id" class="flex items-start gap-2">
-                <input
-                  v-model="accountForm.nativeAccountIds"
-                  type="checkbox"
-                  :value="account.id"
-                  class="accent-primary mt-0.5 size-4 shrink-0"
-                />
-                <span>{{ account.name }}</span>
-              </label>
-              <p v-if="!nativeAccounts.length" class="text-muted-foreground text-xs">
-                No existing MoneyMatter accounts.
-              </p>
-            </div>
-            <p class="text-muted-foreground text-xs">
-              Select every account included in this history row. Leave empty for manual history.
-            </p>
-          </fieldset>
-          <label class="grid gap-1.5 text-sm"
-            >Preferred source<select v-model="accountForm.preferredSource" :class="inputClass">
-              <option value="manual">Manual verified balances</option>
-              <option value="google-sheets">Google Sheets history</option>
-              <option value="simplefin">SimpleFIN</option>
-              <option value="plaid">Plaid (when connected)</option>
-            </select></label
-          >
-          <label class="flex items-center gap-2 text-sm"
-            ><input v-model="accountForm.included" type="checkbox" class="accent-primary size-4" />Include in personal
-            net worth</label
-          >
-          <p class="text-muted-foreground text-xs sm:col-span-2">
-            Category follows your choice, independent of the bank's account type. Linked balances are combined only when
-            all selected accounts have a valuation on the same day. Each bank account can belong to one history row.
-          </p>
-          <div class="sm:col-span-2 lg:col-span-3">
-            <Button type="submit" :disabled="busy">{{ busy ? 'Saving…' : 'Save account' }}</Button>
-          </div>
-        </form>
-        <form
-          v-else-if="activePanel === 'snapshot'"
-          ref="snapshotFormElement"
-          class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"
-          @submit.prevent="submitSnapshot"
-        >
-          <label class="grid gap-1.5 text-sm"
-            >Account<select v-model="snapshotForm.accountId" :class="inputClass" required>
-              <option value="" disabled>Select account</option>
-              <option v-for="account in data.accounts" :key="account.id" :value="account.id">{{ account.name }}</option>
-            </select></label
-          >
-          <label class="grid gap-1.5 text-sm"
-            >Actual valuation date<input
-              v-model="snapshotForm.date"
-              :class="inputClass"
-              type="date"
-              :max="today()"
-              required
-          /></label>
-          <label class="grid gap-1.5 text-sm"
-            >Balance<input
-              v-model="snapshotForm.balance"
-              :class="inputClass"
-              type="number"
-              step="0.01"
-              required
-              placeholder="0.00"
-          /></label>
-          <label class="grid gap-1.5 text-sm"
-            >Description (optional)<input v-model="snapshotForm.description" :class="inputClass" maxlength="1000"
-          /></label>
-          <p class="text-muted-foreground text-xs sm:col-span-2 lg:col-span-4">
-            Use the date the balance was valued. A correction adds a new revision; it preserves the previous record. A
-            balance is not a contribution.
-          </p>
-          <div class="sm:col-span-2 lg:col-span-4">
-            <Button type="submit" :disabled="busy || !data.accounts.length">Save verified balance</Button
-            ><Button type="button" variant="link" @click="editAccount()">Add an account</Button>
-          </div>
-        </form>
-        <form
-          v-else-if="activePanel === 'cashflow'"
-          class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
-          @submit.prevent="submitCashFlow"
-        >
-          <label class="grid gap-1.5 text-sm"
-            >Account<select v-model="flowForm.accountId" :class="inputClass" :disabled="!!flowCorrectionId" required>
-              <option value="" disabled>Select account</option>
-              <option v-for="account in data.accounts" :key="account.id" :value="account.id">{{ account.name }}</option>
-            </select></label
-          >
-          <label class="grid gap-1.5 text-sm"
-            >Actual date<input v-model="flowForm.date" :class="inputClass" type="date" :max="today()" required
-          /></label>
-          <label class="grid gap-1.5 text-sm"
-            >Type<select v-model="flowForm.type" :class="inputClass" :disabled="!!flowCorrectionId">
-              <option value="contribution">External contribution / deposit</option>
-              <option value="withdrawal">Withdrawal</option>
-              <option value="transfer">Transfer between my accounts</option>
-              <option value="adjustment">Principal adjustment</option>
-              <option value="interest">Interest earned</option>
-              <option value="dividend">Dividend / reinvested dividend</option>
-            </select></label
-          >
-          <label class="grid gap-1.5 text-sm"
-            >Amount<input
-              v-model="flowForm.amount"
-              :class="inputClass"
-              type="number"
-              step="0.01"
-              :min="flowForm.type === 'adjustment' ? undefined : '0.01'"
-              required
-          /></label>
-          <label v-if="flowForm.type === 'transfer'" class="grid gap-1.5 text-sm"
-            >Destination account<select
-              v-model="flowForm.toAccountId"
-              :class="inputClass"
-              :disabled="!!flowCorrectionId"
-              required
-            >
-              <option value="" disabled>Select destination</option>
-              <option
-                v-for="account in data.accounts.filter((a) => a.id !== flowForm.accountId)"
-                :key="account.id"
-                :value="account.id"
-              >
-                {{ account.name }}
-              </option>
-            </select></label
-          >
-          <label class="grid gap-1.5 text-sm"
-            >Description (optional)<input v-model="flowForm.description" :class="inputClass" maxlength="1000"
-          /></label>
-          <label v-if="flowForm.type === 'contribution'" class="grid gap-1.5 text-sm"
-            >Contribution source
-            <select v-model="flowForm.contributionKind" :class="inputClass">
-              <option value="unspecified">Not separately identified</option>
-              <option value="employee">Employee contribution</option>
-              <option value="employer">Employer contribution / match</option>
-            </select>
-          </label>
-          <label v-if="flowForm.opening" class="grid gap-1 text-sm"
-            >Principal verified through (optional)<input
-              v-model="flowForm.principalValidThrough"
-              type="date"
-              :max="today()"
-              :class="inputClass"
-              aria-label="Principal verified through"
-            /><span class="text-muted-foreground text-xs"
-              >Use the latest date whose complete contribution basis you have verified. Later gains remain unavailable
-              until verified.</span
-            ></label
-          >
-          <label
-            v-if="['adjustment', 'contribution'].includes(flowForm.type)"
-            class="flex items-start gap-2 text-sm sm:col-span-2 lg:col-span-3"
-            ><input
-              v-model="flowForm.opening"
-              type="checkbox"
-              :disabled="!!flowCorrectionId"
-              class="accent-primary mt-0.5 size-4 shrink-0"
-            />This establishes my known opening principal. I have entered the complete contribution basis from this
-            date.</label
-          >
-          <p class="text-muted-foreground text-xs sm:col-span-2 lg:col-span-3">
-            Purchases and sales inside an investment account are not contributions. Dividends and interest are returns.
-            Transfers move principal between accounts without creating outside contributions. Set a reliable opening
-            basis before displaying investment gains.
-          </p>
-          <div class="sm:col-span-2 lg:col-span-3">
-            <Button type="submit" :disabled="busy || !data.accounts.length">{{
-              flowCorrectionId ? 'Save principal correction' : 'Save cash flow'
-            }}</Button>
-          </div>
-        </form>
-        <div v-else-if="activePanel === 'categories'" class="space-y-4">
-          <div v-for="category in categoryDraft" :key="category.id" class="flex max-w-lg items-center gap-3">
-            <input
-              v-model="category.color"
-              type="color"
-              class="border-input size-10 rounded border"
-              :aria-label="`${category.name} color`"
-            /><input
-              v-model="category.name"
-              :class="inputClass"
-              :aria-label="`${category.id} category name`"
-              maxlength="100"
-            /><Button
-              v-if="!data.accounts.some((a) => a.categoryId === category.id)"
-              variant="ghost"
-              size="sm"
-              @click="categoryDraft = categoryDraft.filter((c) => c.id !== category.id)"
-              >Remove</Button
-            >
-          </div>
-          <div>
-            <Button variant="outline" size="sm" @click="addCategory">Add category</Button>
-          </div>
-          <Button
-            :disabled="busy || categoryDraft.some((c) => !c.name.trim())"
-            @click="mutate(() => saveFinanceCategories(categoryDraft), 'Category names and colors saved.')"
-            >Save categories</Button
-          >
-        </div>
-        <div v-else-if="activePanel === 'import'" class="space-y-5">
-          <p class="text-muted-foreground text-sm">
-            Upload a normalized Google Sheets history export or CSV. Each record needs account, actual date
-            (YYYY-MM-DD), balance, and currencyCode. Historical names stay in the source record. Blank balances are
-            skipped. Contributions are entered separately.
-          </p>
-          <div class="flex flex-wrap items-center gap-3">
-            <input
-              type="file"
-              accept=".json,.csv,application/json,text/csv"
-              class="file:bg-muted file:text-foreground file:mr-3 file:rounded file:border-0 file:px-3 file:py-2 file:text-sm"
-              aria-label="Choose historical balance file"
-              @change="selectFile"
-            /><Button variant="outline" size="sm" @click="downloadTemplate"
-              ><DownloadIcon class="size-4" />CSV template</Button
-            >
-          </div>
-          <template v-if="importRecords.length">
-            <p class="text-sm">
-              {{ fileName }} · {{ importRecords.length }} nonblank values · {{ skippedBlank }} blanks skipped
-            </p>
-            <div class="grid gap-3 md:grid-cols-2">
-              <label v-for="label in importLabels" :key="label" class="grid gap-1.5 text-sm"
-                ><span>{{ label }} <span class="text-muted-foreground">→ current reporting account</span></span
-                ><select v-model="importMapping[label]" :class="inputClass">
-                  <option value="" disabled>Select an account</option>
-                  <option value="__skip__">Skip this historical row</option>
-                  <option v-for="account in data.accounts" :key="account.id" :value="account.id">
-                    {{ account.name }}
-                  </option>
-                </select></label
-              >
-            </div>
-            <Button :disabled="busy" variant="outline" @click="previewImport">{{
-              busy ? 'Checking…' : 'Preview import'
-            }}</Button>
-          </template>
-          <template v-if="preview">
-            <Callout variant="info" title="Preview ready"
-              >{{ preview.counts.insert }} new records · {{ preview.counts.duplicate }} duplicates skipped ·
-              {{ preview.counts.protected }} verified records protected. Review the dates and mappings below before
-              importing.</Callout
-            >
-            <Callout v-for="warning in preview.warnings" :key="warning" variant="warning" title="Review needed">{{
-              warning
-            }}</Callout>
-            <div class="max-h-96 overflow-auto rounded-md border">
-              <table class="w-full text-left text-xs">
-                <thead class="bg-muted sticky top-0">
-                  <tr>
-                    <th class="p-3">Historical account</th>
-                    <th class="p-3">Mapped account</th>
-                    <th class="p-3">Recorded date</th>
-                    <th class="p-3 text-right">Balance</th>
-                    <th class="p-3">Action / formula</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="record in preview.records" :key="record.sourceKey" class="border-t">
-                    <td class="p-3">{{ record.sourceLabel }}</td>
-                    <td class="p-3">{{ accountById(record.accountId)?.name }}</td>
-                    <td class="p-3 whitespace-nowrap">{{ record.date }}</td>
-                    <td class="p-3 text-right whitespace-nowrap tabular-nums">
-                      {{ money(record.balance, record.currencyCode) }}
-                    </td>
-                    <td class="max-w-sm p-3">
-                      <span>{{ record.action }}</span
-                      ><code v-if="record.formula" class="text-muted-foreground mt-1 block break-all">{{
-                        record.formula
-                      }}</code>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-            <Button :disabled="busy || !preview.counts.insert" @click="commitImport"
-              ><CheckIcon class="size-4" />Import {{ preview.counts.insert }} records</Button
-            >
-          </template>
-        </div>
-      </Card>
       <Card class="p-4 sm:p-5">
         <div class="mb-5 flex flex-wrap items-center justify-between gap-3">
           <div class="flex flex-wrap items-center gap-2">
@@ -1113,10 +810,38 @@ const inputClass =
               :class="[inputClass, 'max-w-64']"
               aria-label="Chart account"
             >
-              <option v-for="account in data.accounts" :key="account.id" :value="account.id">{{ account.name }}</option>
+              <option v-for="account in filteredAccounts" :key="account.id" :value="account.id">
+                {{ account.name }}
+              </option>
             </select>
           </div>
           <div class="flex flex-wrap items-center gap-2">
+            <label class="sr-only" for="finance-category">Category filter</label
+            ><select
+              id="finance-category"
+              v-model="categoryFilter"
+              :class="[inputClass, 'w-auto']"
+              aria-label="Category filter"
+            >
+              <option value="all">All Categories</option>
+              <option v-for="category in data.categories" :key="category.id" :value="category.id">
+                {{ category.name }}
+              </option>
+            </select>
+            <select
+              v-if="chart === 'categories'"
+              v-model="categoryDisplay"
+              :class="[inputClass, 'w-auto']"
+              aria-label="Category display"
+            >
+              <option value="stacked">Stacked categories</option>
+              <option value="overlay">Overlaid categories</option>
+            </select>
+            <label
+              v-if="chart === 'categories' && categoryDisplay === 'overlay'"
+              class="flex items-center gap-2 text-xs"
+              ><input v-model="showTotalComparison" type="checkbox" />Show Total Net Worth</label
+            >
             <div class="bg-muted flex flex-wrap rounded-md p-1">
               <button
                 v-for="option in [
@@ -1172,7 +897,7 @@ const inputClass =
       <div class="flex flex-wrap items-center justify-between gap-3">
         <h2 class="text-lg font-semibold">Accounts & contribution basis</h2>
         <div class="flex flex-wrap gap-2">
-          <Button variant="ghost" size="sm" @click="activePanel = 'categories'"
+          <Button variant="ghost" size="sm" @click="openPanel('categories')"
             ><Settings2Icon class="size-4" />Categories</Button
           ><Button variant="outline" size="sm" @click="recordCashFlow()"
             ><ArrowDownUpIcon class="size-4" />Record cash flow</Button
@@ -1204,7 +929,7 @@ const inputClass =
             </thead>
             <tbody>
               <tr
-                v-for="account in data.accounts"
+                v-for="account in filteredAccounts"
                 :key="account.id"
                 :class="['border-t', !account.included && 'opacity-60']"
               >
@@ -1271,7 +996,11 @@ const inputClass =
                 </td>
                 <td class="p-4 text-right whitespace-nowrap tabular-nums">
                   {{ money(account.principal, account.currencyCode)
-                  }}<span v-if="account.principal === null" class="text-muted-foreground mt-1 block text-xs"
+                  }}<span v-if="account.principalEstimated" class="text-muted-foreground mt-1 block text-xs"
+                    >Includes owner-accepted estimates</span
+                  ><span v-if="account.principalDatesIncomplete" class="text-muted-foreground mt-1 block text-xs"
+                    >Historical principal accepted; original dates incomplete</span
+                  ><span v-if="account.principal === null" class="text-muted-foreground mt-1 block text-xs"
                     >{{
                       account.knownPrincipal !== null && account.knownPrincipal !== undefined
                         ? `${money(account.knownPrincipal, account.currencyCode)} recorded · later contributions need verification`
@@ -1301,7 +1030,9 @@ const inputClass =
                   </p>
                   <p class="text-muted-foreground mt-1 text-xs">
                     {{ pct(account.gainPercent)
-                    }}<span v-if="account.interest">
+                    }}<span v-if="account.principalEstimated || account.principalDatesIncomplete" class="block"
+                      >Estimate relative to recorded principal</span
+                    ><span v-if="account.interest">
                       · {{ money(account.interest, account.currencyCode) }} interest</span
                     >
                   </p>
@@ -1391,7 +1122,15 @@ const inputClass =
             </thead>
             <tbody>
               <tr v-for="flow in [...data.cashFlows].reverse()" :key="flow.id" class="border-t">
-                <td class="p-3 whitespace-nowrap">{{ flow.date }}</td>
+                <td class="p-3 whitespace-nowrap">
+                  {{
+                    flow.evidence?.dateUnknown
+                      ? 'Undated historical contribution'
+                      : flow.evidence?.checkpoint && flow.evidence?.ownerAcceptedLegacy
+                        ? 'Legacy opening basis · dates incomplete'
+                        : flow.date
+                  }}
+                </td>
                 <td class="p-3">
                   {{ accountById(flow.accountId)?.name
                   }}<span v-if="flow.toAccountId"> → {{ accountById(flow.toAccountId)?.name }}</span>
@@ -1410,7 +1149,13 @@ const inputClass =
                 <td class="p-3">
                   {{ valuationSourceLabel(flow.source ?? 'manual') }}
                   <span class="text-muted-foreground mt-1 block">{{
-                    flow.verified === false ? 'Needs verification' : 'Verified record'
+                    flow.evidence?.estimated
+                      ? 'Owner-accepted estimate'
+                      : flow.evidence?.ownerAcceptedLegacy
+                        ? 'Owner-accepted historical amount'
+                        : flow.verified === false
+                          ? 'Needs verification'
+                          : 'Recorded contribution'
                   }}</span>
                 </td>
                 <td class="p-3">{{ flow.description }}</td>
@@ -1428,6 +1173,409 @@ const inputClass =
           </table>
         </div>
       </details>
+      <details class="border-border rounded-lg border" id="finance-tools">
+        <summary class="cursor-pointer p-4 text-sm font-medium">Data sources, imports & reconciliation</summary>
+        <div class="space-y-5 border-t p-4">
+          <div class="flex flex-wrap items-end gap-3">
+            <label class="grid gap-1 text-sm"
+              >Balance sources
+              <select v-model="sourceView" :class="inputClass" aria-label="Balance sources">
+                <option value="all">Automatic + personal records</option>
+                <option value="personal">Personal records only</option>
+              </select>
+            </label>
+            <label class="grid gap-1 text-sm"
+              >Through date
+              <input
+                v-model="throughDate"
+                :class="inputClass"
+                type="date"
+                :max="today()"
+                aria-label="Balances through date"
+              />
+            </label>
+            <Button v-if="throughDate" variant="ghost" size="sm" @click="throughDate = ''">Latest balances</Button>
+            <p class="text-muted-foreground max-w-2xl text-xs">
+              Before November 5, 2026, recorded Sheet history is primary. From that date, connected accounts can use
+              automatic balances; dated manual corrections and fallback records remain available.
+            </p>
+          </div>
+          <SheetsSyncPanel
+            :accounts="data?.accounts ?? []"
+            @updated="refreshBalances"
+            @review-principal="reviewPrincipalLedger"
+          />
+          <PrincipalReviewPanel
+            :accounts="data?.accounts ?? []"
+            @updated="refreshBalances"
+            @record="
+              (accountId, date) => {
+                recordCashFlow();
+                flowForm.accountId = accountId;
+                if (date) flowForm.date = date;
+              }
+            "
+          />
+        </div>
+      </details>
+      <div ref="toolPanel" class="scroll-mt-6">
+        <Card v-if="activePanel" class="p-4 sm:p-5">
+          <div class="mb-5 flex items-center justify-between">
+            <h2 class="font-semibold">
+              {{
+                {
+                  accounts: accountForm.id ? 'Edit reporting account' : 'Add reporting account',
+                  snapshot: 'Record a verified balance',
+                  cashflow: flowCorrectionId ? 'Correct a principal record' : 'Record principal or growth',
+                  import: 'Import historical balances',
+                  categories: 'Customize categories',
+                }[activePanel]
+              }}
+            </h2>
+            <Button variant="ghost" size="sm" @click="activePanel = null">Close</Button>
+          </div>
+          <form
+            v-if="activePanel === 'accounts'"
+            class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
+            @submit.prevent="submitAccount"
+          >
+            <label class="grid gap-1.5 text-sm"
+              >Account name<input
+                v-model="accountForm.name"
+                :class="inputClass"
+                required
+                maxlength="200"
+                placeholder="Capital One Safe Checking"
+            /></label>
+            <label class="grid gap-1.5 text-sm"
+              >Reporting category<select v-model="accountForm.categoryId" :class="inputClass">
+                <option v-for="category in data.categories" :key="category.id" :value="category.id">
+                  {{ category.name }}
+                </option>
+              </select></label
+            >
+            <label class="grid gap-1.5 text-sm"
+              >Balance represents<select v-model="accountForm.balanceKind" :class="inputClass">
+                <option value="asset">Asset</option>
+                <option value="liability">Liability (amount owed)</option>
+              </select></label
+            >
+            <label class="grid gap-1.5 text-sm"
+              >Currency<input
+                v-model="accountForm.currencyCode"
+                :class="inputClass"
+                pattern="[A-Za-z]{3}"
+                maxlength="3"
+                required
+            /></label>
+            <fieldset class="grid gap-1.5 text-sm">
+              <legend class="mb-1.5">Linked MoneyMatter accounts</legend>
+              <div class="max-h-44 space-y-2 overflow-y-auto rounded-md border p-3">
+                <label v-for="account in nativeAccounts" :key="account.id" class="flex items-start gap-2">
+                  <input
+                    v-model="accountForm.nativeAccountIds"
+                    type="checkbox"
+                    :value="account.id"
+                    class="accent-primary mt-0.5 size-4 shrink-0"
+                  />
+                  <span>{{ account.name }}</span>
+                </label>
+                <p v-if="!nativeAccounts.length" class="text-muted-foreground text-xs">
+                  No existing MoneyMatter accounts.
+                </p>
+              </div>
+              <p class="text-muted-foreground text-xs">
+                Select every account included in this history row. Leave empty for manual history.
+              </p>
+            </fieldset>
+            <label class="grid gap-1.5 text-sm"
+              >Preferred source<select v-model="accountForm.preferredSource" :class="inputClass">
+                <option value="manual">Manual verified balances</option>
+                <option value="google-sheets">Google Sheets history</option>
+                <option value="simplefin">SimpleFIN</option>
+                <option value="plaid">Plaid (when connected)</option>
+              </select></label
+            >
+            <label class="flex items-center gap-2 text-sm"
+              ><input v-model="accountForm.included" type="checkbox" class="accent-primary size-4" />Include in personal
+              net worth</label
+            >
+            <p class="text-muted-foreground text-xs sm:col-span-2">
+              Category follows your choice, independent of the bank's account type. Linked balances are combined only
+              when all selected accounts have a valuation on the same day. Each bank account can belong to one history
+              row.
+            </p>
+            <div class="sm:col-span-2 lg:col-span-3">
+              <Button type="submit" :disabled="busy">{{ busy ? 'Saving…' : 'Save account' }}</Button>
+            </div>
+          </form>
+          <form
+            v-else-if="activePanel === 'snapshot'"
+            ref="snapshotFormElement"
+            class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"
+            @submit.prevent="submitSnapshot"
+          >
+            <label class="grid gap-1.5 text-sm"
+              >Account<select v-model="snapshotForm.accountId" :class="inputClass" required>
+                <option value="" disabled>Select account</option>
+                <option v-for="account in data.accounts" :key="account.id" :value="account.id">
+                  {{ account.name }}
+                </option>
+              </select></label
+            >
+            <label class="grid gap-1.5 text-sm"
+              >Actual valuation date<input
+                v-model="snapshotForm.date"
+                :class="inputClass"
+                type="date"
+                :max="today()"
+                required
+            /></label>
+            <label class="grid gap-1.5 text-sm"
+              >Balance<input
+                v-model="snapshotForm.balance"
+                :class="inputClass"
+                type="number"
+                step="0.01"
+                required
+                placeholder="0.00"
+            /></label>
+            <label class="grid gap-1.5 text-sm"
+              >Description (optional)<input v-model="snapshotForm.description" :class="inputClass" maxlength="1000"
+            /></label>
+            <p class="text-muted-foreground text-xs sm:col-span-2 lg:col-span-4">
+              Use the date the balance was valued. A correction adds a new revision; it preserves the previous record. A
+              balance is not a contribution.
+            </p>
+            <div class="sm:col-span-2 lg:col-span-4">
+              <Button type="submit" :disabled="busy || !data.accounts.length">Save verified balance</Button
+              ><Button type="button" variant="link" @click="editAccount()">Add an account</Button>
+            </div>
+          </form>
+          <form
+            v-else-if="activePanel === 'cashflow'"
+            class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
+            @submit.prevent="submitCashFlow"
+          >
+            <label class="grid gap-1.5 text-sm"
+              >Account<select v-model="flowForm.accountId" :class="inputClass" :disabled="!!flowCorrectionId" required>
+                <option value="" disabled>Select account</option>
+                <option v-for="account in data.accounts" :key="account.id" :value="account.id">
+                  {{ account.name }}
+                </option>
+              </select></label
+            >
+            <label class="grid gap-1.5 text-sm"
+              >Actual date<input v-model="flowForm.date" :class="inputClass" type="date" :max="today()" required
+            /></label>
+            <label class="grid gap-1.5 text-sm"
+              >Type<select v-model="flowForm.type" :class="inputClass" :disabled="!!flowCorrectionId">
+                <option value="contribution">External contribution / deposit</option>
+                <option value="withdrawal">Withdrawal</option>
+                <option value="transfer">Transfer between my accounts</option>
+                <option value="adjustment">Principal adjustment</option>
+                <option value="interest">Interest earned</option>
+                <option value="dividend">Dividend / reinvested dividend</option>
+              </select></label
+            >
+            <label class="grid gap-1.5 text-sm"
+              >Amount<input
+                v-model="flowForm.amount"
+                :class="inputClass"
+                type="number"
+                step="0.01"
+                :min="flowForm.type === 'adjustment' ? undefined : '0.01'"
+                required
+            /></label>
+            <label v-if="flowForm.type === 'transfer'" class="grid gap-1.5 text-sm"
+              >Destination account<select
+                v-model="flowForm.toAccountId"
+                :class="inputClass"
+                :disabled="!!flowCorrectionId"
+                required
+              >
+                <option value="" disabled>Select destination</option>
+                <option
+                  v-for="account in data.accounts.filter((a) => a.id !== flowForm.accountId)"
+                  :key="account.id"
+                  :value="account.id"
+                >
+                  {{ account.name }}
+                </option>
+              </select></label
+            >
+            <label class="grid gap-1.5 text-sm"
+              >Description (optional)<input v-model="flowForm.description" :class="inputClass" maxlength="1000"
+            /></label>
+            <label v-if="flowForm.type === 'contribution'" class="grid gap-1.5 text-sm"
+              >Contribution source
+              <select v-model="flowForm.contributionKind" :class="inputClass">
+                <option value="unspecified">Not separately identified</option>
+                <option value="employee">Employee contribution</option>
+                <option value="employer">Employer contribution / match</option>
+              </select>
+            </label>
+            <label v-if="flowForm.opening" class="grid gap-1 text-sm"
+              >Principal verified through (optional)<input
+                v-model="flowForm.principalValidThrough"
+                type="date"
+                :max="today()"
+                :class="inputClass"
+                aria-label="Principal verified through"
+              /><span class="text-muted-foreground text-xs"
+                >Use the latest date whose complete contribution basis you have verified. Later gains remain unavailable
+                until verified.</span
+              ></label
+            >
+            <label
+              v-if="['adjustment', 'contribution'].includes(flowForm.type)"
+              class="flex items-start gap-2 text-sm sm:col-span-2 lg:col-span-3"
+              ><input
+                v-model="flowForm.opening"
+                type="checkbox"
+                :disabled="!!flowCorrectionId"
+                class="accent-primary mt-0.5 size-4 shrink-0"
+              />This establishes my known opening principal. I have entered the complete contribution basis from this
+              date.</label
+            >
+            <p class="text-muted-foreground text-xs sm:col-span-2 lg:col-span-3">
+              Purchases and sales inside an investment account are not contributions. Dividends and interest are
+              returns. Transfers move principal between accounts without creating outside contributions. Set a reliable
+              opening basis before displaying investment gains.
+            </p>
+            <div class="sm:col-span-2 lg:col-span-3">
+              <Button type="submit" :disabled="busy || !data.accounts.length">{{
+                flowCorrectionId ? 'Save principal correction' : 'Save cash flow'
+              }}</Button>
+            </div>
+          </form>
+          <div v-else-if="activePanel === 'categories'" class="space-y-4">
+            <label class="grid gap-2 text-sm"
+              >Filter accounts and category charts<select
+                v-model="categoryFilter"
+                :class="inputClass"
+                aria-label="Account category filter"
+              >
+                <option value="all">All Categories</option>
+                <option v-for="category in data.categories" :key="category.id" :value="category.id">
+                  {{ category.name }}
+                </option>
+              </select></label
+            >
+            <p class="text-muted-foreground text-xs">
+              The filter updates charts and the account list immediately. Names and colors below customize your existing
+              categories.
+            </p>
+            <div v-for="category in categoryDraft" :key="category.id" class="flex max-w-lg items-center gap-3">
+              <input
+                v-model="category.color"
+                type="color"
+                class="border-input size-10 rounded border"
+                :aria-label="`${category.name} color`"
+              /><input
+                v-model="category.name"
+                :class="inputClass"
+                :aria-label="`${category.id} category name`"
+                maxlength="100"
+              /><Button
+                v-if="!data.accounts.some((a) => a.categoryId === category.id)"
+                variant="ghost"
+                size="sm"
+                @click="categoryDraft = categoryDraft.filter((c) => c.id !== category.id)"
+                >Remove</Button
+              >
+            </div>
+            <div>
+              <Button variant="outline" size="sm" @click="addCategory">Add category</Button>
+            </div>
+            <Button
+              :disabled="busy || categoryDraft.some((c) => !c.name.trim())"
+              @click="mutate(() => saveFinanceCategories(categoryDraft), 'Category names and colors saved.')"
+              >Save categories</Button
+            >
+          </div>
+          <div v-else-if="activePanel === 'import'" class="space-y-5">
+            <p class="text-muted-foreground text-sm">
+              Upload a normalized Google Sheets history export or CSV. Each record needs account, actual date
+              (YYYY-MM-DD), balance, and currencyCode. Historical names stay in the source record. Blank balances are
+              skipped. Contributions are entered separately.
+            </p>
+            <div class="flex flex-wrap items-center gap-3">
+              <input
+                type="file"
+                accept=".json,.csv,application/json,text/csv"
+                class="file:bg-muted file:text-foreground file:mr-3 file:rounded file:border-0 file:px-3 file:py-2 file:text-sm"
+                aria-label="Choose historical balance file"
+                @change="selectFile"
+              /><Button variant="outline" size="sm" @click="downloadTemplate"
+                ><DownloadIcon class="size-4" />CSV template</Button
+              >
+            </div>
+            <template v-if="importRecords.length">
+              <p class="text-sm">
+                {{ fileName }} · {{ importRecords.length }} nonblank values · {{ skippedBlank }} blanks skipped
+              </p>
+              <div class="grid gap-3 md:grid-cols-2">
+                <label v-for="label in importLabels" :key="label" class="grid gap-1.5 text-sm"
+                  ><span>{{ label }} <span class="text-muted-foreground">→ current reporting account</span></span
+                  ><select v-model="importMapping[label]" :class="inputClass">
+                    <option value="" disabled>Select an account</option>
+                    <option value="__skip__">Skip this historical row</option>
+                    <option v-for="account in data.accounts" :key="account.id" :value="account.id">
+                      {{ account.name }}
+                    </option>
+                  </select></label
+                >
+              </div>
+              <Button :disabled="busy" variant="outline" @click="previewImport">{{
+                busy ? 'Checking…' : 'Preview import'
+              }}</Button>
+            </template>
+            <template v-if="preview">
+              <Callout variant="info" title="Preview ready"
+                >{{ preview.counts.insert }} new records · {{ preview.counts.duplicate }} duplicates skipped ·
+                {{ preview.counts.protected }} verified records protected. Review the dates and mappings below before
+                importing.</Callout
+              >
+              <Callout v-for="warning in preview.warnings" :key="warning" variant="warning" title="Review needed">{{
+                warning
+              }}</Callout>
+              <div class="max-h-96 overflow-auto rounded-md border">
+                <table class="w-full text-left text-xs">
+                  <thead class="bg-muted sticky top-0">
+                    <tr>
+                      <th class="p-3">Historical account</th>
+                      <th class="p-3">Mapped account</th>
+                      <th class="p-3">Recorded date</th>
+                      <th class="p-3 text-right">Balance</th>
+                      <th class="p-3">Action / formula</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="record in preview.records" :key="record.sourceKey" class="border-t">
+                      <td class="p-3">{{ record.sourceLabel }}</td>
+                      <td class="p-3">{{ accountById(record.accountId)?.name }}</td>
+                      <td class="p-3 whitespace-nowrap">{{ record.date }}</td>
+                      <td class="p-3 text-right whitespace-nowrap tabular-nums">
+                        {{ money(record.balance, record.currencyCode) }}
+                      </td>
+                      <td class="max-w-sm p-3">
+                        <span>{{ record.action }}</span
+                        ><code v-if="record.formula" class="text-muted-foreground mt-1 block break-all">{{
+                          record.formula
+                        }}</code>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <Button :disabled="busy || !preview.counts.insert" @click="commitImport"
+                ><CheckIcon class="size-4" />Import {{ preview.counts.insert }} records</Button
+              >
+            </template>
+          </div>
+        </Card>
+      </div>
       <div class="text-muted-foreground flex flex-wrap gap-x-5 gap-y-2 text-xs">
         <RouterLink
           :to="{ name: ROUTES_NAMES.analyticsCashFlow }"
@@ -1486,11 +1634,14 @@ const inputClass =
             >
             <label class="grid gap-1 text-sm"
               >Snapshot date<select
-                :value="detailPoint?.date"
+                :value="detailDate === 'latest' ? 'latest' : detailPoint?.date"
                 :class="inputClass"
                 aria-label="Detail snapshot date"
                 @change="detailDate = ($event.target as HTMLSelectElement).value"
               >
+                <option v-if="data.currentSummary && detailScope !== 'account' && !throughDate" value="latest">
+                  Latest known balances · individual valuation dates
+                </option>
                 <option v-for="point in [...detailPoints].reverse()" :key="point.date" :value="point.date">
                   {{ point.date }}{{ point.complete ? '' : ' · partial' }}
                 </option>

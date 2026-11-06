@@ -19,6 +19,8 @@ export interface FinanceAccount {
   valuationDate: string | null;
   principal: number | null;
   principalComplete?: boolean;
+  principalEstimated?: boolean;
+  principalDatesIncomplete?: boolean;
   knownPrincipal?: number | null;
   basisDate?: string | null;
   principalValidThrough?: string | null;
@@ -70,6 +72,11 @@ export interface FinanceCashFlow {
   evidence?: Record<string, unknown>;
 }
 export interface FinanceDashboard {
+  currentSummary?: FinanceHistoryPoint & {
+    assetsOnly: boolean;
+    earliestValuationDate: string | null;
+    isAsOfSummary: true;
+  };
   currencyCode: string;
   asOf: string | null;
   complete: boolean;

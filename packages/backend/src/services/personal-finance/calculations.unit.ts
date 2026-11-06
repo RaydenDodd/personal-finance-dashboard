@@ -1,4 +1,11 @@
-import { buildHistory, cents, moneyWeightedReturn, preferredSnapshots, principalFor } from './calculations';
+import {
+  buildHistory,
+  cents,
+  moneyWeightedReturn,
+  preferredSnapshots,
+  principalFor,
+  latestKnownSummary,
+} from './calculations';
 import type { FinanceAccount, FinanceCashFlow, FinanceSnapshot } from './types';
 
 const account = (id: string, extra: Partial<FinanceAccount> = {}): FinanceAccount => ({
@@ -246,5 +253,35 @@ describe('personal finance accounting', () => {
     expect(() => cents(Number.NaN)).toThrow();
     expect(() => cents(0.001)).toThrow();
     expect(cents(0.29)).toBe(29);
+  });
+  it('includes owner-accepted estimates in principal while withholding independently verified annualized returns', () => {
+    const entries = [
+      flow('a', 1000, 'contribution', {
+        opening: true,
+        evidence: { ownerAcceptedLegacy: true, principalValidThrough: '2026-05-29' },
+      }),
+      flow('a', 200, 'contribution', {
+        date: '2026-06-12',
+        verified: false,
+        evidence: { ownerAccepted: true, estimated: true },
+      }),
+    ];
+    expect(principalFor('a', entries, '2026-11-01')).toMatchObject({
+      principal: 1200,
+      principalEstimated: true,
+      principalComplete: true,
+    });
+    expect(moneyWeightedReturn('a', entries, 1400, '2026-11-01')).toBeNull();
+  });
+  it('sums latest-known manual and automatic balances separately from actual sparse historical points', () => {
+    const a = [account('manual'), account('bank', { preferredSource: 'simplefin' })];
+    const s = [snapshot('manual', '2026-11-01', 100), snapshot('bank', '2026-11-05', 200, { source: 'simplefin' })];
+    expect(buildHistory(a, s, 'daily').at(-1)?.knownTotal).toBe(200);
+    expect(latestKnownSummary(a, s)).toMatchObject({
+      knownTotal: 300,
+      complete: true,
+      valuationDates: { manual: '2026-11-01', bank: '2026-11-05' },
+    });
+    expect(s).toHaveLength(2);
   });
 });

@@ -155,9 +155,13 @@ export interface NetWorthHistoryPoint {
   // signed value, so an overpaid loan can read positive.
   liabilities: Record<NetWorthLiabilityKind, number>;
   // Sum of `liabilities` values. Signed, negative = owed.
-  liabilitiesTotal: number;
+  liabilitiesTotal: number | null;
   // assetsTotal + liabilitiesTotal.
-  netWorth: number;
+  netWorth: number | null;
+  liabilitiesAvailable?: boolean;
+  complete?: boolean;
+  historySource?: 'imported' | 'recorded';
+  valuationDates?: Record<string, string>;
 }
 
 // One security whose holdings the report could not price on some snapshot days.

@@ -67,7 +67,7 @@ const audit = async (userId: number, action: string, entityId: string, details: 
 async function review(userId: number, reviewKey: string, reason: string, details: unknown, transaction?: Transaction) {
   await execute(
     `INSERT INTO "PersonalFinancePrincipalReviews" (id,"userId","reviewKey",reason,details) VALUES (:id,:userId,:reviewKey,:reason,CAST(:details AS jsonb))
-    ON CONFLICT ("userId","reviewKey") DO UPDATE SET reason=EXCLUDED.reason,details=EXCLUDED.details,"resolvedAt"=NULL`,
+    ON CONFLICT ("userId","reviewKey") DO UPDATE SET reason=EXCLUDED.reason,details=EXCLUDED.details,"resolvedAt"=CASE WHEN "PersonalFinancePrincipalReviews".reason=EXCLUDED.reason AND "PersonalFinancePrincipalReviews".details=EXCLUDED.details THEN "PersonalFinancePrincipalReviews"."resolvedAt" ELSE NULL END`,
     { id: randomUUID(), userId, reviewKey, reason, details: JSON.stringify(details) },
     transaction,
   );
@@ -79,6 +79,73 @@ export async function recordPrincipalReview(
   return lockUser(userId, async (transaction) => {
     await review(userId, data.reviewKey, data.reason, data.details, transaction);
     return { recorded: true };
+  });
+}
+export async function acknowledgePrincipalHistory(
+  userId: number,
+  data: { basis: Array<{ id: string; validThrough?: string }>; reviewIds: string[]; undatedFlowIds?: string[] },
+) {
+  return lockUser(userId, async (transaction) => {
+    const own = await read<PrincipalStoredFlow>(
+      'SELECT * FROM "PersonalFinanceCashFlows" WHERE "userId"=:userId AND "supersededAt" IS NULL',
+      { userId },
+      transaction,
+    );
+    for (const acceptance of data.basis) {
+      const flow = own.find((f) => f.id === acceptance.id && f.opening);
+      if (!flow) fail('An accepted opening basis must belong to this account owner');
+      const evidence = {
+        ...flow.evidence,
+        ownerAccepted: true,
+        ownerAcceptedLegacy: true,
+        ownerAcceptedAt: new Date().toISOString(),
+        ...(acceptance.validThrough ? { principalValidThrough: acceptance.validThrough } : {}),
+      };
+      await execute(
+        'UPDATE "PersonalFinanceCashFlows" SET evidence=CAST(:evidence AS jsonb) WHERE id=:id AND "userId"=:userId',
+        { userId, id: flow.id, evidence: JSON.stringify(evidence) },
+        transaction,
+      );
+      await audit(
+        userId,
+        'principal.legacy-amounts-accepted',
+        flow.id,
+        { before: flow.evidence, after: evidence, datesNotCertified: true },
+        transaction,
+      );
+    }
+    for (const id of data.undatedFlowIds ?? []) {
+      const flow = own.find((f) => f.id === id && !f.opening);
+      if (!flow) fail('Legacy contribution must belong to this owner');
+      const evidence = {
+        ...flow.evidence,
+        dateUnknown: true,
+        dateVerified: false,
+        ownerAccepted: true,
+        acceptedAsUndatedAt: new Date().toISOString(),
+      };
+      await execute(
+        'UPDATE "PersonalFinanceCashFlows" SET evidence=CAST(:evidence AS jsonb) WHERE id=:id AND "userId"=:userId',
+        { id, userId, evidence: JSON.stringify(evidence) },
+        transaction,
+      );
+      await audit(
+        userId,
+        'principal.legacy-date-uncertainty-recorded',
+        id,
+        { before: flow.evidence, after: evidence },
+        transaction,
+      );
+    }
+    if (data.reviewIds.length) {
+      await execute(
+        'UPDATE "PersonalFinancePrincipalReviews" SET "resolvedAt"=COALESCE("resolvedAt",NOW()) WHERE "userId"=:userId AND id IN (:ids)',
+        { userId, ids: data.reviewIds },
+        transaction,
+      );
+      await audit(userId, 'principal.reviews-archived', 'legacy', { reviewIds: data.reviewIds }, transaction);
+    }
+    return { accepted: data.basis.length, archived: data.reviewIds.length };
   });
 }
 

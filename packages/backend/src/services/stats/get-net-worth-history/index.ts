@@ -13,6 +13,7 @@ import { logger } from '@js/utils';
 import Accounts from '@models/accounts.model';
 import UsersCurrencies from '@models/users-currencies.model';
 import { withTransaction } from '@services/common/with-transaction';
+import { getRecordedNativeHistory, selectRecordedPeriods } from '@services/personal-finance/native-history';
 import { calculateVehiclesBalanceHistory } from '@services/stats/calculate-vehicles-balance-history';
 import { calculateVentureBalanceHistory } from '@services/stats/calculate-venture-balance-history';
 import { getPerAccountBalanceHistory, toBalanceDateKey } from '@services/stats/get-balance-history';
@@ -211,7 +212,12 @@ export const getNetWorthHistory = async ({
 
   // Holdings are valued on these days only (the boundary-dates optimization) —
   // never per calendar day, which is what keeps an all-time range affordable.
-  const snapshotDates = buckets.map((bucket) => format(bucket.periodEnd, 'yyyy-MM-dd'));
+  const recorded = await getRecordedNativeHistory(userId);
+  const authoritative = recorded ? selectRecordedPeriods(recorded, from, to, granularity) : null;
+  const snapshotDates = authoritative
+    ? authoritative.filter((p) => p.historySource === 'recorded').map((p) => p.date)
+    : buckets.map((bucket) => format(bucket.periodEnd, 'yyyy-MM-dd'));
+  if (authoritative && !snapshotDates.length) return { points: authoritative };
   // The portfolio cash replay only adds deltas landing exactly on a listed day,
   // so it gets every day between the first and last snapshot.
   const denseDates = buildDenseDateRange({ boundaryDates: snapshotDates });
@@ -346,7 +352,26 @@ export const getNetWorthHistory = async ({
   );
 
   return {
-    points,
+    points: authoritative
+      ? authoritative.map((point) => {
+          if (point.historySource === 'imported') return point;
+          const other = points.find((p) => p.date === point.date);
+          if (!other) return point;
+          const assets = {
+            ...point.assets,
+            investments: asCents(point.assets.investments + other.assets.investments),
+            vehicles: other.assets.vehicles,
+            ventures: other.assets.ventures,
+          };
+          const assetsTotal = asCents(Object.values(assets).reduce((a, b) => a + b, 0));
+          return {
+            ...point,
+            assets,
+            assetsTotal,
+            netWorth: point.netWorth === null ? null : asCents(assetsTotal + point.liabilitiesTotal!),
+          };
+        })
+      : points,
     degraded: buildDegraded({
       unpricedSecurities: portfolioValuation.unpricedSecurities,
       fxFallbackCurrencies: portfolioValuation.fxFallbackCurrencies,

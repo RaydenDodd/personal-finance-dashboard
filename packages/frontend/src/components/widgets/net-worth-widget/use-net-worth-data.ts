@@ -4,6 +4,7 @@ import { useUserSettings } from '@/composable/data-queries/user-settings';
 import { captureException } from '@/lib/sentry';
 import { useRootStore } from '@/stores';
 import { useQuery } from '@tanstack/vue-query';
+import { format } from 'date-fns';
 import { storeToRefs } from 'pinia';
 import { type Ref, computed, watch } from 'vue';
 
@@ -50,6 +51,20 @@ export function useNetWorthData({
   });
 
   const series = computed(() => data.value ?? []);
+  const inPeriod = computed(() =>
+    series.value.filter(
+      (p) =>
+        p.date >= format(selectedPeriod().from, 'yyyy-MM-dd') && p.date <= format(selectedPeriod().to, 'yyyy-MM-dd'),
+    ),
+  );
+  const isAssetsOnly = computed(
+    () => inPeriod.value.length > 0 && inPeriod.value.every((p) => p.liabilitiesAvailable === false),
+  );
+  const mixedLiabilityScope = computed(
+    () =>
+      inPeriod.value.some((p) => p.liabilitiesAvailable === false) &&
+      inPeriod.value.some((p) => p.liabilitiesAvailable !== false),
+  );
 
   const startNetWorth = computed(() =>
     computeStartNetWorth({ series: series.value, settings: settings.value, period: selectedPeriod() }),
@@ -58,7 +73,9 @@ export function useNetWorthData({
     computeEndNetWorth({ series: series.value, settings: settings.value, period: selectedPeriod() }),
   );
   const currentDelta = computed(() =>
-    startNetWorth.value === null || endNetWorth.value === null ? null : endNetWorth.value - startNetWorth.value,
+    mixedLiabilityScope.value || startNetWorth.value === null || endNetWorth.value === null
+      ? null
+      : endNetWorth.value - startNetWorth.value,
   );
 
   const prevDelta = computed(() =>
@@ -89,6 +106,8 @@ export function useNetWorthData({
   const isEmpty = computed(() => series.value.length === 0);
 
   return {
+    isAssetsOnly,
+    mixedLiabilityScope,
     startNetWorth,
     endNetWorth,
     currentDelta,

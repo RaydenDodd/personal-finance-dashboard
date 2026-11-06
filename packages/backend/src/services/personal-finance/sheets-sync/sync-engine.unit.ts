@@ -121,6 +121,35 @@ function fixture(initial: Record<string, unknown> = {}) {
   };
 }
 describe('automatic Google Sheets reconciliation', () => {
+  it('accepts an acknowledged undated legacy amount without fabricating a date, but surfaces a changed amount', async () => {
+    const f = fixture({
+      '51:5': { userEnteredValue: { numberValue: 698.44 }, note: 'Initial contribution, date unknown' },
+    });
+    const accepted = {
+      ...config,
+      acceptedLegacyPrincipalCells: [{ row: 51, column: 5, cents: 69844, note: 'Initial contribution, date unknown' }],
+    };
+    expect((await synchronizeSheet(accepted, f.transport, f.repository)).issues).toEqual([]);
+    expect((await synchronizeSheet(accepted, f.transport, f.repository)).issues).toEqual([]);
+    expect(f.flows).toHaveLength(0);
+    expect(f.writes).toHaveLength(0);
+    f.grid.cells.set('51:5', { userEnteredValue: { numberValue: 700 }, note: 'Initial contribution, date unknown' });
+    expect((await synchronizeSheet(accepted, f.transport, f.repository)).issues).toContainEqual(
+      expect.objectContaining({ reason: 'contribution_date_unverified' }),
+    );
+  });
+  it('takes the leading contribution date rather than a comparison date and retains estimated amounts as owner accepted', async () => {
+    const note =
+      '06/12/2026\nDate confirmed by owner; amount carried forward from 05/29/2026, pending amount verification.';
+    expect(contributionDate(note)).toBe('2026-06-12');
+    const f = fixture({ '51:5': { userEnteredValue: { numberValue: 1226.54 }, note } });
+    await synchronizeSheet(config, f.transport, f.repository);
+    expect(f.flows[0]).toMatchObject({
+      date: '2026-06-12',
+      verified: false,
+      evidence: { estimated: true, ownerAccepted: true },
+    });
+  });
   it('pulls a Sheet edit, pushes a manual edit, and repeats without loops or duplicate valuations', async () => {
     const f = fixture({ '4:2': { userEnteredValue: { numberValue: 100 } } });
     expect((await synchronizeSheet(config, f.transport, f.repository)).importedBalances).toBe(1);

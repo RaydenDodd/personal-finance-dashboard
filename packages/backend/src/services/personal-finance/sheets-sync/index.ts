@@ -105,10 +105,16 @@ export async function configureSheetSync(userId: number, config: SheetSyncConfig
   )
     fail('Every Sheet mapping must use a distinct owned USD account and row.');
   const prior = await settings(userId);
+  if (config.acceptedLegacyPrincipalCells === undefined && prior?.config.acceptedLegacyPrincipalCells)
+    config = { ...config, acceptedLegacyPrincipalCells: prior.config.acceptedLegacyPrincipalCells };
   if (
     prior &&
-    fingerprint({ ...prior.config, enabled: false, mirrorSimplefin: false }) !==
-      fingerprint({ ...config, enabled: false, mirrorSimplefin: false })
+    fingerprint({
+      ...prior.config,
+      enabled: false,
+      mirrorSimplefin: false,
+      acceptedLegacyPrincipalCells: undefined,
+    }) !== fingerprint({ ...config, enabled: false, mirrorSimplefin: false, acceptedLegacyPrincipalCells: undefined })
   ) {
     // A deliberate mapping change starts a new comparison baseline; old snapshots
     // and outbox records are preserved. No previous cell is ever reassigned by guess.

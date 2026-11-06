@@ -29,7 +29,8 @@ export function recordedPrincipal(accountId: string, flows: FinanceCashFlow[], d
   const dated = flows
     .filter(
       (flow) =>
-        flow.verified !== false &&
+        flow.evidence?.dateUnknown !== true &&
+        (flow.verified !== false || flow.evidence?.ownerAccepted === true) &&
         flow.date <= date &&
         (flow.accountId === accountId || flow.toAccountId === accountId),
     )
@@ -37,7 +38,8 @@ export function recordedPrincipal(accountId: string, flows: FinanceCashFlow[], d
   const opening = dated.findIndex((flow) => flow.accountId === accountId && flow.opening);
   if (opening < 0) return null;
   const validThrough = dated[opening]?.evidence?.principalValidThrough;
-  if (typeof validThrough === 'string' && date > validThrough) return null;
+  if (typeof validThrough === 'string' && date > validThrough && dated[opening]?.evidence?.ownerAcceptedLegacy !== true)
+    return null;
   return (
     (dated[opening]?.evidence?.checkpoint === true
       ? [dated[opening]!, ...dated.filter((flow) => flow.date > dated[opening]!.date)]

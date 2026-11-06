@@ -31,6 +31,17 @@ router.put(
         sheetName: z.string().min(1).max(100),
         sheetId: z.number().int().min(0),
         mirrorSimplefin: z.boolean(),
+        acceptedLegacyPrincipalCells: z
+          .array(
+            z.object({
+              row: z.number().int().min(49).max(66),
+              column: z.number().int().min(5).max(20000),
+              cents: z.number().int(),
+              note: z.string().max(10000),
+            }),
+          )
+          .max(3000)
+          .optional(),
         mappings: z
           .array(
             z.object({

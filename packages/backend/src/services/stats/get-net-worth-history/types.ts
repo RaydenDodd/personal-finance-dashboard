@@ -20,9 +20,13 @@ export interface NetWorthHistoryPointCents {
    */
   liabilities: Record<NetWorthLiabilityKind, Cents>;
   /** Sum of the `liabilities` values. */
-  liabilitiesTotal: Cents;
+  liabilitiesTotal: Cents | null;
   /** assetsTotal + liabilitiesTotal. */
-  netWorth: Cents;
+  netWorth: Cents | null;
+  liabilitiesAvailable?: boolean;
+  complete?: boolean;
+  historySource?: 'imported' | 'recorded';
+  valuationDates?: Record<string, string>;
 }
 
 export interface NetWorthHistoryResultCents {

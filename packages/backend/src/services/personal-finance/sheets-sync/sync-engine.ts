@@ -285,12 +285,57 @@ export async function synchronizeSheet(
         continue;
       }
       if (marker || !date) {
+        const accepted =
+          !marker &&
+          config.acceptedLegacyPrincipalCells?.some(
+            (cell) =>
+              cell.row === mapping.principalRow &&
+              cell.column === column &&
+              cell.cents === amount &&
+              cell.note === (remote.note ?? ''),
+          );
+        if (accepted) {
+          await repo.saveState(key, { sheetFingerprint: hash, cents: amount, row: mapping.principalRow!, column });
+          continue;
+        }
         if (result.issues.length < 100)
           result.issues.push({
             accountId: mapping.accountId,
             reason: marker ? 'unknown_cash_flow_reference' : 'contribution_date_unverified',
             cell: `R${mapping.principalRow}C${column}`,
           });
+        continue;
+      }
+      const sourceColumn = (number: number) => {
+        let text = '';
+        for (let n = number; n > 0; n = Math.floor((n - 1) / 26))
+          text = String.fromCharCode(65 + ((n - 1) % 26)) + text;
+        return text;
+      };
+      const covered = repo.flows.find(
+        (flow) =>
+          flow.accountId === mapping.accountId &&
+          flow.opening &&
+          flow.evidence?.checkpoint === true &&
+          Array.isArray(flow.evidence.sourcePrincipalCells) &&
+          flow.evidence.sourcePrincipalCells.some(
+            (cell: any) =>
+              cell.cell === `${sourceColumn(column)}${mapping.principalRow}` &&
+              Math.round(cell.amount * 100) === amount,
+          ),
+      );
+      if (!existingSource && covered && date > covered.date) {
+        await conflict({
+          key,
+          accountId: mapping.accountId,
+          date,
+          kind: 'principal',
+          reason: 'legacy_principal_already_in_opening_basis',
+          sheetValue: amount / 100,
+          dashboardValue: covered.amount,
+          sheetFingerprint: hash,
+          localFingerprint: covered.id,
+        });
         continue;
       }
       imported.push({
@@ -301,11 +346,21 @@ export async function synchronizeSheet(
         source: 'google-sheets',
         sourceId: sourceId + ':principal',
         sourceKey: `sheet:${config.sheetId}:R${mapping.principalRow}C${column}`,
-        verified: true,
+        verified: !/amount carried forward|estimated amount|pending amount verification/i.test(remote.note ?? ''),
         contributionKind: 'unspecified',
         description: 'Google Sheets contribution with explicit dated note',
         note: remote.note ?? '',
-        evidence: { sheetRow: mapping.principalRow, sheetColumn: column },
+        evidence: {
+          sheetRow: mapping.principalRow,
+          sheetColumn: column,
+          ...(/amount carried forward|estimated amount|pending amount verification/i.test(remote.note ?? '')
+            ? {
+                ownerAccepted: true,
+                estimated: true,
+                verification: 'Owner-accepted estimate; not verified by a payroll statement.',
+              }
+            : {}),
+        },
       });
     }
   if (imported.length) {

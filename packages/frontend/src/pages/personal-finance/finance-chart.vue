@@ -6,6 +6,7 @@ import { formatAxisCurrency } from '@/composable/charts/format-axis-currency';
 import { useResizeObserver } from '@vueuse/core';
 import * as d3 from 'd3';
 import { computed, onMounted, reactive, ref, watch } from 'vue';
+import { stackedUpperBoundary } from './chart-geometry';
 
 export interface ChartRow {
   label: string;
@@ -16,12 +17,13 @@ export interface ChartSeries {
   id: string;
   name: string;
   color: string;
+  lineOnly?: boolean;
 }
 const props = withDefaults(
   defineProps<{
     rows: ChartRow[];
     series: ChartSeries[];
-    mode?: 'line' | 'stacked' | 'bar' | 'donut';
+    mode?: 'line' | 'overlay' | 'stacked' | 'bar' | 'donut';
     percentage?: boolean;
     currency?: string;
   }>(),
@@ -31,6 +33,13 @@ const emit = defineEmits<{ select: [row: ChartRow] }>();
 const container = ref<HTMLDivElement | null>(null);
 const svg = ref<SVGSVGElement | null>(null);
 const width = ref(700);
+const hiddenSeries = ref<string[]>([]);
+const visibleSeries = computed(() => props.series.filter((s) => !hiddenSeries.value.includes(s.id)));
+function toggleSeries(id: string) {
+  hiddenSeries.value = hiddenSeries.value.includes(id)
+    ? hiddenSeries.value.filter((key) => key !== id)
+    : [...hiddenSeries.value, id];
+}
 const tooltip = reactive({ visible: false, x: 0, y: 0, row: null as ChartRow | null });
 const formatValue = (n: number) =>
   props.percentage
@@ -42,7 +51,7 @@ const formatValue = (n: number) =>
         maximumFractionDigits: 2,
       }).format(n);
 const hasValues = computed(() =>
-  props.rows.some((r) => props.series.some((s) => r.values[s.id] !== null && r.values[s.id] !== undefined)),
+  props.rows.some((r) => visibleSeries.value.some((s) => r.values[s.id] !== null && r.values[s.id] !== undefined)),
 );
 
 function showTooltip(event: MouseEvent, row: ChartRow) {
@@ -63,7 +72,7 @@ function render() {
   root.attr('viewBox', `0 0 ${w} ${h}`);
   if (props.mode === 'donut') {
     const row = props.rows.at(-1)!;
-    const data = props.series
+    const data = visibleSeries.value
       .map((s) => ({ ...s, value: Math.max(0, row.values[s.id] ?? 0) }))
       .filter((s) => s.value > 0);
     const radius = Math.min(w / 2 - 10, 130);
@@ -131,10 +140,10 @@ function render() {
   const values = props.rows.flatMap((r) =>
     props.mode === 'stacked'
       ? [
-          props.series.reduce((n, s) => n + Math.max(0, r.values[s.id] ?? 0), 0),
-          props.series.reduce((n, s) => n + Math.min(0, r.values[s.id] ?? 0), 0),
+          visibleSeries.value.reduce((n, s) => n + Math.max(0, r.values[s.id] ?? 0), 0),
+          visibleSeries.value.reduce((n, s) => n + Math.min(0, r.values[s.id] ?? 0), 0),
         ]
-      : props.series.map((s) => r.values[s.id]).filter((v): v is number => v !== null && v !== undefined),
+      : visibleSeries.value.map((s) => r.values[s.id]).filter((v): v is number => v !== null && v !== undefined),
   );
   const lo = Math.min(0, d3.min(values) ?? 0),
     hi = Math.max(0, d3.max(values) ?? 1);
@@ -207,7 +216,7 @@ function render() {
   if (props.mode === 'stacked') {
     const stack = d3
       .stack<ChartRow>()
-      .keys(props.series.map((s) => s.id))
+      .keys(visibleSeries.value.map((s) => s.id))
       .value((r, id) => r.values[id] ?? 0)
       .offset(d3.stackOffsetDiverging);
     const area = d3
@@ -220,29 +229,44 @@ function render() {
       .data(stack(props.rows))
       .join('path')
       .attr('d', (series) => area.defined((point) => typeof point.data.values[series.key] === 'number')(series))
-      .attr('fill', (s) => props.series.find((v) => v.id === s.key)!.color)
+      .attr('fill', (s) => visibleSeries.value.find((v) => v.id === s.key)!.color)
       .attr('fill-opacity', 0.75);
   } else if (props.mode === 'bar') {
     const barW = Math.min(48, (plotW / Math.max(1, props.rows.length)) * 0.65);
-    props.series.forEach((series, seriesIndex) => {
+    visibleSeries.value.forEach((series, seriesIndex) => {
       plot
         .selectAll(`.bar-${seriesIndex}`)
         .data(props.rows.filter((r) => r.values[series.id] !== null && r.values[series.id] !== undefined))
         .join('rect')
-        .attr('x', (r) => x(r.label)! - barW / 2 + (seriesIndex * barW) / props.series.length)
-        .attr('width', barW / props.series.length)
+        .attr('x', (r) => x(r.label)! - barW / 2 + (seriesIndex * barW) / visibleSeries.value.length)
+        .attr('width', barW / visibleSeries.value.length)
         .attr('y', (r) => y(Math.max(0, r.values[series.id]!)))
         .attr('height', (r) => Math.max(1, Math.abs(y(r.values[series.id]!) - y(0))))
         .attr('fill', (r) => (r.values[series.id]! < 0 ? colors.appExpense : series.color))
         .attr('rx', 2);
     });
   } else {
-    props.series.forEach((series) => {
+    visibleSeries.value.forEach((series) => {
       const available = (r: ChartRow) => r.values[series.id] !== null && r.values[series.id] !== undefined;
       const line = d3
         .line<ChartRow>()
         .x((r) => x(r.label))
         .y((r) => y(r.values[series.id]!));
+      if (props.mode === 'overlay' && !series.lineOnly)
+        plot
+          .append('path')
+          .datum(props.rows)
+          .attr(
+            'd',
+            d3
+              .area<ChartRow>()
+              .defined(available)
+              .x((r) => x(r.label))
+              .y0(y(0))
+              .y1((r) => y(r.values[series.id]!)),
+          )
+          .attr('fill', series.color)
+          .attr('fill-opacity', 0.08);
       plot
         .append('path')
         .datum(props.rows)
@@ -254,7 +278,7 @@ function render() {
         .attr('stroke', series.color)
         .attr('stroke-width', 2.5);
       plot
-        .selectAll(`.partial-segment-${props.series.indexOf(series)}`)
+        .selectAll(`.partial-segment-${visibleSeries.value.indexOf(series)}`)
         .data(
           props.rows
             .slice(1)
@@ -298,10 +322,31 @@ function render() {
     guide.attr('x1', x(row.label)).attr('x2', x(row.label));
     hover
       .selectAll('circle')
-      .data(props.series.filter((s) => typeof row.values[s.id] === 'number'))
+      .data(visibleSeries.value.filter((s) => typeof row.values[s.id] === 'number'))
       .join('circle')
       .attr('cx', x(row.label))
-      .attr('cy', (s) => y(row.values[s.id]!))
+      .attr('cy', (s) =>
+        y(
+          props.mode === 'stacked'
+            ? stackedUpperBoundary(
+                row.values,
+                visibleSeries.value.map((item) => item.id),
+                s.id,
+              )!
+            : row.values[s.id]!,
+        ),
+      )
+      .attr('data-hover-series', (s) => s.id)
+      .attr('data-hover-value', (s) => row.values[s.id]!)
+      .attr('data-plotted-value', (s) =>
+        props.mode === 'stacked'
+          ? stackedUpperBoundary(
+              row.values,
+              visibleSeries.value.map((item) => item.id),
+              s.id,
+            )!
+          : row.values[s.id]!,
+      )
       .attr('r', 5)
       .attr('fill', colors.card)
       .attr('stroke', (s) => s.color)
@@ -340,7 +385,7 @@ function render() {
     .attr(
       'aria-label',
       (r) =>
-        `${r.label}: ${props.series.map((s) => `${s.name} ${r.values[s.id] === null ? 'missing' : formatValue(r.values[s.id] ?? 0)}`).join(', ')}`,
+        `${r.label}: ${visibleSeries.value.map((s) => `${s.name} ${r.values[s.id] === null ? 'missing' : formatValue(r.values[s.id] ?? 0)}`).join(', ')}`,
     )
     .on('focus', (_, row) => activate(row))
     .on('keydown', (event: KeyboardEvent, row) => {
@@ -368,10 +413,22 @@ useResizeObserver(container, (entries) => {
   width.value = entries[0]!.contentRect.width;
   render();
 });
-watch(() => [props.rows, props.series, props.mode, props.percentage, props.currency, currentTheme.value], render, {
-  deep: true,
-  flush: 'post',
-});
+watch(
+  () => [
+    props.rows,
+    props.series,
+    props.mode,
+    props.percentage,
+    props.currency,
+    currentTheme.value,
+    hiddenSeries.value,
+  ],
+  render,
+  {
+    deep: true,
+    flush: 'post',
+  },
+);
 onMounted(render);
 </script>
 
@@ -390,7 +447,7 @@ onMounted(render);
         <ChartTooltip>
           <ChartTooltipHeader>{{ tooltip.row.label }}</ChartTooltipHeader>
           <ChartTooltipRow
-            v-for="series in props.series"
+            v-for="series in visibleSeries"
             :key="series.id"
             :color="series.color"
             :label="series.name"
@@ -410,9 +467,17 @@ onMounted(render);
       <span v-if="rows.some((row) => row.partial)" class="text-warning-text"
         >○ Dashed / open points: partial recorded subtotal</span
       >
-      <span v-for="series in props.series" :key="series.id" class="text-muted-foreground flex items-center gap-2"
-        ><span class="size-2.5 rounded-sm" :style="{ backgroundColor: series.color }" />{{ series.name }}</span
+      <button
+        v-for="series in props.series"
+        :key="series.id"
+        type="button"
+        :aria-pressed="!hiddenSeries.includes(series.id)"
+        :aria-label="`Toggle ${series.name}`"
+        @click="toggleSeries(series.id)"
+        :class="['text-muted-foreground flex items-center gap-2', hiddenSeries.includes(series.id) && 'opacity-40']"
       >
+        <span class="size-2.5 rounded-sm" :style="{ backgroundColor: series.color }" />{{ series.name }}
+      </button>
     </div>
   </div>
 </template>

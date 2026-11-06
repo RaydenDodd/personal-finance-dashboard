@@ -236,12 +236,15 @@ onBeforeUnmount(() => {
               <dd class="text-foreground mt-1">{{ status.pendingWrites }}</dd>
             </div>
           </dl>
-          <Callout v-if="status.issues?.length" variant="warning" title="Contribution dates need review"
-            ><p v-for="(issue, index) in status.issues" :key="index">
-              {{ props.accounts.find((account) => account.id === issue.accountId)?.name ?? 'Account'
-              }}{{ issue.cell ? ` · ${issue.cell}` : '' }}: {{ issue.reason }}
-            </p></Callout
-          >
+          <details v-if="status.issues?.length" class="rounded-md border p-3 text-xs">
+            <summary class="cursor-pointer">New reconciliation details · {{ status.issues.length }}</summary>
+            <div class="mt-3 max-h-48 overflow-auto">
+              <p v-for="(issue, index) in status.issues" :key="index">
+                {{ props.accounts.find((account) => account.id === issue.accountId)?.name ?? 'Account'
+                }}{{ issue.cell ? ` · ${issue.cell}` : '' }}: {{ issue.reason }}
+              </p>
+            </div>
+          </details>
           <div v-if="status.conflicts.length" class="space-y-3 border-t pt-4">
             <h3 class="text-sm font-medium">Review conflicting edits</h3>
             <p class="text-muted-foreground text-xs">

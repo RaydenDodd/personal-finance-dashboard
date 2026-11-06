@@ -14,6 +14,7 @@ import UsersCurrencies from '@models/users-currencies.model';
 import { withTransaction } from '@services/common/with-transaction';
 import { API_LAYER_BASE_CURRENCY_CODE } from '@services/exchange-rates/constants';
 import { getBankHistoryContext, mergeImportedBankHistory } from '@services/personal-finance/bank-history';
+import { getRecordedNativeHistory, recordedCombinedHistory } from '@services/personal-finance/native-history';
 import { buildUsdRateLookup } from '@services/stats/build-usd-rate-lookup';
 import { calculateVehiclesBalanceHistory } from '@services/stats/calculate-vehicles-balance-history';
 import { calculateVentureBalanceHistory } from '@services/stats/calculate-venture-balance-history';
@@ -358,8 +359,10 @@ export const getCombinedBalanceHistory = async ({
   try {
     const maxDate = to || format(new Date(), 'yyyy-MM-dd');
     const importedHistory = await getBankHistoryContext(userId);
+    const recorded = importedHistory ? await getRecordedNativeHistory(userId) : null;
     const nativeStart = from ?? (await resolveOldestEventDate({ userId, fallback: maxDate }));
     const minDate = from ?? [nativeStart, importedHistory?.points[0]?.date ?? nativeStart].sort()[0]!;
+    if (recorded && maxDate < '2026-11-05') return recordedCombinedHistory(recorded, minDate, maxDate);
     if (importedHistory && maxDate < importedHistory.liveFrom)
       return mergeImportedBankHistory([], importedHistory, minDate, maxDate);
 
@@ -469,6 +472,7 @@ export const getCombinedBalanceHistory = async ({
       };
     });
 
+    if (recorded) return recordedCombinedHistory(recorded, minDate, maxDate, combinedHistory);
     return importedHistory
       ? mergeImportedBankHistory(combinedHistory, importedHistory, minDate, maxDate)
       : combinedHistory;
