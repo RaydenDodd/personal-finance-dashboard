@@ -92,7 +92,7 @@ COPY --from=build-stage --chown=nginx:nginx /app/packages/landing/dist /landing
 COPY --chown=nginx:nginx packages/frontend/nginx.conf /etc/nginx/templates/nginx.conf.template
 
 COPY self-hosting/frontend/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+RUN chmod 755 /usr/local/bin/docker-entrypoint.sh
 
 # Use non-root user
 USER nginx
