@@ -43,3 +43,23 @@ it('distinguishes browser chrome from the keyboard and preserves pinch zoom', ()
   input.remove();
   vi.unstubAllGlobals();
 });
+
+it('tracks the visible bottom edge including viewport scrolling without resizing during pinch zoom', () => {
+  const viewport = Object.assign(new EventTarget(), { height: 760, offsetTop: 24, scale: 1 });
+  vi.stubGlobal('visualViewport', viewport);
+  vi.stubGlobal('innerHeight', 844);
+  installVisualViewportSizing();
+  expect(document.documentElement.style.getPropertyValue('--app-visible-bottom')).toBe('784px');
+  viewport.offsetTop = 0;
+  viewport.height = 740;
+  viewport.dispatchEvent(new Event('scroll'));
+  expect(document.documentElement.style.getPropertyValue('--app-visible-bottom')).toBe('740px');
+  vi.stubGlobal('innerHeight', 720);
+  window.dispatchEvent(new Event('resize'));
+  expect(document.documentElement.style.getPropertyValue('--app-visible-bottom')).toBe('720px');
+  viewport.scale = 2;
+  viewport.height = 370;
+  viewport.dispatchEvent(new Event('resize'));
+  expect(document.documentElement.style.getPropertyValue('--app-visible-bottom')).toBe('720px');
+  vi.unstubAllGlobals();
+});

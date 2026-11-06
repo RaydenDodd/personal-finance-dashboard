@@ -647,9 +647,12 @@ select:focus-visible,
   }
 
   :root[data-finance-standalone] .finance-bottom-bar {
-    /* Installed iPhone windows can retain a toolbar-sized inset after auth.
-       Reserve the home-indicator space, without an extra browser-toolbar gap. */
-    padding-bottom: clamp(0.25rem, var(--finance-nav-safe-area-bottom), 34px);
+    /* Paint through the large viewport, but keep the entire button row inside
+       the visual viewport when iOS clips its lower content area. */
+    padding-bottom: max(
+      clamp(0.25rem, var(--finance-nav-safe-area-bottom), 34px),
+      calc(100lvh - var(--app-visible-bottom, 100dvh))
+    );
   }
 
   :root[data-finance-standalone] .finance-app-shell {

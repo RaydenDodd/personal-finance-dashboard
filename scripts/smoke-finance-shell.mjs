@@ -139,6 +139,34 @@ try {
       .toBeLessThanOrEqual(1);
     if (inset === 83) await page.screenshot({ path: path.join(output, 'mobile-installed-inset-83.png') });
   }
+  stage = 'installed-visible-content-clipping';
+  for (const obscured of [20, 49, 83]) {
+    await page.evaluate((obscured) => {
+      document.documentElement.style.setProperty('--app-visible-bottom', `${innerHeight - obscured}px`);
+    }, obscured);
+    await expect
+      .poll(() =>
+        page.evaluate((obscured) => {
+          const row = document.querySelector('[aria-label="Primary navigation"]').getBoundingClientRect();
+          return row.bottom - (innerHeight - obscured);
+        }, obscured),
+      )
+      .toBeLessThanOrEqual(1);
+    await expect
+      .poll(() =>
+        page.evaluate((obscured) => {
+          const labels = [
+            ...document.querySelectorAll(
+              '[aria-label="Primary navigation"] a span, [aria-label="Primary navigation"] button span',
+            ),
+          ];
+          return Math.max(...labels.map((label) => label.getBoundingClientRect().bottom)) - (innerHeight - obscured);
+        }, obscured),
+      )
+      .toBeLessThanOrEqual(0);
+    if (obscured === 49) await page.screenshot({ path: path.join(output, 'mobile-visible-content-49.png') });
+  }
+  await page.evaluate(() => document.documentElement.style.removeProperty('--app-visible-bottom'));
   await page.evaluate(() => {
     document.documentElement.removeAttribute('data-finance-standalone');
     document.querySelector('[data-testid="mobile-bottom-bar"]').style.removeProperty('--finance-nav-safe-area-bottom');
@@ -164,6 +192,7 @@ try {
     darkAndLight: true,
     touchTargets: true,
     installedSafeAreaInsets: [0, 21, 34, 83],
+    installedObscuredContentHeights: [20, 49, 83],
     nativeTransactionForm: true,
     offlineHidesFinancialViews: true,
     browserErrors: 0,

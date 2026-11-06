@@ -14,6 +14,10 @@ export const installVisualViewportSizing = (): void => {
   const resize = () => {
     if (viewport.scale !== 1) return;
     document.documentElement.style.setProperty('--app-visible-height', `${Math.round(viewport.height)}px`);
+    document.documentElement.style.setProperty(
+      '--app-visible-bottom',
+      `${Math.round(Math.min(window.innerHeight, viewport.height + (viewport.offsetTop ?? 0)))}px`,
+    );
     const focused = document.activeElement;
     const editing =
       focused instanceof HTMLInputElement ||
@@ -25,6 +29,8 @@ export const installVisualViewportSizing = (): void => {
     );
   };
   viewport.addEventListener('resize', resize);
+  viewport.addEventListener('scroll', resize, { passive: true });
+  window.addEventListener('resize', resize);
   document.addEventListener('focusin', resize);
   document.addEventListener('focusout', () => requestAnimationFrame(resize));
   resize();
