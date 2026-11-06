@@ -119,12 +119,24 @@ try {
         .querySelector('[data-testid="mobile-bottom-bar"]')
         .style.setProperty('--finance-nav-safe-area-bottom', `${inset}px`);
     }, inset);
-    const bar = await page.getByTestId('mobile-bottom-bar').boundingBox();
-    const controls = await nav.boundingBox();
-    const padding = bar.y + bar.height - controls.y - controls.height;
-    if (Math.abs(padding - Math.max(4, Math.min(inset, 34))) > 1)
-      throw Error('Installed tab controls have excessive bottom padding');
-    if (Math.abs(bar.y + bar.height - 844) > 1) throw Error('Installed tab bar does not reach the viewport bottom');
+    await expect
+      .poll(() =>
+        page.evaluate((inset) => {
+          const bar = document.querySelector('[data-testid="mobile-bottom-bar"]').getBoundingClientRect();
+          const controls = document.querySelector('[aria-label="Primary navigation"]').getBoundingClientRect();
+          return Math.abs(bar.bottom - controls.bottom - Math.max(4, Math.min(inset, 34)));
+        }, inset),
+      )
+      .toBeLessThanOrEqual(1);
+    await expect
+      .poll(() =>
+        page.evaluate(() =>
+          Math.abs(
+            document.querySelector('[data-testid="mobile-bottom-bar"]').getBoundingClientRect().bottom - innerHeight,
+          ),
+        ),
+      )
+      .toBeLessThanOrEqual(1);
     if (inset === 83) await page.screenshot({ path: path.join(output, 'mobile-installed-inset-83.png') });
   }
   await page.evaluate(() => {
