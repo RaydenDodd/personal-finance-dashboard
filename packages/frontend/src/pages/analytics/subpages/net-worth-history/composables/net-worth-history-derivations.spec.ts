@@ -76,14 +76,14 @@ describe('kindsWithActivity', () => {
     const [historical] = buildDisplayPoints({
       points: [raw],
       selectedAssetKinds: ['cash'],
-      selectedLiabilityKinds: ['credit-card'],
+      selectedLiabilityKinds: [CREDIT_CARD],
     });
     expect(historical?.assetsTotal).toBe(100);
     expect(historical?.liabilitiesAvailable).toBe(false);
     const [current] = buildDisplayPoints({
       points: [buildPoint({ date: '2026-11-05', assets: 1000, creditCard: -200 })],
       selectedAssetKinds: ['cash'],
-      selectedLiabilityKinds: ['credit-card'],
+      selectedLiabilityKinds: [CREDIT_CARD],
     });
     expect(averageOwedLiabilities({ points: [historical!, current!] })).toBe(200);
     expect(computePeriodChange({ points: [historical!, current!] })).toEqual({ amount: 0, pct: null });
