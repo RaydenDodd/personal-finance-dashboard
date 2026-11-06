@@ -111,6 +111,27 @@ try {
   }
   stage = 'dark-and-light';
   await page.setViewportSize({ width: 390, height: 844 });
+  stage = 'installed-safe-area-padding';
+  for (const inset of [0, 21, 34, 83]) {
+    await page.evaluate((inset) => {
+      document.documentElement.setAttribute('data-finance-standalone', '');
+      document
+        .querySelector('[data-testid="mobile-bottom-bar"]')
+        .style.setProperty('--finance-nav-safe-area-bottom', `${inset}px`);
+    }, inset);
+    const bar = await page.getByTestId('mobile-bottom-bar').boundingBox();
+    const controls = await nav.boundingBox();
+    const padding = bar.y + bar.height - controls.y - controls.height;
+    if (Math.abs(padding - Math.max(4, Math.min(inset, 34))) > 1)
+      throw Error('Installed tab controls have excessive bottom padding');
+    if (Math.abs(bar.y + bar.height - 844) > 1) throw Error('Installed tab bar does not reach the viewport bottom');
+    if (inset === 83) await page.screenshot({ path: path.join(output, 'mobile-installed-inset-83.png') });
+  }
+  await page.evaluate(() => {
+    document.documentElement.removeAttribute('data-finance-standalone');
+    document.querySelector('[data-testid="mobile-bottom-bar"]').style.removeProperty('--finance-nav-safe-area-bottom');
+  });
+  stage = 'dark-and-light';
   await page.screenshot({ path: path.join(output, 'mobile-dark.png') });
   await page.evaluate(() => {
     document.documentElement.classList.remove('dark');
@@ -130,6 +151,7 @@ try {
     viewportWidths: [320, 375, 390, 430, 844],
     darkAndLight: true,
     touchTargets: true,
+    installedSafeAreaInsets: [0, 21, 34, 83],
     nativeTransactionForm: true,
     offlineHidesFinancialViews: true,
     browserErrors: 0,

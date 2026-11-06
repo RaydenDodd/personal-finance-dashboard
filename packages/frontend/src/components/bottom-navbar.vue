@@ -1,7 +1,7 @@
 <template>
   <div
     ref="navbarRef"
-    class="finance-bottom-bar bg-background border-border relative z-40 w-full shrink-0 border-t pt-1 pb-[max(0.25rem,env(safe-area-inset-bottom))]"
+    class="finance-bottom-bar bg-background border-border relative z-40 w-full shrink-0 border-t pt-1"
     data-testid="mobile-bottom-bar"
   >
     <nav aria-label="Primary navigation" class="mobile-bottom-navigation grid grid-cols-5 gap-0.5 px-1">

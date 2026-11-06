@@ -1,5 +1,14 @@
 /** Match the visible iPhone viewport while its keyboard is open, without restricting pinch zoom. */
 export const installVisualViewportSizing = (): void => {
+  const displayMode = window.matchMedia?.('(display-mode: standalone)');
+  const updateDisplayMode = () => {
+    document.documentElement.toggleAttribute(
+      'data-finance-standalone',
+      Boolean(displayMode?.matches || (navigator as Navigator & { standalone?: boolean }).standalone),
+    );
+  };
+  displayMode?.addEventListener('change', updateDisplayMode);
+  updateDisplayMode();
   const viewport = window.visualViewport;
   if (!viewport) return;
   const resize = () => {

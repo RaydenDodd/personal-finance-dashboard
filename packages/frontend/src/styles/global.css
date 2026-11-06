@@ -640,8 +640,16 @@ select:focus-visible,
   }
 
   .finance-bottom-bar {
+    --finance-nav-safe-area-bottom: env(safe-area-inset-bottom, 0px);
+    padding-bottom: max(0.25rem, var(--finance-nav-safe-area-bottom));
     padding-right: env(safe-area-inset-right);
     padding-left: env(safe-area-inset-left);
+  }
+
+  :root[data-finance-standalone] .finance-bottom-bar {
+    /* Installed iPhone windows can retain a toolbar-sized inset after auth.
+       Reserve the home-indicator space, without an extra browser-toolbar gap. */
+    padding-bottom: clamp(0.25rem, var(--finance-nav-safe-area-bottom), 34px);
   }
 
   :root[data-finance-keyboard] .finance-app-shell {

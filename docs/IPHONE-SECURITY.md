@@ -51,6 +51,8 @@ Public password reset is disabled. Lost-factor or password recovery requires the
 
 ### Which login to use
 
+Installed mode is detected through the display-mode query and iPhone's standalone flag. Its tab bar caps bottom safe-area padding at 34 CSS pixels, retaining home-indicator clearance without allowing a retained browser-toolbar inset to create a large empty strip beneath the buttons. Ordinary Safari retains its reported inset. Visual checks must measure the button row's distance from the bottom, not just the bar container's edge.
+
 The Home Screen app can require a fresh gateway session even when Safari is already signed in. At a URL containing `/authelia/`, use the gateway username **rayden** and the separate password delivered in `private/finance-gateway-owner-access.txt`, followed by the authenticator. The MoneyMatter email/password does not authenticate this gateway. At MoneyMatter's `/sign-in` page, use the existing MoneyMatter email/password instead. Save these as distinct password-manager entries and check which entry autofill selects.
 
 Repeated wrong gateway credentials trigger a temporary lockout. Wait until its recorded expiration before retrying; changing passwords or removing MFA is not necessary. Never send passwords or authenticator codes in support messages.
