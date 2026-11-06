@@ -1,5 +1,9 @@
 <template>
-  <div ref="rootRef" class="border-border bg-card space-y-7.5 rounded-lg border p-4">
+  <div
+    ref="rootRef"
+    data-testid="cash-flow-composition"
+    class="border-border bg-card space-y-7.5 rounded-lg border p-4"
+  >
     <div :class="cn('flex items-center gap-3', isCompact ? 'justify-between' : 'flex-wrap justify-between')">
       <PeriodSelector
         v-model="period"
@@ -195,7 +199,6 @@ const topN = useLocalStorage('cash-flow-composition-top-n', '8');
 const queryParams = computed(() => ({
   from: period.value.from,
   to: period.value.to,
-  categoryIds: categories.value.map((c) => c.id),
 }));
 
 const {

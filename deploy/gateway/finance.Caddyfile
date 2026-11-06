@@ -1,7 +1,7 @@
 # Imported by the existing host Caddyfile. No second proxy or public app port.
 (finance_authorize) {
   forward_auth 127.0.0.1:9091 {
-    uri /api/authz/forward-auth
+    uri /api/authz/forward-auth?
     header_up -Authorization
     header_up -Remote-User
     header_up -Remote-Groups
@@ -12,7 +12,7 @@
 (finance_api_authorize) {
   reverse_proxy 127.0.0.1:9091 {
     method GET
-    rewrite /api/authz/forward-auth
+    rewrite /api/authz/forward-auth?
     header_up X-Forwarded-Method {method}
     header_up X-Forwarded-Uri {uri}
     header_up -Authorization

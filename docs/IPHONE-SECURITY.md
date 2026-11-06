@@ -59,6 +59,8 @@ The manifest uses standalone display, scope `/`, start URL `/personal-finance`, 
 
 ## Sensitive data and connectivity
 
+The gateway uses 16 KiB read/write buffers so analytics filters and normal browser cookies fit. Caddy forwards the original URI in the authorization header without also copying its query onto the internal authorization endpoint. Increasing this transport limit does not grant access: large unauthenticated requests must still return the normal MFA-required 401 response. The Cash flow composition card requests all categories without redundantly enumerating every category ID.
+
 The self-hosted app does not persist financial query responses in IndexedDB or register a caching service worker. Startup removes the obsolete query cache and service-worker caches from this app origin. API/auth requests use no-store. Credentials stay server-side; session cookies are HttpOnly. Browser theme/preferences may persist, but balances, bank responses and Google credentials are not an offline database.
 
 If the connection fails, financial views are hidden behind a clear retry screen rather than displaying old balances as current. The public app hides financial views while backgrounded and rechecks its session when returning. An expired gateway redirects to authentication; an expired MoneyMatter session goes to the normal app login. Offline/failed checks do not grant access.

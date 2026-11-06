@@ -630,7 +630,11 @@ select:focus-visible,
 /* iPhone uses the existing MoneyMatter controls and palette. Keep desktop sizing intact. */
 @media (max-width: 767px), (pointer: coarse) and (max-width: 1000px) and (max-height: 500px) {
   .finance-app-shell {
-    height: 100dvh;
+    /* One viewport frame keeps Safari's restored fixed-position offsets from
+       separating the tab bar from the screen after keyboard/app transitions. */
+    position: fixed;
+    inset: 0;
+    height: auto;
     padding-right: env(safe-area-inset-right);
     padding-left: env(safe-area-inset-left);
   }
@@ -641,6 +645,7 @@ select:focus-visible,
   }
 
   :root[data-finance-keyboard] .finance-app-shell {
+    bottom: auto;
     height: var(--app-visible-height, 100dvh);
   }
 

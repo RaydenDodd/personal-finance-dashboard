@@ -2,6 +2,10 @@
 # Nonsecret template; initialization copies it to the ignored private directory.
 server:
   address: tcp://0.0.0.0:9091/authelia
+  # Analytics filters plus browser/app cookies exceed the 4 KiB default.
+  buffers:
+    read: 16384
+    write: 16384
 log:
   level: warn
 theme: auto

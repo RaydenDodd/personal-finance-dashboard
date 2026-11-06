@@ -1,4 +1,4 @@
-import { chromium, expect } from '@playwright/test';
+import { chromium, webkit, expect } from '@playwright/test';
 // Synthetic shared-shell QA only. All API traffic is intercepted; no owner data or sessions.
 import { mkdir, writeFile, unlink } from 'node:fs/promises';
 import path from 'node:path';
@@ -39,7 +39,10 @@ let stage = 'start';
 const errors = [],
   writes = [];
 try {
-  browser = await chromium.launch({ channel: 'msedge', headless: true });
+  browser =
+    process.env.FINANCE_QA_BROWSER === 'webkit'
+      ? await webkit.launch({ headless: true })
+      : await chromium.launch({ channel: 'msedge', headless: true });
   const context = await browser.newContext({
     viewport: { width: 390, height: 844 },
     hasTouch: true,
