@@ -59,7 +59,7 @@ The manifest uses standalone display, scope `/`, start URL `/personal-finance`, 
 
 ## Sensitive data and connectivity
 
-The gateway uses 16 KiB read/write buffers so analytics filters and normal browser cookies fit. Caddy forwards the original URI in the authorization header without also copying its query onto the internal authorization endpoint. Increasing this transport limit does not grant access: large unauthenticated requests must still return the normal MFA-required 401 response. The Cash flow composition card requests all categories without redundantly enumerating every category ID.
+The gateway uses 16 KiB read/write buffers so analytics filters and normal browser cookies fit. Caddy forwards the original URI in the authorization header without also copying its query onto the internal authorization endpoint. Increasing this transport limit does not grant access: large unauthenticated requests must still return the normal MFA-required 401 response. The Cash flow composition card retains its explicit category filter, which preserves the endpoint's category detail and grouping behavior.
 
 The self-hosted app does not persist financial query responses in IndexedDB or register a caching service worker. Startup removes the obsolete query cache and service-worker caches from this app origin. API/auth requests use no-store. Credentials stay server-side; session cookies are HttpOnly. Browser theme/preferences may persist, but balances, bank responses and Google credentials are not an offline database.
 

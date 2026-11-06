@@ -199,6 +199,7 @@ const topN = useLocalStorage('cash-flow-composition-top-n', '8');
 const queryParams = computed(() => ({
   from: period.value.from,
   to: period.value.to,
+  categoryIds: categories.value.map((c) => c.id),
 }));
 
 const {
