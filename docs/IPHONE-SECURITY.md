@@ -49,6 +49,12 @@ Public password reset is disabled. Lost-factor or password recovery requires the
 5. Name it **My Finances** and tap **Add**.
 6. Launch the icon and confirm charts, navigation, login and logout in the installed app. Test reopening after backgrounding it and after a session expires.
 
+### Which login to use
+
+The Home Screen app can require a fresh gateway session even when Safari is already signed in. At a URL containing `/authelia/`, use the gateway username **rayden** and the separate password delivered in `private/finance-gateway-owner-access.txt`, followed by the authenticator. The MoneyMatter email/password does not authenticate this gateway. At MoneyMatter's `/sign-in` page, use the existing MoneyMatter email/password instead. Save these as distinct password-manager entries and check which entry autofill selects.
+
+Repeated wrong gateway credentials trigger a temporary lockout. Wait until its recorded expiration before retrying; changing passwords or removing MFA is not necessary. Never send passwords or authenticator codes in support messages.
+
 The manifest uses standalone display, scope `/`, start URL `/personal-finance`, and authenticated same-origin fetching. Normal application navigation stays within Vue's router. Safe-area padding, Dynamic Island/home-indicator clearance, keyboard-aware dialogs, touch controls and a mobile bottom bar preserve the existing desktop sidebar and MoneyMatter styling. Personal accounts use compact mobile cards; desktop keeps its table. Charts distinguish horizontal inspection from vertical page scrolling.
 
 ## Sensitive data and connectivity
