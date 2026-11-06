@@ -2,26 +2,7 @@
 @finance_api path /api/*
 handle @finance_api {
   route {
-    reverse_proxy 127.0.0.1:9091 {
-      method GET
-      rewrite /api/authz/forward-auth
-      header_up X-Forwarded-Method {method}
-      header_up X-Forwarded-Uri {uri}
-      header_up -Authorization
-      header_up -Remote-User
-      header_up -Remote-Groups
-      header_up -Remote-Email
-      @authorized status 2xx
-      handle_response @authorized {
-        request_header X-Finance-Gateway-Authorized true
-      }
-      @login_required status 302 303 401 403
-      handle_response @login_required {
-        header Cache-Control no-store
-        header X-Finance-Authentication required
-        respond 401
-      }
-    }
+    import finance_api_authorize
     header Cache-Control no-store
     reverse_proxy 192.168.0.32:8095 {
       header_up Host raydenfinance.duckdns.org

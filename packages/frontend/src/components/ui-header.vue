@@ -17,7 +17,7 @@
             <Sheet.SheetContent
               side="left"
               :class="[
-                'xs:w-3/4 w-full overflow-y-auto px-0',
+                'finance-mobile-menu xs:w-3/4 w-full overflow-y-auto px-0 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]',
                 'data-[state=closed]:duration-200 data-[state=open]:duration-300',
               ]"
             >

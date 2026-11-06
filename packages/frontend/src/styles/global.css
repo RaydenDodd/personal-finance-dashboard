@@ -639,6 +639,10 @@ select:focus-visible,
     padding-top: env(safe-area-inset-top);
   }
 
+  .finance-mobile-menu > button:last-child {
+    top: max(1rem, env(safe-area-inset-top));
+  }
+
   input:not([type='checkbox']):not([type='radio']),
   select,
   textarea {

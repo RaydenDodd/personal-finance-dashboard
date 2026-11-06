@@ -1,6 +1,11 @@
 <template>
   <main class="bg-background">
-    <div v-if="!isConnectionBlocked" :class="{ invisible: checkingForegroundSession }" :inert="checkingForegroundSession" :aria-hidden="checkingForegroundSession || undefined">
+    <div
+      v-if="!isConnectionBlocked"
+      :class="{ invisible: checkingForegroundSession }"
+      :inert="checkingForegroundSession"
+      :aria-hidden="checkingForegroundSession || undefined"
+    >
       <router-view />
 
       <base-currency-change-overlay />

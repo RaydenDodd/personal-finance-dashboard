@@ -168,6 +168,13 @@ location /api/ {
   proxy_set_header Connection \$bt_connection_upgrade;
   proxy_hide_header Cache-Control;
   add_header Cache-Control "no-store" always;
+  # Location-level add_header disables inheritance; retain the server's headers.
+  add_header Strict-Transport-Security "max-age=63072000; includeSubDomains; preload" always;
+  add_header X-Frame-Options "SAMEORIGIN" always;
+  add_header X-Content-Type-Options "nosniff" always;
+  add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+  add_header Permissions-Policy "camera=(), microphone=(), geolocation=(self), payment=()" always;
+  add_header Content-Security-Policy \$csp_policy always;
   # Backend streams Server-Sent Events; buffering would stall them.
   proxy_buffering off;
   proxy_read_timeout 3600s;

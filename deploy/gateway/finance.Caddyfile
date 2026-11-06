@@ -9,6 +9,29 @@
   }
 }
 
+(finance_api_authorize) {
+  reverse_proxy 127.0.0.1:9091 {
+    method GET
+    rewrite /api/authz/forward-auth
+    header_up X-Forwarded-Method {method}
+    header_up X-Forwarded-Uri {uri}
+    header_up -Authorization
+    header_up -Remote-User
+    header_up -Remote-Groups
+    header_up -Remote-Email
+    @authorized status 2xx
+    handle_response @authorized {
+      request_header X-Finance-Gateway-Authorized true
+    }
+    @login_required status 302 303 401 403
+    handle_response @login_required {
+      header Cache-Control no-store
+      header X-Finance-Authentication required
+      respond 401
+    }
+  }
+}
+
 raydenfinance.duckdns.org {
   header {
     Strict-Transport-Security "max-age=31536000"
@@ -77,6 +100,13 @@ raydenfinance.duckdns.org {
   handle /__finance_security_check {
     route {
       import finance_authorize
+      header Cache-Control no-store
+      respond 204
+    }
+  }
+  handle /__finance_security_api_check {
+    route {
+      import finance_api_authorize
       header Cache-Control no-store
       respond 204
     }

@@ -31,10 +31,10 @@ describe('Home Screen foreground privacy', () => {
   });
   it('hides the warm view while backgrounded and only reveals it after a fresh credentialed session response', async () => {
     const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
-    let answer;
+    let answer: ((response: Response) => void) | undefined;
     const fetch = vi.fn().mockImplementation(
       () =>
-        new Promise((resolve) => {
+        new Promise<Response>((resolve) => {
           answer = resolve;
         }),
     );
@@ -52,7 +52,8 @@ describe('Home Screen foreground privacy', () => {
       origin + '/api/v1/auth/get-session',
       expect.objectContaining({ credentials: 'include', cache: 'no-store' }),
     );
-    answer(new Response(JSON.stringify({ session: { id: 'fixture' }, user: { id: 'fixture' } }), { status: 200 }));
+    expect(answer).toBeDefined();
+    answer!(new Response(JSON.stringify({ session: { id: 'fixture' }, user: { id: 'fixture' } }), { status: 200 }));
     await vi.waitFor(() => expect(checking).toHaveBeenLastCalledWith(false));
     expect(assign).not.toHaveBeenCalled();
   });
@@ -72,7 +73,7 @@ describe('Home Screen foreground privacy', () => {
     cleanup = installForegroundSessionCheck();
     document.dispatchEvent(new Event('visibilitychange'));
     await vi.waitFor(() => expect(assign).toHaveBeenCalledWith(origin + '/sign-in'));
-    expect(wipe.mock.invocationCallOrder[0]).toBeLessThan(assign.mock.invocationCallOrder[0]);
+    expect(wipe.mock.invocationCallOrder[0]).toBeLessThan(assign.mock.invocationCallOrder[0]!);
     expect(checking).not.toHaveBeenCalledWith(false);
   });
   it('does not alter private LAN or SSH browser-session behavior', async () => {
