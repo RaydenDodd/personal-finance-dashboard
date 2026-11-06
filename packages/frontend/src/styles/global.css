@@ -652,6 +652,14 @@ select:focus-visible,
     padding-bottom: clamp(0.25rem, var(--finance-nav-safe-area-bottom), 34px);
   }
 
+  :root[data-finance-standalone] .finance-app-shell {
+    /* A retained small viewport can leave a toolbar-height strip in an
+       installed window. The standalone frame must use its full viewport. */
+    bottom: auto;
+    height: 100vh;
+    height: 100lvh;
+  }
+
   :root[data-finance-keyboard] .finance-app-shell {
     bottom: auto;
     height: var(--app-visible-height, 100dvh);

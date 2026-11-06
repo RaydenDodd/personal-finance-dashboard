@@ -53,6 +53,11 @@
         "currentPayPeriod": "Current pay period"
       },
       "composition": {
+        "title": "Cash flow composition",
+        "viewLabel": "Composition view",
+        "flowDiagram": "Flow diagram",
+        "listView": "List",
+        "scrollHint": "Swipe across the diagram to follow the branches. Tap a flow for details.",
         "detail": "Detail",
         "levelsSummary": "Sources L{sources} · Expenses L{expenses}",
         "levelsHint": "Category nesting level per side: higher levels break flows into subcategories.",

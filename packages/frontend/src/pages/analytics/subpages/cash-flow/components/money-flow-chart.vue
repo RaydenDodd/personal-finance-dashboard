@@ -1,11 +1,12 @@
 <template>
-  <div ref="containerRef" class="relative w-full">
+  <div ref="containerRef" class="relative w-full" @pointercancel="tooltip.visible = false">
     <svg ref="svgRef" class="block w-full"></svg>
 
     <div
       v-show="tooltip.visible"
       ref="tooltipRef"
-      class="pointer-events-none absolute z-10"
+      class="pointer-events-none fixed z-50"
+      data-testid="money-flow-tooltip"
       :style="{ left: `${tooltip.x}px`, top: `${tooltip.y}px` }"
     >
       <ChartTooltip>
@@ -78,7 +79,7 @@ const tooltip = reactive({
   description: '',
 });
 
-const { updateTooltipPosition } = useChartTooltipPosition({ containerRef, tooltipRef, tooltip });
+const { updateTooltipPosition } = useChartTooltipPosition({ containerRef, tooltipRef, tooltip, strategy: 'fixed' });
 
 const NODE_WIDTH = 12;
 const HUB_WIDTH = 24;
@@ -170,16 +171,27 @@ const bindTooltip = <T extends d3.BaseType>({
   content: TooltipContent;
 }) =>
   selection
-    .on('mouseenter', (event: MouseEvent) => {
+    .on('pointerenter', (event: PointerEvent) => {
+      if (event.pointerType === 'touch') return;
       tooltip.title = content.title;
       tooltip.rows = content.rows;
       tooltip.description = content.description ?? '';
       tooltip.visible = true;
       updateTooltipPosition(event);
     })
-    .on('mousemove', (event: MouseEvent) => updateTooltipPosition(event))
-    .on('mouseleave', () => {
-      tooltip.visible = false;
+    .on('pointerdown', (event: PointerEvent) => {
+      if (event.pointerType !== 'touch') return;
+      tooltip.title = content.title;
+      tooltip.rows = content.rows;
+      tooltip.description = content.description ?? '';
+      tooltip.visible = true;
+      updateTooltipPosition(event);
+    })
+    .on('pointermove', (event: PointerEvent) => {
+      if (event.pointerType !== 'touch') updateTooltipPosition(event);
+    })
+    .on('pointerleave', (event: PointerEvent) => {
+      if (event.pointerType !== 'touch') tooltip.visible = false;
     });
 
 const renderChart = () => {

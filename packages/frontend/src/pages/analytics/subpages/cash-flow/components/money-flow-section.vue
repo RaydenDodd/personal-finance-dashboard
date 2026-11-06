@@ -4,6 +4,32 @@
     data-testid="cash-flow-composition"
     class="border-border bg-card space-y-7.5 rounded-lg border p-4"
   >
+    <div class="flex flex-wrap items-center justify-between gap-2">
+      <h2 class="text-sm font-semibold">{{ $t('analytics.cashFlow.composition.title') }}</h2>
+      <div
+        v-if="isCompact"
+        role="group"
+        :aria-label="$t('analytics.cashFlow.composition.viewLabel')"
+        class="flex gap-1"
+      >
+        <UiButton
+          size="sm"
+          :variant="compositionView === 'diagram' ? 'secondary' : 'ghost'"
+          :aria-pressed="compositionView === 'diagram'"
+          @click="compositionView = 'diagram'"
+        >
+          {{ $t('analytics.cashFlow.composition.flowDiagram') }}
+        </UiButton>
+        <UiButton
+          size="sm"
+          :variant="compositionView === 'list' ? 'secondary' : 'ghost'"
+          :aria-pressed="compositionView === 'list'"
+          @click="compositionView = 'list'"
+        >
+          {{ $t('analytics.cashFlow.composition.listView') }}
+        </UiButton>
+      </div>
+    </div>
     <div :class="cn('flex items-center gap-3', isCompact ? 'justify-between' : 'flex-wrap justify-between')">
       <PeriodSelector
         v-model="period"
@@ -134,8 +160,21 @@
         </div>
       </div>
 
-      <MoneyFlowList v-if="isCompact" :flow="flow" />
-      <MoneyFlowChart v-else :flow="flow" />
+      <MoneyFlowList v-if="isCompact && compositionView === 'list'" :flow="flow" />
+      <div v-else class="min-w-0 space-y-2">
+        <p v-if="isCompact" class="text-muted-foreground text-xs">
+          {{ $t('analytics.cashFlow.composition.scrollHint') }}
+        </p>
+        <div
+          class="max-w-full overflow-x-auto overscroll-x-contain"
+          role="region"
+          :aria-label="$t('analytics.cashFlow.composition.flowDiagram')"
+          tabindex="0"
+          data-testid="money-flow-scroll"
+        >
+          <MoneyFlowChart :flow="flow" :class="isCompact && 'min-w-[720px]'" data-testid="money-flow-diagram" />
+        </div>
+      </div>
     </template>
 
     <div v-else class="flex h-100 items-center justify-center">
@@ -191,6 +230,7 @@ const COMPACT_WIDTH = 560;
 const rootRef = ref<HTMLElement | null>(null);
 const { width: rootWidth } = useElementSize(rootRef);
 const isCompact = computed(() => rootWidth.value > 0 && rootWidth.value < COMPACT_WIDTH);
+const compositionView = ref<'diagram' | 'list'>('diagram');
 
 const sourceLevel = useLocalStorage('cash-flow-composition-source-level', 2);
 const expenseLevel = useLocalStorage('cash-flow-composition-expense-level', 1);
