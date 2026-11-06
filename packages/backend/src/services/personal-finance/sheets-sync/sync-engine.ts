@@ -1,6 +1,7 @@
 import type { FinanceCashFlow, FinanceSnapshot } from '../types';
 import type { SheetsTransport } from './google-client';
 import {
+  assertMappedRows,
   blankCell,
   cellAt,
   cellCents,
@@ -85,6 +86,7 @@ export async function synchronizeSheet(
   };
   const grid = await transport.read(config);
   if (grid.sheetName !== config.sheetName) throw Error('sheet_mapping_changed');
+  assertMappedRows(grid, config);
   const columns = dateColumns(grid);
   const originalDates = new Set(columns.keys());
   const operations: OutboxOperation[] = [];
@@ -260,13 +262,13 @@ export async function synchronizeSheet(
         const expected =
           (flow.accountId === mapping.accountId && ['withdrawal', 'transfer'].includes(flow.type) ? -1 : 1) *
           Math.round(flow.amount * 100);
-        if (amount !== expected && date)
+        if (amount !== expected || date !== flow.date)
           await conflict({
             key,
             accountId: mapping.accountId,
-            date,
+            date: date ?? flow.date,
             kind: 'principal',
-            reason: 'verified_contribution_changed',
+            reason: amount !== expected ? 'verified_contribution_changed' : 'verified_contribution_date_changed',
             sheetValue: amount / 100,
             dashboardValue: expected / 100,
             sheetFingerprint: hash,
@@ -415,8 +417,8 @@ export async function synchronizeSheet(
     }
     let column = 5;
     while (
-      column <= grid.columnCount &&
-      (!blankCell(cellAt(grid, mapping.principalRow!, column)) || occupied.has(cellKey(mapping.principalRow!, column)))
+      !blankCell(cellAt(grid, mapping.principalRow!, column)) ||
+      occupied.has(cellKey(mapping.principalRow!, column))
     )
       column++;
     occupied.add(cellKey(mapping.principalRow!, column));
@@ -442,6 +444,7 @@ export async function synchronizeSheet(
     operations.map(async (operation) => ({ operation, id: await repo.queue(operation) })),
   );
   const preflight = await transport.read(config);
+  assertMappedRows(preflight, config);
   const currentOriginIds = await repo.currentOriginIds();
   const safe: typeof queued = [];
   for (const item of queued) {

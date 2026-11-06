@@ -3,7 +3,7 @@ import { connection } from '@models/index';
 import { getBaseCurrency } from '@models/users-currencies.model';
 import { QueryTypes } from 'sequelize';
 
-import { FINANCE_AUTOMATION_CUTOFF, cents } from './calculations';
+import { FINANCE_AUTOMATION_CUTOFF, cents, principalFor } from './calculations';
 import { getFinanceAccounts, getFinanceCategories, getFinanceDashboard } from './index';
 
 export interface BankHistoryMapping {
@@ -200,10 +200,32 @@ export async function getBankAccountHistory(userId: number, nativeAccountId: str
       effective.set(point.date, { date: point.date, balance: point.balance, source: point.source });
   return {
     label: mapping.label,
-    grouped: mapping.nativeAccountIds.length > 1,
+    grouped: mapping.nativeAccountIds.length > 1 || mapping.sourceAccountIds.length > 1,
     nativeAccountIds: mapping.nativeAccountIds,
     sourceAccountIds: mapping.sourceAccountIds,
     liveFrom: context.liveFrom,
-    points: [...effective.values()].sort((a, b) => a.date.localeCompare(b.date)),
+    points: [...effective.values()]
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .map((point) => {
+        const activeIds = mapping.sourceAccountIds.filter((id) =>
+          dashboard.snapshots.some((snapshot) => snapshot.accountId === id && snapshot.date <= point.date),
+        );
+        const bases = activeIds.map((id) => principalFor(id, dashboard.cashFlows, point.date));
+        const complete = bases.length > 0 && bases.every((basis) => basis.principalComplete);
+        const principal = complete ? bases.reduce((sum, basis) => sum + cents(basis.principal!), 0) / 100 : null;
+        const knownPrincipal =
+          bases.length && bases.every((basis) => basis.knownPrincipal !== null)
+            ? bases.reduce((sum, basis) => sum + cents(basis.knownPrincipal!), 0) / 100
+            : null;
+        const gain = principal === null ? null : Math.round((point.balance - principal) * 100) / 100;
+        return {
+          ...point,
+          principal,
+          knownPrincipal,
+          principalComplete: complete,
+          gain,
+          gainPercent: gain !== null && principal !== null && principal > 0 ? (gain / principal) * 100 : null,
+        };
+      }),
   };
 }

@@ -190,6 +190,8 @@ router.post(
         toAccountId: id.nullable().default(null),
         description: z.string().max(2000).default(''),
         opening: z.boolean().default(false),
+        contributionKind: z.enum(['employee', 'employer', 'unspecified']).optional(),
+        principalValidThrough: date.nullable().optional(),
         idempotencyKey: z.string().max(200).optional(),
       }),
     }),

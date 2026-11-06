@@ -160,7 +160,7 @@ export function googleSheetsTransport(credentials: SheetsCredentials): SheetsTra
       };
       const properties = metadata.sheets?.find((sheet) => sheet.properties.sheetId === config.sheetId)?.properties;
       if (!properties) throw Error('sheet_not_found');
-      const count = Math.min(properties.gridProperties.columnCount, 702);
+      const count = properties.gridProperties.columnCount;
       let column = '';
       for (let value = count; value > 0; value = Math.floor((value - 1) / 26))
         column = String.fromCharCode(65 + ((value - 1) % 26)) + column;

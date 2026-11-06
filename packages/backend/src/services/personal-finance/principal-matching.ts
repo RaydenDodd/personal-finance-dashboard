@@ -1,9 +1,29 @@
 import { cents } from './calculations';
-import type { PrincipalImportRecord } from './principal-types';
+import type { PrincipalImportRecord, PrincipalTransferRule } from './principal-types';
 import type { FinanceCashFlow } from './types';
 
 export const PRINCIPAL_AUTOMATION_START = '2026-11-05';
 export const PRINCIPAL_POSTING_WINDOW_DAYS = 7;
+export const normalizePrincipalDescription = (value: string) => value.trim().toLowerCase();
+
+/** Old case variants may predate the confirmation guard. Never select an
+ * arbitrary destination when two enabled confirmations disagree. */
+export function selectPrincipalTransferRule(
+  rules: PrincipalTransferRule[],
+  sourceNativeAccountId: string,
+  description: string,
+  date: string,
+) {
+  const matches = rules.filter(
+    (rule) =>
+      rule.isEnabled &&
+      rule.sourceNativeAccountId === sourceNativeAccountId &&
+      rule.effectiveFrom <= date &&
+      normalizePrincipalDescription(rule.exactDescription) === normalizePrincipalDescription(description),
+  );
+  const conflicting = new Set(matches.map((rule) => rule.destinationAccountId)).size > 1;
+  return { rule: conflicting ? null : (matches.toSorted((a, b) => a.id.localeCompare(b.id))[0] ?? null), conflicting };
+}
 
 export function isRecordedDate(value: string): boolean {
   return (

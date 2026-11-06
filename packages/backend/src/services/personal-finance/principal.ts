@@ -14,9 +14,11 @@ import {
   isRecordedDate,
   isReturnOrAwardDescription,
   matchPrincipalEvidence,
+  normalizePrincipalDescription,
   PRINCIPAL_AUTOMATION_START,
   principalRecordFingerprintInput,
   sameReferencedPrincipalMovement,
+  selectPrincipalTransferRule,
 } from './principal-matching';
 import type {
   PrincipalImportRecord,
@@ -375,6 +377,7 @@ export async function correctPrincipalRecord(
     amount: number;
     description?: string;
     contributionKind?: 'employee' | 'employer' | 'unspecified';
+    principalValidThrough?: string | null;
   },
 ) {
   return lockUser(userId, async (transaction) => {
@@ -400,6 +403,8 @@ export async function correctPrincipalRecord(
       sourceKey: previous.sourceKey ?? previous.id,
       verified: true,
       evidence: {
+        ...previous.evidence,
+        ...(data.principalValidThrough !== undefined ? { principalValidThrough: data.principalValidThrough } : {}),
         manualCorrectionOf: previous.id,
         previousAmountCents: Number(previous.amountCents),
         previousOriginalNote: previous.evidence?.originalNote ?? '',
@@ -431,18 +436,33 @@ export async function savePrincipalTransferRule(userId: number, data: Omit<Princ
       fail('A contribution rule requires an explicit funding description, not a return or award');
     if (!isRecordedDate(data.effectiveFrom) || data.effectiveFrom < PRINCIPAL_AUTOMATION_START)
       fail('Automatic principal matching starts November 5, 2026; use the reconciliation import for older evidence');
-    const id = randomUUID();
-    await execute(
-      `INSERT INTO "PersonalFinancePrincipalTransferRules" (id,"userId","sourceNativeAccountId","destinationAccountId","exactDescription","effectiveFrom","isEnabled") VALUES (:id,:userId,:sourceNativeAccountId,:destinationAccountId,:exactDescription,:effectiveFrom,:isEnabled)
-      ON CONFLICT ("userId","sourceNativeAccountId","exactDescription") DO UPDATE SET "destinationAccountId"=EXCLUDED."destinationAccountId","effectiveFrom"=EXCLUDED."effectiveFrom","isEnabled"=EXCLUDED."isEnabled"`,
-      { ...data, exactDescription: data.exactDescription.trim(), id, userId },
+    const canonicalDescription = normalizePrincipalDescription(data.exactDescription);
+    const existing = await read<PrincipalTransferRule>(
+      'SELECT * FROM "PersonalFinancePrincipalTransferRules" WHERE "userId"=:userId AND "sourceNativeAccountId"=:sourceNativeAccountId AND LOWER(BTRIM("exactDescription"))=:canonicalDescription ORDER BY id',
+      { userId, sourceNativeAccountId: data.sourceNativeAccountId, canonicalDescription },
       transaction,
     );
+    if (existing.some((rule) => rule.destinationAccountId !== data.destinationAccountId))
+      fail('This funding description is already confirmed for another principal account, including case variants');
+    const id = existing[0]?.id ?? randomUUID();
+    if (existing.length) {
+      await execute(
+        'UPDATE "PersonalFinancePrincipalTransferRules" SET "effectiveFrom"=:effectiveFrom,"isEnabled"=:isEnabled WHERE "userId"=:userId AND id IN (:ids)',
+        { userId, ids: existing.map((rule) => rule.id), effectiveFrom: data.effectiveFrom, isEnabled: data.isEnabled },
+        transaction,
+      );
+    } else {
+      await execute(
+        'INSERT INTO "PersonalFinancePrincipalTransferRules" (id,"userId","sourceNativeAccountId","destinationAccountId","exactDescription","effectiveFrom","isEnabled") VALUES (:id,:userId,:sourceNativeAccountId,:destinationAccountId,:exactDescription,:effectiveFrom,:isEnabled)',
+        { ...data, exactDescription: data.exactDescription.trim(), id, userId },
+        transaction,
+      );
+    }
     await audit(userId, 'principal.transfer-rule-confirmed', id, data, transaction);
     return (
       await read<PrincipalTransferRule>(
-        'SELECT * FROM "PersonalFinancePrincipalTransferRules" WHERE "userId"=:userId AND "sourceNativeAccountId"=:sourceNativeAccountId AND "exactDescription"=:exactDescription',
-        { ...data, userId, exactDescription: data.exactDescription.trim() },
+        'SELECT * FROM "PersonalFinancePrincipalTransferRules" WHERE "userId"=:userId AND id=:id',
+        { userId, id },
         transaction,
       )
     )[0]!;
@@ -529,12 +549,25 @@ export async function reconcileFinanceTransfers(userId: number, transactionIds?:
       (transactionIds && !transactionIds.includes(tx.id) && (!opposite || !transactionIds.includes(opposite.id)))
     )
       continue;
-    const rule = rules.find(
-      (r) =>
-        r.sourceNativeAccountId === tx.accountId &&
-        r.exactDescription.toLocaleLowerCase() === (tx.note ?? '').trim().toLocaleLowerCase() &&
-        r.effectiveFrom <= effectiveDate,
-    );
+    const selectedRule = selectPrincipalTransferRule(rules, tx.accountId, tx.note ?? '', effectiveDate);
+    if (selectedRule.conflicting) {
+      await review(
+        userId,
+        `transaction:${tx.id}`,
+        'Conflicting case variants of the confirmed funding description need review',
+        {
+          transactionId: tx.id,
+          sourceNativeAccountId: tx.accountId,
+          exactDescription: tx.note ?? '',
+          amount: tx.amount.toNumber(),
+          date: effectiveDate,
+          currencyCode: tx.currencyCode,
+        },
+      );
+      pending++;
+      continue;
+    }
+    const rule = selectedRule.rule;
     if (opposite && !rule) {
       if (nativeCategories.find((account) => account.id === opposite.accountId)?.accountCategory === 'credit-card')
         continue;
@@ -594,6 +627,30 @@ export async function reconcileFinanceTransfers(userId: number, transactionIds?:
       continue;
     const sourceIds = [...(map.get(tx.accountId) ?? [])];
     const destinationIds = rule ? [rule.destinationAccountId] : [...(map.get(opposite!.accountId) ?? [])];
+    if (
+      !sourceIds.length &&
+      ['saving', 'investment', 'crypto'].includes(
+        nativeCategories.find((account) => account.id === tx.accountId)?.accountCategory ?? '',
+      )
+    ) {
+      await review(
+        userId,
+        `transaction:${tx.id}`,
+        'An owned savings or investment source needs a reporting-account mapping before principal can move',
+        {
+          transactionId: tx.id,
+          sourceNativeAccountId: tx.accountId,
+          exactDescription: tx.note ?? '',
+          amount: tx.amount.toNumber(),
+          date: effectiveDate,
+          currencyCode: tx.currencyCode,
+          sourceAccountIds: sourceIds,
+          destinationAccountIds: destinationIds,
+        },
+      );
+      pending++;
+      continue;
+    }
     if (sourceIds.length > 1 || destinationIds.length !== 1) {
       await review(
         userId,

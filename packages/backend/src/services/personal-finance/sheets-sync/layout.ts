@@ -18,6 +18,8 @@ export interface SheetMapping {
   accountId: string;
   balanceRow: number;
   principalRow?: number;
+  expectedBalanceLabel?: string;
+  expectedPrincipalLabel?: string;
 }
 export interface SheetSyncConfig {
   enabled: boolean;
@@ -26,6 +28,21 @@ export interface SheetSyncConfig {
   sheetId: number;
   mirrorSimplefin: boolean;
   mappings: SheetMapping[];
+}
+export function assertMappedRows(grid: SheetGrid, config: SheetSyncConfig): void {
+  const normalize = (text: string) => text.trim().replace(/\s+/g, ' ').toLowerCase();
+  const label = (row: number) => {
+    const cell = cellAt(grid, row, 1);
+    return normalize(String(cell.effectiveValue?.stringValue ?? cell.userEnteredValue?.stringValue ?? ''));
+  };
+  for (const mapping of config.mappings)
+    if (
+      (mapping.expectedBalanceLabel && label(mapping.balanceRow) !== normalize(mapping.expectedBalanceLabel)) ||
+      (mapping.principalRow &&
+        mapping.expectedPrincipalLabel &&
+        label(mapping.principalRow) !== normalize(mapping.expectedPrincipalLabel))
+    )
+      throw Error('sheet_mapping_changed');
 }
 export const fingerprint = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 export const cellKey = (row: number, column: number) => `${row}:${column}`;

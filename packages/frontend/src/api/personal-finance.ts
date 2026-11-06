@@ -63,6 +63,7 @@ export interface FinanceCashFlow {
   sourceKey?: string | null;
   transactionId?: string | null;
   contributionKind?: 'employee' | 'employer' | 'unspecified';
+  principalValidThrough?: string | null;
   verified?: boolean;
   supersedesId?: string | null;
   idempotencyKey?: string | null;
@@ -142,6 +143,7 @@ export const correctFinancePrincipal = (correction: {
   amount: number;
   description?: string;
   contributionKind?: 'employee' | 'employer' | 'unspecified';
+  principalValidThrough?: string | null;
 }) => api.post('/personal-finance/principal/corrections', correction);
 export interface PrincipalReview {
   id: string;

@@ -14,7 +14,15 @@ import {
   type SheetsCredentials,
   validateCredentials,
 } from './google-client';
-import { cellAt, cellCents, cellFingerprint, fingerprint, type SheetSyncConfig, writeCellRequest } from './layout';
+import {
+  assertMappedRows,
+  cellAt,
+  cellCents,
+  cellFingerprint,
+  fingerprint,
+  type SheetSyncConfig,
+  writeCellRequest,
+} from './layout';
 import { type CellState, type OutboxOperation, type SyncConflict, synchronizeSheet } from './sync-engine';
 
 type SyncRow = {
@@ -29,8 +37,8 @@ type SyncRow = {
 };
 const query = <T>(sql: string, replacements: Record<string, unknown> = {}, transaction?: Transaction): Promise<T[]> =>
   connection.sequelize.query(sql, { replacements, type: QueryTypes.SELECT, transaction, logging: false });
-const execute = (sql: string, replacements: Record<string, unknown> = {}) =>
-  connection.sequelize.query(sql, { replacements, logging: false });
+const execute = (sql: string, replacements: Record<string, unknown> = {}, transaction?: Transaction) =>
+  connection.sequelize.query(sql, { replacements, transaction, logging: false });
 function fail(message: string): never {
   throw new ValidationError({ message });
 }
@@ -188,16 +196,47 @@ async function saveState(userId: number, key: string, state: CellState) {
   );
 }
 async function conflict(userId: number, data: SyncConflict) {
-  await execute(
-    `INSERT INTO "PersonalFinanceSheetConflicts" (id,"userId",key,"accountId",date,kind,reason,"sheetValue","dashboardValue","sheetFingerprint","localFingerprint") VALUES (:id,:userId,:key,:accountId,:date,:kind,:reason,CAST(:sheetValue AS jsonb),CAST(:dashboardValue AS jsonb),:sheetFingerprint,:localFingerprint) ON CONFLICT ("userId",key) WHERE status='open' DO UPDATE SET reason=EXCLUDED.reason,"sheetValue"=EXCLUDED."sheetValue","dashboardValue"=EXCLUDED."dashboardValue","sheetFingerprint"=EXCLUDED."sheetFingerprint","localFingerprint"=EXCLUDED."localFingerprint"`,
-    {
-      ...data,
-      id: randomUUID(),
-      userId,
-      sheetValue: JSON.stringify(data.sheetValue),
-      dashboardValue: JSON.stringify(data.dashboardValue),
-    },
-  );
+  return connection.sequelize.transaction(async (transaction: Transaction) => {
+    const previous = (
+      await query<SyncConflict & { id: string }>(
+        'SELECT id,key,"accountId",date::text,kind,reason,"sheetValue","dashboardValue","sheetFingerprint","localFingerprint" FROM "PersonalFinanceSheetConflicts" WHERE "userId"=:userId AND key=:key AND status=\'open\' FOR UPDATE',
+        { userId, key: data.key },
+        transaction,
+      )
+    )[0];
+    if (previous) {
+      const { id: previousId, ...before } = previous;
+      const content = (value: SyncConflict) =>
+        fingerprint([
+          value.key,
+          value.accountId,
+          value.date,
+          value.kind,
+          value.reason,
+          value.sheetValue,
+          value.dashboardValue,
+          value.sheetFingerprint,
+          value.localFingerprint,
+        ]);
+      if (content(before) !== content(data))
+        await execute(
+          'INSERT INTO "PersonalFinanceAudit" (id,"userId",action,"entityId",details) VALUES (:id,:userId,\'sheets.conflict.revised\',:entityId,CAST(:details AS jsonb))',
+          { id: randomUUID(), userId, entityId: previousId, details: JSON.stringify({ before, after: data }) },
+          transaction,
+        );
+    }
+    await execute(
+      `INSERT INTO "PersonalFinanceSheetConflicts" (id,"userId",key,"accountId",date,kind,reason,"sheetValue","dashboardValue","sheetFingerprint","localFingerprint") VALUES (:id,:userId,:key,:accountId,:date,:kind,:reason,CAST(:sheetValue AS jsonb),CAST(:dashboardValue AS jsonb),:sheetFingerprint,:localFingerprint) ON CONFLICT ("userId",key) WHERE status='open' DO UPDATE SET date=EXCLUDED.date,reason=EXCLUDED.reason,"sheetValue"=EXCLUDED."sheetValue","dashboardValue"=EXCLUDED."dashboardValue","sheetFingerprint"=EXCLUDED."sheetFingerprint","localFingerprint"=EXCLUDED."localFingerprint"`,
+      {
+        ...data,
+        id: randomUUID(),
+        userId,
+        sheetValue: JSON.stringify(data.sheetValue),
+        dashboardValue: JSON.stringify(data.dashboardValue),
+      },
+      transaction,
+    );
+  });
 }
 export async function runSheetSync(userId: number) {
   return connection.sequelize.transaction(async (transaction: Transaction) => {
@@ -221,7 +260,11 @@ export async function runSheetSync(userId: number) {
         );
         return { skipped: true, reason: 'credentials_missing' };
       }
-      const dashboard = await getFinanceDashboard(userId, { granularity: 'daily' });
+      const dashboardQuery = {
+        granularity: 'daily' as const,
+        ...(row.config.mirrorSimplefin ? {} : { mode: 'personal' as const }),
+      };
+      const dashboard = await getFinanceDashboard(userId, dashboardQuery);
       const states = await query<{ key: string; state: CellState }>(
         'SELECT key,state FROM "PersonalFinanceSheetCells" WHERE "userId"=:userId',
         { userId },
@@ -235,7 +278,7 @@ export async function runSheetSync(userId: number) {
         saveState: (key, state) => saveState(userId, key, state),
         conflict: (data) => conflict(userId, data),
         currentOriginIds: async () => {
-          const current = await getFinanceDashboard(userId, { granularity: 'daily' });
+          const current = await getFinanceDashboard(userId, dashboardQuery);
           return new Set([...current.snapshots.map((s) => s.id), ...current.cashFlows.map((f) => f.id)]);
         },
         queue: async (operation: OutboxOperation) => {
@@ -311,11 +354,15 @@ export async function resolveSheetConflict(userId: number, id: string, resolutio
   if (!mapping) fail('Account mapping changed.');
   const transport = googleSheetsTransport(auth);
   const grid = await transport.read(row.config);
+  assertMappedRows(grid, row.config);
   const { dateColumns } = await import('./layout');
   const column = dateColumns(grid).get(String(pending.date));
   if (!column) fail('Recorded date column is missing.');
   const remote = cellAt(grid, mapping.balanceRow, column);
-  const dashboard = await getFinanceDashboard(userId, { granularity: 'daily' });
+  const dashboard = await getFinanceDashboard(userId, {
+    granularity: 'daily',
+    ...(row.config.mirrorSimplefin ? {} : { mode: 'personal' as const }),
+  });
   const local = dashboard.snapshots.find((s) => s.accountId === pending.accountId && s.date === String(pending.date));
   if (cellFingerprint(remote) !== pending.sheetFingerprint || (local?.id ?? 'none') !== pending.localFingerprint)
     fail('This conflict changed; run synchronization and review the current values.');

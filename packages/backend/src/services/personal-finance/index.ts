@@ -264,7 +264,7 @@ export async function addFinanceSnapshot(
 }
 export async function addFinanceCashFlow(
   userId: number,
-  data: Omit<FinanceCashFlow, 'id' | 'createdAt'> & { idempotencyKey?: string },
+  data: Omit<FinanceCashFlow, 'id' | 'createdAt'> & { idempotencyKey?: string; principalValidThrough?: string | null },
 ) {
   return locked(userId, async (transaction) => {
     if (data.idempotencyKey) {
@@ -307,10 +307,20 @@ export async function addFinanceCashFlow(
       fail('An opening basis already exists for this account');
     const id = randomUUID();
     await execute(
-      `INSERT INTO "PersonalFinanceCashFlows" (id,"userId","accountId",date,"amountCents",type,"toAccountId",description,opening,"idempotencyKey")
-      VALUES (:id,:userId,:accountId,:date,:amountCents,:type,:toAccountId,:description,:opening,:idempotencyKey)
+      `INSERT INTO "PersonalFinanceCashFlows" (id,"userId","accountId",date,"amountCents",type,"toAccountId",description,opening,"idempotencyKey","contributionKind",evidence)
+      VALUES (:id,:userId,:accountId,:date,:amountCents,:type,:toAccountId,:description,:opening,:idempotencyKey,:contributionKind,CAST(:evidence AS jsonb))
       ON CONFLICT ("userId","idempotencyKey") DO NOTHING`,
-      { ...data, id, userId, amountCents: cents(data.amount), idempotencyKey: data.idempotencyKey ?? null },
+      {
+        ...data,
+        id,
+        userId,
+        amountCents: cents(data.amount),
+        idempotencyKey: data.idempotencyKey ?? null,
+        contributionKind: data.contributionKind ?? 'unspecified',
+        evidence: JSON.stringify(
+          data.opening && data.principalValidThrough ? { principalValidThrough: data.principalValidThrough } : {},
+        ),
+      },
       transaction,
     );
     await audit(
@@ -476,7 +486,10 @@ export async function getFinanceDashboard(
         gain !== null && principal.principal !== null && principal.principal > 0
           ? (gain / principal.principal) * 100
           : null,
-      moneyWeightedReturnPercent: latest ? moneyWeightedReturn(a.id, cashFlows, latest.balance, latest.date) : null,
+      moneyWeightedReturnPercent:
+        latest && principal.principalComplete
+          ? moneyWeightedReturn(a.id, cashFlows, latest.balance, latest.date)
+          : null,
       returnMethod:
         'Contribution-based gain is not annualized. XIRR requires an explicitly complete inception ledger and at least one year.',
     };

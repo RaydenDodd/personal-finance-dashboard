@@ -198,6 +198,105 @@ describe('automatic Google Sheets reconciliation', () => {
     });
     expect(f.flows).toHaveLength(1);
   });
+  it('extends a full principal row for two contributions without assigning both to the same new cell', async () => {
+    const f = fixture();
+    for (let column = 5; column <= f.grid.columnCount; column++)
+      f.grid.cells.set(cellKey(51, column), { userEnteredValue: { numberValue: column } });
+    const firstNewColumn = f.grid.columnCount + 1;
+    for (const [index, amount] of [125, 225].entries())
+      f.flows.push({
+        id: index === 0 ? '11111111-1111-4111-8111-111111111111' : '22222222-2222-4222-8222-222222222222',
+        accountId: 'a',
+        date: index === 0 ? '2026-11-05' : '2026-11-06',
+        amount,
+        type: 'contribution',
+        toAccountId: null,
+        opening: false,
+        description: 'Verified funding',
+        createdAt: '',
+        source: 'bank-transfer',
+        verified: true,
+      });
+    expect(await synchronizeSheet(config, f.transport, f.repository)).toMatchObject({
+      writtenContributions: 2,
+      conflicts: 0,
+    });
+    expect(cellAt(f.grid, 51, firstNewColumn).userEnteredValue?.numberValue).toBe(125);
+    expect(cellAt(f.grid, 51, firstNewColumn + 1).userEnteredValue?.numberValue).toBe(225);
+    expect(cellAt(f.grid, 51, firstNewColumn).note).toContain('Date: 2026-11-05');
+    expect(cellAt(f.grid, 51, firstNewColumn + 1).note).toContain('Date: 2026-11-06');
+    expect(f.grid.columnCount).toBe(firstNewColumn + 1);
+    expect((await synchronizeSheet(config, f.transport, f.repository)).writtenContributions).toBe(0);
+  });
+  it.each([4, 51])(
+    'stops before any writes or imports when an expected account label changed at row %i',
+    async (changedRow) => {
+      const f = fixture({
+        '4:1': { userEnteredValue: { stringValue: 'Savings' } },
+        '51:1': { userEnteredValue: { stringValue: 'Investment' } },
+        '4:2': { userEnteredValue: { numberValue: 100 } },
+      });
+      f.grid.cells.set(cellKey(changedRow, 1), { userEnteredValue: { stringValue: 'Different account' } });
+      const mapped: SheetSyncConfig = {
+        ...config,
+        mappings: [
+          {
+            accountId: 'a',
+            balanceRow: 4,
+            principalRow: 51,
+            expectedBalanceLabel: 'Savings',
+            expectedPrincipalLabel: 'Investment',
+          },
+        ],
+      };
+      await expect(synchronizeSheet(mapped, f.transport, f.repository)).rejects.toThrow('sheet_mapping_changed');
+      expect(f.writes).toHaveLength(0);
+      expect(f.outbox).toHaveLength(0);
+      expect(f.snapshots).toHaveLength(0);
+      expect(f.flows).toHaveLength(0);
+    },
+  );
+  it('re-checks account row labels after preparation so a reordered row cannot receive a pending write', async () => {
+    const f = fixture({ '4:1': { userEnteredValue: { stringValue: 'Savings' } } });
+    const mapped: SheetSyncConfig = {
+      ...config,
+      mappings: [{ accountId: 'a', balanceRow: 4, expectedBalanceLabel: 'Savings' }],
+    };
+    await f.manual('2026-11-05', 120);
+    f.onPreflight(() => f.grid.cells.set('4:1', { userEnteredValue: { stringValue: 'Different account' } }));
+    await expect(synchronizeSheet(mapped, f.transport, f.repository)).rejects.toThrow('sheet_mapping_changed');
+    expect(f.writes).toHaveLength(0);
+    expect(f.outbox).toHaveLength(1);
+    expect(f.snapshots[0]?.balance).toBe(120);
+  });
+  it('preserves the ledger date and surfaces a changed contribution date note instead of silently accepting it', async () => {
+    const id = '11111111-1111-4111-8111-111111111111';
+    const f = fixture({
+      '51:5': { userEnteredValue: { numberValue: 200 }, note: `Date: 2026-11-06\nMoneyMatter cash-flow: ${id}` },
+    });
+    f.flows.push({
+      id,
+      accountId: 'a',
+      date: '2026-11-05',
+      amount: 200,
+      type: 'contribution',
+      toAccountId: null,
+      opening: false,
+      description: 'Verified funding',
+      createdAt: '',
+      source: 'bank-transfer',
+      verified: true,
+    });
+    expect(await synchronizeSheet(config, f.transport, f.repository)).toMatchObject({
+      conflicts: 1,
+      writtenContributions: 0,
+      importedContributions: 0,
+    });
+    expect(f.conflicts[0]).toMatchObject({ reason: 'verified_contribution_date_changed', date: '2026-11-06' });
+    expect(f.flows).toHaveLength(1);
+    expect(f.flows[0]?.date).toBe('2026-11-05');
+    expect(f.writes).toHaveLength(0);
+  });
   it('keeps yearless or ambiguous old notes unresolved while accepting the explicit contribution date over audit timestamps', () => {
     expect(contributionDate('Dec 5th')).toBeNull();
     expect(contributionDate('2026-06-11\nReconciled 2026-11-05; source file 2026-11-05.csv')).toBe('2026-06-11');

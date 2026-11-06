@@ -44,6 +44,8 @@ router.put(
                   'Choose an existing principal account row',
                 )
                 .optional(),
+              expectedBalanceLabel: z.string().min(1).max(200).optional(),
+              expectedPrincipalLabel: z.string().min(1).max(200).optional(),
             }),
           )
           .min(1)

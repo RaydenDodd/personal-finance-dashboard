@@ -5,6 +5,7 @@ import {
   isRecordedDate,
   isReturnOrAwardDescription,
   matchPrincipalEvidence,
+  selectPrincipalTransferRule,
 } from './principal-matching';
 import type { PrincipalImportRecord } from './principal-types';
 import type { FinanceCashFlow } from './types';
@@ -34,6 +35,30 @@ const flow = (extra: Partial<FinanceCashFlow> = {}): FinanceCashFlow => ({
   ...extra,
 });
 describe('principal evidence reconciliation', () => {
+  it('uses the same funding destination across description case variants and refuses conflicting confirmations', () => {
+    const rule = {
+      id: 'a',
+      sourceNativeAccountId: 'checking',
+      destinationAccountId: 'investment',
+      exactDescription: 'M1',
+      effectiveFrom: '2026-11-05',
+      isEnabled: true,
+    };
+    expect(selectPrincipalTransferRule([rule], 'checking', '  m1 ', '2026-11-06').rule?.id).toBe('a');
+    expect(
+      selectPrincipalTransferRule([rule, { ...rule, id: 'b', exactDescription: 'm1' }], 'checking', 'M1', '2026-11-06')
+        .conflicting,
+    ).toBe(false);
+    expect(
+      selectPrincipalTransferRule(
+        [rule, { ...rule, id: 'b', exactDescription: 'm1', destinationAccountId: 'retirement' }],
+        'checking',
+        'M1',
+        '2026-11-06',
+      ),
+    ).toEqual({ rule: null, conflicting: true });
+    expect(selectPrincipalTransferRule([rule], 'checking', 'M1 subscription fee', '2026-11-06').rule).toBeNull();
+  });
   it('matches initiation and receipt dates without duplicating a verified bank contribution', () => {
     expect(matchPrincipalEvidence(record(), [flow()]).match?.id).toBe('bank-flow');
     expect(matchPrincipalEvidence(record(), [flow({ date: '2026-11-16' })]).match).toBeNull();

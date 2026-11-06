@@ -76,6 +76,7 @@ router.post(
         amount,
         description: z.string().max(10000).optional(),
         contributionKind: kind.optional(),
+        principalValidThrough: date.nullable().optional(),
       }),
     }),
     async ({ user, body }) => ({ data: await correctPrincipalRecord(user.id, body) }),

@@ -90,6 +90,7 @@ const flowForm = reactive({
   description: '',
   opening: false,
   contributionKind: 'unspecified' as 'employee' | 'employer' | 'unspecified',
+  principalValidThrough: '',
   idempotencyKey: newFlowKey(),
 });
 const categoryDraft = ref<FinanceCategory[]>([]);
@@ -468,6 +469,7 @@ async function submitCashFlow() {
             amount: Number(flowForm.amount),
             description: flowForm.description,
             contributionKind: flowForm.contributionKind,
+            ...(flowForm.opening ? { principalValidThrough: flowForm.principalValidThrough || null } : {}),
           })
         : saveFinanceCashFlow({
             ...flowForm,
@@ -497,6 +499,8 @@ function recordCashFlow(flow?: FinanceCashFlow) {
     description: flow?.description ?? '',
     opening: flow?.opening ?? false,
     contributionKind: flow?.contributionKind ?? 'unspecified',
+    principalValidThrough:
+      typeof flow?.evidence?.principalValidThrough === 'string' ? flow.evidence.principalValidThrough : '',
     idempotencyKey: newFlowKey(),
   });
   activePanel.value = 'cashflow';
@@ -950,6 +954,18 @@ const inputClass =
               <option value="employer">Employer contribution / match</option>
             </select>
           </label>
+          <label v-if="flowForm.opening" class="grid gap-1 text-sm"
+            >Principal verified through (optional)<input
+              v-model="flowForm.principalValidThrough"
+              type="date"
+              :max="today()"
+              :class="inputClass"
+              aria-label="Principal verified through"
+            /><span class="text-muted-foreground text-xs"
+              >Use the latest date whose complete contribution basis you have verified. Later gains remain unavailable
+              until verified.</span
+            ></label
+          >
           <label
             v-if="['adjustment', 'contribution'].includes(flowForm.type)"
             class="flex items-start gap-2 text-sm sm:col-span-2 lg:col-span-3"

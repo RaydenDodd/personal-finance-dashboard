@@ -108,7 +108,10 @@ export function buildHistory(
 
 export function principalFor(accountId: string, flows: FinanceCashFlow[], valuationDate: string) {
   const relevant = flows
-    .filter((f) => f.date <= valuationDate && (f.accountId === accountId || f.toAccountId === accountId))
+    .filter(
+      (f) =>
+        f.verified !== false && f.date <= valuationDate && (f.accountId === accountId || f.toAccountId === accountId),
+    )
     .sort((a, b) => a.date.localeCompare(b.date) || a.createdAt.localeCompare(b.createdAt));
   const opening = relevant.find((f) => f.accountId === accountId && f.opening);
   let principalCents = 0,
@@ -116,7 +119,12 @@ export function principalFor(accountId: string, flows: FinanceCashFlow[], valuat
     withdrawalsCents = 0,
     interestCents = 0,
     dividendsCents = 0;
-  const basisFlows = opening ? relevant.slice(relevant.indexOf(opening)) : relevant;
+  const basisFlows =
+    opening?.evidence?.checkpoint === true
+      ? [opening, ...relevant.filter((flow) => flow.date > opening.date)]
+      : opening
+        ? relevant.slice(relevant.indexOf(opening))
+        : relevant;
   for (const f of basisFlows) {
     const amount = cents(f.amount);
     if (f.type === 'transfer') principalCents += f.accountId === accountId ? -amount : amount;
@@ -144,10 +152,13 @@ export function principalFor(accountId: string, flows: FinanceCashFlow[], valuat
           (f) =>
             f.type === 'contribution' &&
             f.accountId === accountId &&
-            f.contributionKind === kind &&
+            (f.contributionKind === kind || f.evidence?.verifiedComponents === true) &&
             f.verified !== false,
         )
-        .reduce((sum, f) => sum + cents(f.amount), 0),
+        .reduce(
+          (sum, f) => sum + cents(f.contributionKind === kind ? f.amount : Number(f.evidence?.[kind + 'Amount'] ?? 0)),
+          0,
+        ),
     );
   return {
     principal: complete ? money(principalCents) : null,
@@ -173,10 +184,15 @@ export function moneyWeightedReturn(
   terminalDate: string,
 ): number | null {
   const own = flows
-    .filter((f) => f.date <= terminalDate && (f.accountId === accountId || f.toAccountId === accountId))
+    .filter(
+      (f) =>
+        f.verified !== false && f.date <= terminalDate && (f.accountId === accountId || f.toAccountId === accountId),
+    )
     .sort((a, b) => a.date.localeCompare(b.date));
   if (
     !own[0]?.opening ||
+    (typeof own[0].evidence?.principalValidThrough === 'string' &&
+      terminalDate > own[0].evidence.principalValidThrough) ||
     own[0].type !== 'contribution' ||
     own[0].accountId !== accountId ||
     own.some((f) => f.type === 'adjustment')

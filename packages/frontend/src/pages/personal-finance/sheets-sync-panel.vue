@@ -38,6 +38,13 @@ const sourceError = computed(() => {
     (
       {
         permission_denied: 'Google access was denied. Check that the connected account can edit this Sheet.',
+        sheet_permission_denied: 'Google access was denied. Check that the connected account can edit this Sheet.',
+        google_authorization_failed:
+          'Google access has expired or is unavailable. Connect again to resume synchronization.',
+        sheet_mapping_changed:
+          'Sheet account labels or layout changed. Review the mappings before synchronization resumes.',
+        duplicate_date_columns:
+          'The Sheet contains duplicate date columns. Resolve them before synchronization resumes.',
         invalid_grant: 'Google access has expired. Connect again to resume synchronization.',
         sheet_structure_changed: 'The Sheet layout has changed. Review its account mappings before syncing.',
       } as Record<string, string>

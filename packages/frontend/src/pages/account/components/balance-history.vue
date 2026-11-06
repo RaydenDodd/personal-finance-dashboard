@@ -11,7 +11,15 @@ interface History {
   label: string;
   grouped: boolean;
   sourceAccountIds?: string[];
-  points: Array<{ date: string; balance: number; source: string }>;
+  points: Array<{
+    date: string;
+    balance: number;
+    source: string;
+    principal?: number | null;
+    knownPrincipal?: number | null;
+    gain?: number | null;
+    gainPercent?: number | null;
+  }>;
 }
 const month = ref('all');
 const { data, isFetching } = useQuery({
@@ -26,6 +34,8 @@ const points = computed(() =>
   (data.value?.points ?? []).filter((p) => month.value === 'all' || p.date.startsWith(month.value)),
 );
 const money = (value: number) => new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' }).format(value);
+const summary = computed(() => points.value.at(-1));
+const principalAvailable = computed(() => points.value.some((point) => typeof point.principal === 'number'));
 const correctionLink = (date?: string) => ({
   name: ROUTES_NAMES.personalFinance,
   query: {
@@ -57,9 +67,33 @@ const correctionLink = (date?: string) => ({
     <Button as-child variant="outline" size="sm" class="w-fit"
       ><RouterLink :to="correctionLink()">Record or correct a personal balance</RouterLink></Button
     >
+    <div
+      v-if="summary && (typeof summary.principal === 'number' || typeof summary.knownPrincipal === 'number')"
+      class="grid gap-3 rounded-md border p-3 text-sm sm:grid-cols-2"
+    >
+      <div>
+        <p class="text-muted-foreground text-xs">Recorded principal · {{ summary.date }}</p>
+        <p class="mt-1 font-medium">{{ money(summary.principal ?? summary.knownPrincipal!) }}</p>
+        <p v-if="summary.principal === null" class="text-muted-foreground mt-1 text-xs">
+          Later contributions still need verification.
+        </p>
+      </div>
+      <div>
+        <p class="text-muted-foreground text-xs">Contribution-based gain / loss</p>
+        <p class="mt-1 font-medium">{{ typeof summary.gain === 'number' ? money(summary.gain) : 'Unavailable' }}</p>
+        <p v-if="typeof summary.gainPercent === 'number'" class="text-muted-foreground mt-1 text-xs">
+          {{ summary.gainPercent.toFixed(2) }}%
+        </p>
+      </div>
+    </div>
     <FinanceChart
-      :rows="points.map((p) => ({ label: p.date, values: { balance: p.balance } }))"
-      :series="[{ id: 'balance', name: data.label, color: 'var(--primary)' }]"
+      :rows="points.map((p) => ({ label: p.date, values: { balance: p.balance, principal: p.principal ?? null } }))"
+      :series="[
+        { id: 'balance', name: data.label, color: 'var(--primary)' },
+        ...(principalAvailable
+          ? [{ id: 'principal', name: 'Recorded principal', color: 'var(--app-savings-color)' }]
+          : []),
+      ]"
       currency="USD"
     />
     <div class="max-h-80 overflow-auto rounded-md border">

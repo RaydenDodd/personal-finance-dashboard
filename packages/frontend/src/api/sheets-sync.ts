@@ -6,7 +6,13 @@ export interface SheetsSyncConfig {
   sheetName: string;
   sheetId: number;
   mirrorSimplefin: boolean;
-  mappings: Array<{ accountId: string; balanceRow: number; principalRow?: number }>;
+  mappings: Array<{
+    accountId: string;
+    balanceRow: number;
+    principalRow?: number;
+    expectedBalanceLabel?: string;
+    expectedPrincipalLabel?: string;
+  }>;
 }
 export interface SheetsSyncConflict {
   id: string;

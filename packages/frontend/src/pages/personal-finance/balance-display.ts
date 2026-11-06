@@ -27,14 +27,22 @@ export function accountManagementLabel(account: Pick<FinanceAccount, 'preferredS
 /** Dated ledger only: returns and internal purchases do not create contributed capital. */
 export function recordedPrincipal(accountId: string, flows: FinanceCashFlow[], date: string): number | null {
   const dated = flows
-    .filter((flow) => flow.date <= date && (flow.accountId === accountId || flow.toAccountId === accountId))
+    .filter(
+      (flow) =>
+        flow.verified !== false &&
+        flow.date <= date &&
+        (flow.accountId === accountId || flow.toAccountId === accountId),
+    )
     .sort((a, b) => a.date.localeCompare(b.date) || (a.createdAt ?? '').localeCompare(b.createdAt ?? ''));
   const opening = dated.findIndex((flow) => flow.accountId === accountId && flow.opening);
   if (opening < 0) return null;
   const validThrough = dated[opening]?.evidence?.principalValidThrough;
   if (typeof validThrough === 'string' && date > validThrough) return null;
   return (
-    dated.slice(opening).reduce((total, flow) => {
+    (dated[opening]?.evidence?.checkpoint === true
+      ? [dated[opening]!, ...dated.filter((flow) => flow.date > dated[opening]!.date)]
+      : dated.slice(opening)
+    ).reduce((total, flow) => {
       if (flow.type === 'interest' || flow.type === 'dividend') return total;
       const amount = Math.round(flow.amount * 100);
       if (flow.type === 'transfer') return total + (flow.toAccountId === accountId ? amount : -amount);
