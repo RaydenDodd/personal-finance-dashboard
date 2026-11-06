@@ -1,5 +1,4 @@
 import { logger } from '@js/utils/logger';
-import { personalFinanceMonthlyJob } from './crons/personal-finance-monthly';
 import { shutdownPostHog } from '@js/utils/posthog';
 import { accountSyncWorker } from '@services/bank-data-providers/sync/account-sync-queue';
 
@@ -13,6 +12,9 @@ import { demoCleanupCron } from './crons/demo-cleanup';
 import { demoTemplateRefreshCron } from './crons/demo-template-refresh';
 import { loadCurrencyRatesJob } from './crons/exchange-rates';
 import { goalsReachedCheckCron } from './crons/goals-reached-check';
+import { personalFinanceMonthlyJob } from './crons/personal-finance-monthly';
+import { personalFinancePrincipalJob } from './crons/personal-finance-principal';
+import { personalFinanceSheetsCron } from './crons/personal-finance-sheets';
 import { purgeDeletedPortfoliosCron } from './crons/purge-deleted-portfolios';
 import { securitiesDailySyncCron } from './crons/securities-daily-sync';
 import { shareInvitationsExpireCron } from './crons/share-invitations-expire';
@@ -51,6 +53,7 @@ const prodOnlyCrons = [
 
 export function initializeBackgroundJobs() {
   if (process.env.NODE_ENV !== 'test') personalFinanceMonthlyJob.start();
+  if (process.env.NODE_ENV !== 'test') personalFinancePrincipalJob.start();
   const isOfflineMode = process.env.OFFLINE_MODE === 'true';
   const isTestMode = process.env.NODE_ENV === 'test';
 
@@ -63,6 +66,7 @@ export function initializeBackgroundJobs() {
   initializeHistoricalRates();
 
   loadCurrencyRatesJob.start();
+  personalFinanceSheetsCron.startCron();
 
   for (const cron of allEnvCrons) cron.startCron();
 
@@ -73,6 +77,8 @@ export function initializeBackgroundJobs() {
 
 export async function shutdownBackgroundJobs() {
   personalFinanceMonthlyJob.stop();
+  personalFinancePrincipalJob.stop();
+  personalFinanceSheetsCron.stopCron();
   for (const cron of [...allEnvCrons, ...prodOnlyCrons]) cron.stopCron();
   loadCurrencyRatesJob.stop();
   await accountSyncWorker.close();

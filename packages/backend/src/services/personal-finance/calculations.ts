@@ -8,19 +8,31 @@ export const cents = (value: number): number => {
   return result;
 };
 export const money = (value: number): number => value / 100;
-export const sourceRank = (s: Pick<FinanceSnapshot, 'source' | 'verified'>): number =>
-  (s.verified ? 100 : 0) + (s.source === 'manual' ? 40 : ['google-sheets', 'csv'].includes(s.source) ? 30 : 20);
+export const FINANCE_AUTOMATION_CUTOFF = '2026-11-05';
+export const sourceRank = (
+  s: Pick<FinanceSnapshot, 'source' | 'verified'> & Partial<Pick<FinanceSnapshot, 'date' | 'isManualCorrection'>>,
+  account?: Pick<FinanceAccount, 'preferredSource'>,
+): number => {
+  const provider = ['simplefin', 'plaid'].includes(s.source);
+  if (provider && s.date && s.date < FINANCE_AUTOMATION_CUTOFF) return -1000;
+  const automatic = provider && account?.preferredSource !== 'manual';
+  return (
+    (s.verified ? 100 : 0) + (s.source === 'manual' || s.isManualCorrection ? 80 : automatic ? 60 : provider ? 30 : 50)
+  );
+};
 
 /** Highest-quality valuation wins. A correction appends a revision, preserving its predecessor. */
-export function preferredSnapshots(snapshots: FinanceSnapshot[]): FinanceSnapshot[] {
+export function preferredSnapshots(snapshots: FinanceSnapshot[], accounts: FinanceAccount[] = []): FinanceSnapshot[] {
   const chosen = new Map<string, FinanceSnapshot>();
   for (const s of snapshots) {
+    if (['simplefin', 'plaid'].includes(s.source) && s.date < FINANCE_AUTOMATION_CUTOFF) continue;
+    const account = accounts.find((a) => a.id === s.accountId);
     const key = `${s.accountId}:${s.date}`;
     const prior = chosen.get(key);
     if (
       !prior ||
-      sourceRank(s) > sourceRank(prior) ||
-      (sourceRank(s) === sourceRank(prior) &&
+      sourceRank(s, account) > sourceRank(prior, account) ||
+      (sourceRank(s, account) === sourceRank(prior, account) &&
         (s.revision !== undefined && prior.revision !== undefined
           ? s.revision > prior.revision
           : `${s.createdAt}:${s.id}` > `${prior.createdAt}:${prior.id}`))
@@ -41,7 +53,7 @@ export function buildHistory(
   const included = accounts.filter((a) => a.included);
   const accountMap = new Map(included.map((a) => [a.id, a]));
   const buckets = new Map<string, FinanceSnapshot[]>();
-  for (const s of preferredSnapshots(snapshots)) {
+  for (const s of preferredSnapshots(snapshots, accounts)) {
     if (!accountMap.has(s.accountId)) continue;
     const key = granularity === 'monthly' ? s.date.slice(0, 7) : s.date;
     buckets.set(key, [...(buckets.get(key) ?? []), s]);
@@ -122,9 +134,29 @@ export function principalFor(accountId: string, flows: FinanceCashFlow[], valuat
       if (f.type === 'dividend') dividendsCents += amount;
     }
   }
+  const coverage = opening?.evidence?.principalValidThrough;
+  const principalValidThrough = typeof coverage === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(coverage) ? coverage : null;
+  const complete = Boolean(opening) && (!principalValidThrough || valuationDate <= principalValidThrough);
+  const kindTotal = (kind: 'employee' | 'employer') =>
+    money(
+      relevant
+        .filter(
+          (f) =>
+            f.type === 'contribution' &&
+            f.accountId === accountId &&
+            f.contributionKind === kind &&
+            f.verified !== false,
+        )
+        .reduce((sum, f) => sum + cents(f.amount), 0),
+    );
   return {
-    principal: opening ? money(principalCents) : null,
-    principalComplete: Boolean(opening),
+    principal: complete ? money(principalCents) : null,
+    principalComplete: complete,
+    knownPrincipal: opening ? money(principalCents) : null,
+    basisDate: opening?.date ?? null,
+    principalValidThrough,
+    employeeContributions: kindTotal('employee'),
+    employerContributions: kindTotal('employer'),
     contributions: money(contributionsCents),
     withdrawals: money(withdrawalsCents),
     interest: money(interestCents),

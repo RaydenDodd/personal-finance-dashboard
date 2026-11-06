@@ -25,6 +25,7 @@ export interface FinanceAccount {
   createdAt: string;
 }
 export interface FinanceSnapshot {
+  isManualCorrection?: boolean;
   revision?: number;
   id: string;
   accountId: string;
@@ -51,6 +52,15 @@ export interface FinanceCashFlow {
   description: string;
   opening: boolean;
   createdAt: string;
+  source?: 'manual' | 'google-sheets' | 'bank-transfer' | 'csv';
+  sourceId?: string | null;
+  sourceKey?: string | null;
+  transactionId?: string | null;
+  contributionKind?: 'employee' | 'employer' | 'unspecified';
+  verified?: boolean;
+  evidence?: Record<string, unknown>;
+  supersedesId?: string | null;
+  idempotencyKey?: string | null;
 }
 export interface ImportRecord {
   sourceKey: string;

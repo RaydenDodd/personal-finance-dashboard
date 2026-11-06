@@ -3,7 +3,7 @@ import { connection } from '@models/index';
 import { getBaseCurrency } from '@models/users-currencies.model';
 import { QueryTypes } from 'sequelize';
 
-import { cents } from './calculations';
+import { FINANCE_AUTOMATION_CUTOFF, cents } from './calculations';
 import { getFinanceAccounts, getFinanceCategories, getFinanceDashboard } from './index';
 
 export interface BankHistoryMapping {
@@ -21,6 +21,7 @@ export interface BankHistoryContext {
   mappings: BankHistoryMapping[];
   points: ImportedBankPoint[];
   liveFrom: string;
+  manualAdjustments?: Record<string, number>;
 }
 const read = <T>(sql: string, replacements: Record<string, unknown>): Promise<T[]> =>
   connection.sequelize.query(sql, { replacements, type: QueryTypes.SELECT, logging: false });
@@ -62,16 +63,41 @@ export async function getBankHistoryContext(userId: number): Promise<BankHistory
   if (!mappings?.length) return null;
   const base = await getBaseCurrency({ userId });
   if (base?.currencyCode !== 'USD') return null;
-  const [dashboard, nativeStart] = await Promise.all([
-    getFinanceDashboard(userId, { granularity: 'daily', mode: 'personal' }),
-    read<{ liveFrom: string | null }>(
-      `SELECT MIN((c."createdAt" AT TIME ZONE 'America/New_York')::date)::text AS "liveFrom" FROM "BankDataProviderConnections" c WHERE c."userId"=:userId AND EXISTS (SELECT 1 FROM "Accounts" a WHERE a."bankDataProviderConnectionId"=c.id AND a."userId"=:userId)`,
-      { userId },
+  const dashboard = await getFinanceDashboard(userId, { granularity: 'daily', mode: 'personal' });
+  const manualAdjustments: Record<string, number> = {};
+  const manualDates = [
+    ...new Set(
+      dashboard.snapshots
+        .filter(
+          (s) => s.date >= FINANCE_AUTOMATION_CUTOFF && s.verified && (s.source === 'manual' || s.isManualCorrection),
+        )
+        .map((s) => s.date),
     ),
-  ]);
+  ];
+  for (const date of manualDates)
+    for (const mapping of mappings.filter((m) => m.nativeAccountIds.length)) {
+      const values = mapping.sourceAccountIds.map((id) =>
+        dashboard.snapshots.find((s) => s.accountId === id && s.date === date),
+      );
+      if (
+        values.some((value) => !value) ||
+        !values.some((value) => value!.verified && (value!.source === 'manual' || value!.isManualCorrection))
+      )
+        continue;
+      const balances = await read<{ accountId: string; amount: string }>(
+        `SELECT DISTINCT ON (b."accountId") b."accountId",b.amount FROM "Balances" b JOIN "Accounts" a ON a.id=b."accountId" WHERE a."userId"=:userId AND a.id IN (:ids) AND b.date<=:date ORDER BY b."accountId",b.date DESC`,
+        { userId, ids: mapping.nativeAccountIds, date },
+      );
+      if (balances.length !== mapping.nativeAccountIds.length) continue;
+      const delta =
+        values.reduce((sum, value) => sum + cents(value!.balance), 0) -
+        balances.reduce((sum, value) => sum + Number(value.amount), 0);
+      manualAdjustments[date] = (manualAdjustments[date] ?? 0) + delta;
+    }
   return {
     mappings,
-    liveFrom: nativeStart[0]?.liveFrom ?? '9999-12-31',
+    liveFrom: FINANCE_AUTOMATION_CUTOFF,
+    manualAdjustments,
     points: dashboard.history.map((p) => ({ date: p.date, balance: p.knownTotal, complete: p.complete })),
   };
 }
@@ -102,9 +128,22 @@ export function mergeImportedBankHistory<
       historySource: 'imported' as const,
       complete: p.complete,
     }));
-  return [...imported, ...native.filter((p) => p.date >= context.liveFrom)].sort((a, b) =>
-    a.date.localeCompare(b.date),
-  );
+  return [
+    ...imported,
+    ...native
+      .filter((p) => p.date >= context.liveFrom)
+      .map((p) => {
+        const delta = context.manualAdjustments?.[p.date] ?? 0;
+        return delta
+          ? {
+              ...p,
+              accountsBalance: p.accountsBalance + delta,
+              totalBalance: p.totalBalance + delta,
+              historySource: 'manual' as const,
+            }
+          : p;
+      }),
+  ].sort((a, b) => a.date.localeCompare(b.date));
 }
 
 export async function getBankAccountHistory(userId: number, nativeAccountId: string) {
@@ -112,21 +151,37 @@ export async function getBankAccountHistory(userId: number, nativeAccountId: str
   if (!context) return null;
   const mapping = context.mappings.find((m) => m.nativeAccountIds.includes(nativeAccountId));
   if (!mapping) return null;
-  const dashboard = await getFinanceDashboard(userId, { granularity: 'daily', mode: 'personal' });
+  const dashboard = await getFinanceDashboard(userId, { granularity: 'daily' });
   const source = new Set(mapping.sourceAccountIds);
-  const points = dashboard.history
-    .filter((p) => p.date < context.liveFrom)
-    .flatMap((p) => {
-      const recorded = Object.entries(p.balances).filter(([id, value]) => source.has(id) && value !== null);
-      if (!recorded.length) return [];
-      return [
-        {
-          date: p.date,
-          balance: recorded.reduce((sum, [, value]) => sum + cents(value!), 0) / 100,
-          source: 'imported' as const,
-        },
-      ];
-    });
+  const points = dashboard.history.flatMap((p) => {
+    const recorded = Object.entries(p.balances).filter(([id, value]) => source.has(id) && value !== null);
+    const active = mapping.sourceAccountIds.filter((id) => !p.inactiveAccountIds?.includes(id));
+    if (!recorded.length || recorded.length !== active.length) return [];
+    const sources = mapping.sourceAccountIds
+      .map((id) => dashboard.snapshots.find((s) => s.accountId === id && s.date === p.date))
+      .filter(Boolean);
+    const correction = sources.some((s) => s!.verified && (s!.source === 'manual' || s!.isManualCorrection));
+    const pointSource =
+      p.date < context.liveFrom
+        ? 'imported'
+        : correction
+          ? (sources.find((s) => s!.source === 'manual' || s!.isManualCorrection)?.source ?? 'manual')
+          : 'google-sheets';
+    if (p.date >= context.liveFrom && !correction && sources.some((s) => ['simplefin', 'plaid'].includes(s!.source)))
+      return [];
+    return [
+      {
+        date: p.date,
+        balance: recorded.reduce((sum, [, value]) => sum + cents(value!), 0) / 100,
+        source: pointSource,
+        override:
+          correction ||
+          mapping.sourceAccountIds.every(
+            (id) => dashboard.accounts.find((a) => a.id === id)?.preferredSource === 'manual',
+          ),
+      },
+    ];
+  });
   const bankRows = await read<{ date: string; amount: number; accountId: string }>(
     `SELECT b.date::text,b.amount,b."accountId" FROM "Balances" b JOIN "Accounts" a ON a.id=b."accountId" WHERE a."userId"=:userId AND a.id IN (:ids) AND b.date>=:liveFrom ORDER BY b.date`,
     { userId, ids: mapping.nativeAccountIds, liveFrom: context.liveFrom },
@@ -137,12 +192,18 @@ export async function getBankAccountHistory(userId: number, nativeAccountId: str
     if (new Set(rows.map((b) => b.accountId)).size !== mapping.nativeAccountIds.length) return [];
     return [{ date, balance: rows.reduce((sum, b) => sum + Number(b.amount), 0) / 100, source: 'bank' as const }];
   });
+  const effective = new Map<string, { date: string; balance: number; source: string }>(
+    live.map((point) => [point.date, point]),
+  );
+  for (const point of points)
+    if (point.date < context.liveFrom || point.override || !effective.has(point.date))
+      effective.set(point.date, { date: point.date, balance: point.balance, source: point.source });
   return {
     label: mapping.label,
     grouped: mapping.nativeAccountIds.length > 1,
     nativeAccountIds: mapping.nativeAccountIds,
     sourceAccountIds: mapping.sourceAccountIds,
     liveFrom: context.liveFrom,
-    points: [...points, ...live].sort((a, b) => a.date.localeCompare(b.date)),
+    points: [...effective.values()].sort((a, b) => a.date.localeCompare(b.date)),
   };
 }

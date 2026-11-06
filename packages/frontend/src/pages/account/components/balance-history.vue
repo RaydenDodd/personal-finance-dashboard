@@ -1,24 +1,38 @@
 <script setup lang="ts">
 import { api } from '@/api/_api';
 import FinanceChart from '@/pages/personal-finance/finance-chart.vue';
+import { valuationSourceLabel } from '@/pages/personal-finance/balance-display';
+import { Button } from '@/components/lib/ui/button';
+import { ROUTES_NAMES } from '@/routes/constants';
 import { useQuery } from '@tanstack/vue-query';
 import { computed, ref } from 'vue';
 const props = defineProps<{ accountId: string }>();
 interface History {
   label: string;
   grouped: boolean;
-  points: Array<{ date: string; balance: number; source: 'imported' | 'bank' }>;
+  sourceAccountIds?: string[];
+  points: Array<{ date: string; balance: number; source: string }>;
 }
 const month = ref('all');
 const { data, isFetching } = useQuery({
   queryKey: ['bank-account-imported-history', () => props.accountId],
   queryFn: () => api.get(`/personal-finance/bank-history/${props.accountId}`) as Promise<History | null>,
+  staleTime: 30000,
+  refetchInterval: 60000,
+  refetchOnWindowFocus: 'always',
 });
 const months = computed(() => [...new Set(data.value?.points.map((p) => p.date.slice(0, 7)) ?? [])].sort().reverse());
 const points = computed(() =>
   (data.value?.points ?? []).filter((p) => month.value === 'all' || p.date.startsWith(month.value)),
 );
 const money = (value: number) => new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' }).format(value);
+const correctionLink = (date?: string) => ({
+  name: ROUTES_NAMES.personalFinance,
+  query: {
+    ...(data.value?.sourceAccountIds?.length === 1 ? { accountId: data.value.sourceAccountIds[0] } : {}),
+    ...(date ? { date } : {}),
+  },
+});
 </script>
 <template>
   <div v-if="isFetching" class="text-muted-foreground py-8 text-sm">Loading balance history…</div>
@@ -40,6 +54,9 @@ const money = (value: number) => new Intl.NumberFormat(undefined, { style: 'curr
           : 'Imported recorded balances, followed by automated bank balances.'
       }}
     </p>
+    <Button as-child variant="outline" size="sm" class="w-fit"
+      ><RouterLink :to="correctionLink()">Record or correct a personal balance</RouterLink></Button
+    >
     <FinanceChart
       :rows="points.map((p) => ({ label: p.date, values: { balance: p.balance } }))"
       :series="[{ id: 'balance', name: data.label, color: 'var(--primary)' }]"
@@ -52,6 +69,7 @@ const money = (value: number) => new Intl.NumberFormat(undefined, { style: 'curr
             <th class="p-3">Recorded date</th>
             <th class="p-3 text-right">Balance</th>
             <th class="p-3">Source</th>
+            <th class="p-3" />
           </tr>
         </thead>
         <tbody>
@@ -59,7 +77,12 @@ const money = (value: number) => new Intl.NumberFormat(undefined, { style: 'curr
             <td class="p-3">{{ point.date }}</td>
             <td class="p-3 text-right tabular-nums">{{ money(point.balance) }}</td>
             <td class="text-muted-foreground p-3 text-xs">
-              {{ point.source === 'imported' ? 'Imported history' : 'Bank sync' }}
+              {{ valuationSourceLabel(point.source) }}
+            </td>
+            <td class="p-3">
+              <RouterLink :to="correctionLink(point.date)" class="text-xs hover:underline">{{
+                data.sourceAccountIds?.length === 1 ? 'Correct' : 'View personal history'
+              }}</RouterLink>
             </td>
           </tr>
         </tbody>

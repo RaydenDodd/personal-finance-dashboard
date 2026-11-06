@@ -6,8 +6,13 @@ import { configureBankHistory, getBankAccountHistory } from '@services/personal-
 import { Router } from 'express';
 import { z } from 'zod';
 
+import principalRouter from './personal-finance-principal.route';
+import personalFinanceSheetsRoutes from './personal-finance-sheets.route';
+
 const router = Router();
 router.use(authenticateSession);
+router.use('/sheets-sync', personalFinanceSheetsRoutes);
+router.use('/principal', principalRouter);
 router.get(
   '/audit',
   createController(z.object({}), async ({ user }) => ({ data: await finance.getFinanceAudit(user.id) })),

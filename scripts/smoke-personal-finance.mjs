@@ -131,10 +131,24 @@ try {
       try {
         body = req.postDataJSON();
       } catch {}
-      calls.push({ method: req.method(), path, body });
+      calls.push({ method: req.method(), path, query: Object.fromEntries(url.searchParams), body });
       let response;
       if (path === '/personal-finance/dashboard') response = dashboard;
+      else if (path === '/personal-finance/principal') response = { entries: [], rules: [], reviews: [] };
       else if (path === '/accounts') response = nativeAccounts;
+      else if (path === '/personal-finance/sheets-sync')
+        response = {
+          config: null,
+          credentialsConfigured: false,
+          oauthConfigured: false,
+          authKind: null,
+          lastAttemptAt: null,
+          lastSuccessAt: null,
+          lastErrorCode: 'credentials_missing',
+          pendingWrites: 0,
+          conflicts: [],
+          issues: [],
+        };
       else if (path === '/personal-finance/import/preview')
         response = {
           previewToken: 'synthetic-preview',
@@ -160,6 +174,17 @@ try {
   await page.goto(`${previewOrigin}/__qa-personal-finance.html`);
   await expect(page.getByRole('heading', { name: 'Personal net worth', exact: true })).toBeVisible({ timeout: 60000 });
   await expect(page.getByText('Synthetic Spendable Money', { exact: true }).first()).toBeVisible({ timeout: 30000 });
+  await expect(page.getByLabel('Balance sources', { exact: true })).toHaveValue('all');
+  await page.getByLabel('Balance sources', { exact: true }).selectOption('personal');
+  await expect
+    .poll(() => calls.filter((c) => c.path === '/personal-finance/dashboard' && c.query.mode === 'personal').length)
+    .toBeGreaterThan(0);
+  await page.getByLabel('Balance sources', { exact: true }).selectOption('all');
+  await page.getByLabel('Balances through date').fill('2025-01-15');
+  await expect
+    .poll(() => calls.filter((c) => c.path === '/personal-finance/dashboard' && c.query.to === '2025-01-15').length)
+    .toBeGreaterThan(0);
+  await page.getByRole('button', { name: 'Latest balances', exact: true }).click();
   const datedPointPositions = await page
     .locator('svg[aria-label="Financial history chart"] circle')
     .evaluateAll((points) => points.map((point) => Number(point.getAttribute('cx'))));

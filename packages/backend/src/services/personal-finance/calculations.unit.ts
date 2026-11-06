@@ -55,6 +55,45 @@ const flow = (
 });
 
 describe('personal finance accounting', () => {
+  it('uses a verified cumulative checkpoint without counting the covered same-day contribution again', () => {
+    const entries = [
+      flow('a', 89, 'contribution', { date: '2025-04-28' }),
+      flow('a', 939.21, 'adjustment', { date: '2025-04-28', opening: true, evidence: { checkpoint: true } }),
+      flow('a', 10, 'contribution', { date: '2025-05-01' }),
+    ];
+    expect(principalFor('a', entries, '2025-05-01').principal).toBe(949.21);
+  });
+  it('uses Sheet history before November 5 and verified provider balances afterward, retaining manual corrections', () => {
+    const source = snapshot('a', '2026-11-04', 100, { source: 'google-sheets' });
+    const before = snapshot('a', '2026-11-04', 999, { source: 'simplefin', revision: 99 });
+    expect(preferredSnapshots([source, before])[0]!.balance).toBe(100);
+    const sheet = snapshot('a', '2026-11-05', 110, { source: 'google-sheets' });
+    const bank = snapshot('a', '2026-11-05', 120, { source: 'simplefin', revision: 2 });
+    const managed = account('a', { preferredSource: 'simplefin' });
+    expect(preferredSnapshots([sheet, bank], [managed])[0]!.balance).toBe(120);
+    const correction = snapshot('a', '2026-11-05', 115, { source: 'manual', revision: 3 });
+    expect(preferredSnapshots([sheet, bank, correction], [managed])[0]!.balance).toBe(115);
+    expect(
+      preferredSnapshots(
+        [sheet, bank, { ...sheet, balance: 116, isManualCorrection: true, revision: 4 }],
+        [managed],
+      )[0]!.balance,
+    ).toBe(116);
+    expect(preferredSnapshots([sheet, bank], [account('a')])[0]!.balance).toBe(110);
+  });
+  it('does not publish a gain beyond the verified contribution coverage date', () => {
+    const checkpoint = flow('a', 1000, 'adjustment', {
+      opening: true,
+      date: '2026-05-29',
+      evidence: { principalValidThrough: '2026-05-29' },
+    });
+    expect(principalFor('a', [checkpoint], '2026-05-29')).toMatchObject({ principal: 1000, principalComplete: true });
+    expect(principalFor('a', [checkpoint], '2026-11-05')).toMatchObject({
+      principal: null,
+      knownPrincipal: 1000,
+      principalComplete: false,
+    });
+  });
   it('does not warn about accounts before their first recorded balance', () => {
     const history = buildHistory(
       [account('old'), account('new')],

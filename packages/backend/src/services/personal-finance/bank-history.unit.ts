@@ -12,6 +12,20 @@ const native = (date: string) => ({
   totalBalance: 109900,
 });
 describe('historical balances in the automated bank dashboard', () => {
+  it('applies a dated manual group correction to native totals without fabricating another account balance', () => {
+    const result = mergeImportedBankHistory(
+      [native('2026-11-05')],
+      { mappings: [], points: [], liveFrom: '2026-11-05', manualAdjustments: { '2026-11-05': 2500 } },
+      '2026-11-05',
+      '2026-11-05',
+    );
+    expect(result[0]).toMatchObject({
+      accountsBalance: 102400,
+      portfoliosBalance: 10000,
+      totalBalance: 112400,
+      historySource: 'manual',
+    });
+  });
   it('replaces backfilled current values with actual sparse recorded dates before bank connection', () => {
     const result = mergeImportedBankHistory(
       [native('2024-06-01'), native('2024-06-15'), native('2026-11-05')],

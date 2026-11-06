@@ -284,7 +284,7 @@ interface CombinedBalanceHistoryItemApiResponse {
   vehiclesBalance: number;
   loansBalance: number;
   totalBalance: number;
-  historySource?: 'imported';
+  historySource?: 'imported' | 'manual';
   complete?: boolean;
 }
 

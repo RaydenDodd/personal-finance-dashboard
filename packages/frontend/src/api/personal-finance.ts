@@ -19,6 +19,11 @@ export interface FinanceAccount {
   valuationDate: string | null;
   principal: number | null;
   principalComplete?: boolean;
+  knownPrincipal?: number | null;
+  basisDate?: string | null;
+  principalValidThrough?: string | null;
+  employeeContributions?: number;
+  employerContributions?: number;
   contributions: number;
   withdrawals: number;
   interest: number;
@@ -52,6 +57,16 @@ export interface FinanceCashFlow {
   toAccountId?: string | null;
   description?: string;
   opening?: boolean;
+  createdAt?: string;
+  source?: string;
+  sourceId?: string | null;
+  sourceKey?: string | null;
+  transactionId?: string | null;
+  contributionKind?: 'employee' | 'employer' | 'unspecified';
+  verified?: boolean;
+  supersedesId?: string | null;
+  idempotencyKey?: string | null;
+  evidence?: Record<string, unknown>;
 }
 export interface FinanceDashboard {
   currencyCode: string;
@@ -121,6 +136,38 @@ export const saveFinanceSnapshot = (snapshot: {
 }) => api.post('/personal-finance/snapshots', snapshot);
 export const saveFinanceCashFlow = (flow: Omit<FinanceCashFlow, 'id'>) =>
   api.post('/personal-finance/cash-flows', flow);
+export const correctFinancePrincipal = (correction: {
+  cashFlowId: string;
+  date: string;
+  amount: number;
+  description?: string;
+  contributionKind?: 'employee' | 'employer' | 'unspecified';
+}) => api.post('/personal-finance/principal/corrections', correction);
+export interface PrincipalReview {
+  id: string;
+  reason: string;
+  details: {
+    accountId?: string;
+    date?: string;
+    expectedPayDate?: string;
+    amount?: number;
+    sourceNativeAccountId?: string;
+    exactDescription?: string;
+    transactionId?: string;
+    note?: string;
+  };
+}
+export const getFinancePrincipalState = (): Promise<{ reviews: PrincipalReview[] }> =>
+  api.get('/personal-finance/principal', {}, { silent: true });
+export const confirmPrincipalDestination = (rule: {
+  sourceNativeAccountId: string;
+  destinationAccountId: string;
+  exactDescription: string;
+  effectiveFrom: string;
+  isEnabled: boolean;
+}) => api.post('/personal-finance/principal/transfer-rules', rule);
+export const reconcilePrincipalTransactions = (transactionIds: string[]) =>
+  api.post('/personal-finance/principal/reconcile', { transactionIds });
 export const previewFinanceImport = (payload: HistoryImportPayload): Promise<HistoryImportPreview> =>
   api.post('/personal-finance/import/preview', payload);
 export const commitFinanceImport = (payload: HistoryImportPayload & { previewToken: string }) =>

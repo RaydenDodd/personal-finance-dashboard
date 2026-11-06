@@ -187,9 +187,9 @@ async function getSnapshots(userId: number, transaction?: Transaction): Promise<
     createdAt: new Date(r.createdAt).toISOString(),
   })) as FinanceSnapshot[];
 }
-async function getCashFlows(userId: number, transaction?: Transaction): Promise<FinanceCashFlow[]> {
+export async function getCashFlows(userId: number, transaction?: Transaction): Promise<FinanceCashFlow[]> {
   const result = await rows<Row>(
-    'SELECT * FROM "PersonalFinanceCashFlows" WHERE "userId"=:userId ORDER BY date,"createdAt",id',
+    'SELECT * FROM "PersonalFinanceCashFlows" WHERE "userId"=:userId AND "supersededAt" IS NULL AND verified ORDER BY date,"createdAt",id',
     { userId },
     transaction,
   );
@@ -204,13 +204,38 @@ async function insertSnapshot(userId: number, s: Omit<FinanceSnapshot, 'id' | 'c
   const id = randomUUID();
   const fingerprint = hash(s);
   const result = await rows<{ id: string }>(
-    `INSERT INTO "PersonalFinanceSnapshots" (id,"userId","accountId",date,"balanceCents","currencyCode",source,verified,"sourceId","sourceKey",fingerprint,"sourceLabel",formula,description)
-    VALUES (:id,:userId,:accountId,:date,:balanceCents,:currencyCode,:source,:verified,:sourceId,:sourceKey,:fingerprint,:sourceLabel,:formula,:description)
+    `INSERT INTO "PersonalFinanceSnapshots" (id,"userId","accountId",date,"balanceCents","currencyCode",source,verified,"sourceId","sourceKey",fingerprint,"sourceLabel",formula,description,"isManualCorrection")
+    VALUES (:id,:userId,:accountId,:date,:balanceCents,:currencyCode,:source,:verified,:sourceId,:sourceKey,:fingerprint,:sourceLabel,:formula,:description,:isManualCorrection)
     ON CONFLICT ("userId","sourceId","sourceKey",fingerprint) DO UPDATE SET fingerprint=EXCLUDED.fingerprint RETURNING id`,
-    { ...s, id, userId, balanceCents: cents(s.balance), fingerprint },
+    {
+      ...s,
+      id,
+      userId,
+      balanceCents: cents(s.balance),
+      fingerprint,
+      isManualCorrection: s.isManualCorrection ?? false,
+    },
     transaction,
   );
   return result[0]!.id;
+}
+/** Store source revisions even when a stronger source currently wins the date.
+ * Selection is separate from storage, so disconnecting a provider keeps fallback records. */
+export async function appendFinanceSourceSnapshot(userId: number, data: Omit<FinanceSnapshot, 'id' | 'createdAt'>) {
+  return locked(userId, async (transaction) => {
+    const account = (await getFinanceAccounts(userId, transaction)).find((a) => a.id === data.accountId);
+    if (!account || account.currencyCode !== data.currencyCode) fail('Source account/currency is not owned');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(data.date)) fail('Use the actual effective valuation date');
+    const id = await insertSnapshot(userId, data, transaction);
+    await audit(
+      userId,
+      'snapshot.source-appended',
+      id,
+      { accountId: data.accountId, date: data.date, source: data.source },
+      transaction,
+    );
+    return { id };
+  });
 }
 export async function addFinanceSnapshot(
   userId: number,
@@ -323,7 +348,7 @@ function normalizedImport(input: ImportRequest) {
 async function prepareImport(userId: number, input: ImportRequest, transaction?: Transaction) {
   const accounts = await getFinanceAccounts(userId, transaction);
   const snapshots = await getSnapshots(userId, transaction);
-  const selected = preferredSnapshots(snapshots);
+  const selected = preferredSnapshots(snapshots, accounts);
   const records = normalizedImport(input).map((r) => {
     const account = accounts.find((a) => a.id === r.accountId);
     if (!account) fail('Map every source row to an owned reporting account');
@@ -339,7 +364,11 @@ async function prepareImport(userId: number, input: ImportRequest, transaction?:
         s.formula === r.formula &&
         s.verified === r.verified,
     );
-    const action = duplicate ? 'duplicate' : existing && sourceRank(existing) > sourceRank(r) ? 'protected' : 'insert';
+    const action = duplicate
+      ? 'duplicate'
+      : existing && sourceRank(existing, account) > sourceRank(r, account)
+        ? 'protected'
+        : 'insert';
     return { ...r, accountName: account.name, action };
   });
   // Bind review to both the submitted data and current immutable revision set.
@@ -401,7 +430,7 @@ export async function getFinanceDashboard(
     firstDates,
   );
   const history = allHistory.filter((p) => (!query.from || p.date >= query.from) && (!query.to || p.date <= query.to));
-  const selected = preferredSnapshots(snapshots).filter((s) => !query.to || s.date <= query.to);
+  const selected = preferredSnapshots(snapshots, accounts).filter((s) => !query.to || s.date <= query.to);
   const nativeStatuses = await rows<Row>(
     `SELECT a.id,a.type,c."providerType",c."isActive",c."lastSyncAt" FROM "Accounts" a
     LEFT JOIN "BankDataProviderConnections" c ON c.id=a."bankDataProviderConnectionId" WHERE a."userId"=:userId`,
@@ -553,13 +582,13 @@ export async function captureSimplefinValuations(connectionId: string, values: P
           balance: valuation.balance,
           currencyCode: account.currencyCode,
           source: 'simplefin',
-          verified: false,
+          verified: true,
           sourceId: `simplefin:${connectionId}`,
           sourceKey: `linked:${hash(valuation.keys)}`,
           sourceLabel: account.name,
           formula: null,
           description:
-            'Sum of explicitly linked provider accounts on their actual shared valuation day. Manual verified revisions retain priority.',
+            'Validated balance and effective date from explicitly linked provider accounts. Manual verified corrections retain priority; Sheet history before November 5, 2026 is authoritative.',
         },
         transaction,
       );

@@ -2,6 +2,7 @@
 import { loadAccounts } from '@/api/accounts';
 import {
   commitFinanceImport,
+  correctFinancePrincipal,
   getPersonalFinanceDashboard,
   previewFinanceImport,
   saveFinanceAccount,
@@ -13,10 +14,12 @@ import {
   type FinanceCategory,
   type FinanceDashboard,
   type FinanceHistoryPoint,
+  type FinanceCashFlow,
   type HistoryImportPayload,
   type HistoryImportPreview,
 } from '@/api/personal-finance';
 import PageWrapper from '@/components/common/page-wrapper.vue';
+import { VUE_QUERY_CACHE_KEYS } from '@/common/const';
 import { Button } from '@/components/lib/ui/button';
 import { Callout } from '@/components/lib/ui/callout';
 import { Card } from '@/components/lib/ui/card';
@@ -34,24 +37,35 @@ import {
   WalletIcon,
 } from '@lucide/vue';
 import { format, subMonths } from 'date-fns';
-import { computed, onMounted, reactive, ref, watch } from 'vue';
+import { useQueryClient } from '@tanstack/vue-query';
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
+import { useRoute } from 'vue-router';
 
 import FinanceChart, { type ChartRow, type ChartSeries } from './finance-chart.vue';
 import { mapHistoryRecords, parseHistoryFile, type UnmappedHistoryRecord } from './history-import';
 import { recordedCategoryBalance, recordedNetWorth } from './history-display';
+import { accountManagementLabel, recordedPrincipal, valuationSourceLabel } from './balance-display';
+import SheetsSyncPanel from './sheets-sync-panel.vue';
+import PrincipalReviewPanel from './principal-review-panel.vue';
 
+const queryClient = useQueryClient();
+const route = useRoute();
 const data = ref<FinanceDashboard | null>(null);
 const loading = ref(true);
 const busy = ref(false);
 const error = ref('');
 const notice = ref('');
 const period = ref('all');
+const sourceView = ref<'all' | 'personal'>('all');
+const throughDate = ref('');
 const granularity = ref<'daily' | 'monthly'>('monthly');
 const chart = ref('total');
 const selectedAccount = ref('');
 const activePanel = ref<'accounts' | 'snapshot' | 'cashflow' | 'import' | 'categories' | null>(null);
 const nativeAccounts = ref<Array<{ id: string; name: string; currencyCode: string }>>([]);
 const today = () => format(new Date(), 'yyyy-MM-dd');
+const periodAnchor = () => (throughDate.value ? new Date(`${throughDate.value}T12:00:00`) : new Date());
+const newFlowKey = () => `manual:${Date.now().toString(36)}:${Math.random().toString(36).slice(2)}`;
 const accountForm = reactive({
   id: '',
   name: '',
@@ -63,6 +77,10 @@ const accountForm = reactive({
   preferredSource: 'manual',
 });
 const snapshotForm = reactive({ accountId: '', date: today(), balance: '', description: '' });
+const snapshotFormElement = ref<HTMLFormElement | null>(null);
+const flowCorrectionId = ref('');
+const ledgerOpen = ref(false);
+const ledgerElement = ref<HTMLDetailsElement | null>(null);
 const flowForm = reactive({
   accountId: '',
   date: today(),
@@ -71,6 +89,8 @@ const flowForm = reactive({
   toAccountId: '',
   description: '',
   opening: false,
+  contributionKind: 'unspecified' as 'employee' | 'employer' | 'unspecified',
+  idempotencyKey: newFlowKey(),
 });
 const categoryDraft = ref<FinanceCategory[]>([]);
 const fileName = ref('');
@@ -208,21 +228,13 @@ const chartModel = computed(
         const prior = buckets.get(key);
         if (!prior || s.date > prior.date) buckets.set(key, s);
       });
-      const from = period.value === 'all' ? null : format(subMonths(new Date(), Number(period.value)), 'yyyy-MM-dd');
+      const from =
+        period.value === 'all' ? null : format(subMonths(periodAnchor(), Number(period.value)), 'yyyy-MM-dd');
       const accountRows: ChartRow[] = [...buckets.values()]
         .filter((s) => !from || s.date >= from)
         .sort((a, b) => a.date.localeCompare(b.date))
         .map((p) => {
-          const dated = flows.filter((f) => f.date <= p.date);
-          const opening = dated.findIndex((f) => f.accountId === selectedAccount.value && f.opening);
-          let principal: number | null = null;
-          if (opening >= 0)
-            principal = dated.slice(opening).reduce((total, f) => {
-              if (f.type === 'interest' || f.type === 'dividend') return total;
-              if (f.type === 'transfer')
-                return total + (f.toAccountId === selectedAccount.value ? f.amount : -f.amount);
-              return total + (f.type === 'withdrawal' ? -f.amount : f.amount);
-            }, 0);
+          const principal = recordedPrincipal(selectedAccount.value, flows, p.date);
           return { label: p.date, values: { value: p.balance, principal } };
         });
       return {
@@ -353,9 +365,12 @@ async function reload() {
   error.value = '';
   try {
     const result = await getPersonalFinanceDashboard({
-      mode: 'personal',
+      mode: sourceView.value,
       granularity: granularity.value,
-      ...(period.value === 'all' ? {} : { from: format(subMonths(new Date(), Number(period.value)), 'yyyy-MM-dd') }),
+      ...(throughDate.value ? { to: throughDate.value } : {}),
+      ...(period.value === 'all'
+        ? {}
+        : { from: format(subMonths(periodAnchor(), Number(period.value)), 'yyyy-MM-dd') }),
     });
     if (id !== requestId) return;
     data.value = result;
@@ -378,12 +393,21 @@ async function mutate(action: () => Promise<unknown>, message: string) {
   try {
     await action();
     notice.value = message;
-    await reload();
+    await refreshBalances();
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'The change could not be saved.';
   } finally {
     busy.value = false;
   }
+}
+async function refreshBalances() {
+  await reload();
+  await Promise.all([
+    queryClient.invalidateQueries({ queryKey: ['bank-account-imported-history'] }),
+    queryClient.invalidateQueries({ queryKey: VUE_QUERY_CACHE_KEYS.widgetBalanceTrend }),
+    queryClient.invalidateQueries({ queryKey: VUE_QUERY_CACHE_KEYS.widgetBalanceTrendPrev }),
+    queryClient.invalidateQueries({ queryKey: VUE_QUERY_CACHE_KEYS.widgetNetWorth }),
+  ]);
 }
 function editAccount(account?: FinanceAccount) {
   Object.assign(
@@ -427,7 +451,7 @@ async function submitSnapshot() {
   await mutate(
     () =>
       saveFinanceSnapshot({ ...snapshotForm, balance: Number(snapshotForm.balance), source: 'manual', verified: true }),
-    'Verified valuation saved. Earlier revisions remain in the audit history.',
+    'Verified valuation saved and charts refreshed. Earlier revisions remain in the audit history.',
   );
   if (!error.value) {
     snapshotForm.balance = '';
@@ -437,18 +461,64 @@ async function submitSnapshot() {
 async function submitCashFlow() {
   await mutate(
     () =>
-      saveFinanceCashFlow({
-        ...flowForm,
-        amount: Number(flowForm.amount),
-        opening: ['contribution', 'adjustment'].includes(flowForm.type) && flowForm.opening,
-        ...(flowForm.type === 'transfer' ? { toAccountId: flowForm.toAccountId } : { toAccountId: null }),
-      }),
-    'Cash flow recorded. Balances are changed only by dated valuations.',
+      flowCorrectionId.value
+        ? correctFinancePrincipal({
+            cashFlowId: flowCorrectionId.value,
+            date: flowForm.date,
+            amount: Number(flowForm.amount),
+            description: flowForm.description,
+            contributionKind: flowForm.contributionKind,
+          })
+        : saveFinanceCashFlow({
+            ...flowForm,
+            amount: Number(flowForm.amount),
+            opening: ['contribution', 'adjustment'].includes(flowForm.type) && flowForm.opening,
+            ...(flowForm.type === 'transfer' ? { toAccountId: flowForm.toAccountId } : { toAccountId: null }),
+          }),
+    flowCorrectionId.value
+      ? 'Principal correction saved. The original record remains in the audit history.'
+      : 'Cash flow recorded. Balances are changed only by dated valuations.',
   );
   if (!error.value) {
     flowForm.amount = '';
+    flowForm.idempotencyKey = newFlowKey();
+    flowCorrectionId.value = '';
     activePanel.value = null;
   }
+}
+function recordCashFlow(flow?: FinanceCashFlow) {
+  flowCorrectionId.value = flow?.id ?? '';
+  Object.assign(flowForm, {
+    accountId: flow?.accountId ?? data.value?.accounts[0]?.id ?? '',
+    date: flow?.date ?? today(),
+    amount: flow ? String(flow.amount) : '',
+    type: flow?.type ?? 'contribution',
+    toAccountId: flow?.toAccountId ?? '',
+    description: flow?.description ?? '',
+    opening: flow?.opening ?? false,
+    contributionKind: flow?.contributionKind ?? 'unspecified',
+    idempotencyKey: newFlowKey(),
+  });
+  activePanel.value = 'cashflow';
+}
+function reviewPrincipalLedger() {
+  if (!data.value?.cashFlows.length) {
+    recordCashFlow();
+    return;
+  }
+  ledgerOpen.value = true;
+  void nextTick(() => ledgerElement.value?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+}
+function recordBalance(accountId: string, date = today(), balance?: number | null) {
+  Object.assign(snapshotForm, {
+    accountId,
+    date,
+    balance: balance === null || balance === undefined ? '' : String(balance),
+    description: '',
+  });
+  detailOpen.value = false;
+  activePanel.value = 'snapshot';
+  void nextTick(() => snapshotFormElement.value?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
 }
 async function selectFile(event: Event) {
   const file = (event.target as HTMLInputElement).files?.[0];
@@ -522,18 +592,33 @@ function downloadTemplate() {
   link.click();
   URL.revokeObjectURL(url);
 }
-watch([period, granularity], reload);
+watch([period, granularity, sourceView, throughDate], reload);
 watch(importMapping, () => {
   preview.value = null;
   previewPayload.value = null;
 });
+let refreshTimer: ReturnType<typeof setInterval> | undefined;
 onMounted(() => {
-  void reload();
+  if (typeof route.query.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(route.query.date) && !route.query.accountId)
+    throughDate.value = route.query.date;
+  void reload().then(() => {
+    const requestedAccount = typeof route.query.accountId === 'string' ? route.query.accountId : '';
+    const requestedDate =
+      typeof route.query.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(route.query.date) ? route.query.date : today();
+    if (data.value?.accounts.some((account) => account.id === requestedAccount))
+      recordBalance(requestedAccount, requestedDate);
+  });
+  refreshTimer = setInterval(() => {
+    if (document.visibilityState === 'visible' && !busy.value && !activePanel.value) void reload();
+  }, 60000);
   void loadAccounts()
     .then((a) => (nativeAccounts.value = a))
     .catch(() => {
       /* Standalone manual reporting remains usable. */
     });
+});
+onBeforeUnmount(() => {
+  if (refreshTimer) clearInterval(refreshTimer);
 });
 const inputClass =
   'border-input bg-background focus-visible:ring-ring h-10 w-full rounded-md border px-3 text-sm focus-visible:outline-none focus-visible:ring-2';
@@ -545,8 +630,7 @@ const inputClass =
       <div>
         <h1 class="text-2xl font-semibold tracking-tight">Personal net worth</h1>
         <p class="text-muted-foreground mt-1 text-sm">
-          Your personal balance history and monthly backup. Automated bank balances and imported historical months are
-          on the Dashboard.
+          Your recorded account history, contributed principal and manual backup. Bank updates stay optional.
         </p>
       </div>
       <div class="flex flex-wrap gap-2">
@@ -566,6 +650,46 @@ const inputClass =
     </div>
     <Callout v-if="error" variant="destructive" title="Couldn't complete this action" role="alert">{{ error }}</Callout>
     <Callout v-if="notice" variant="success" title="Saved" role="status">{{ notice }}</Callout>
+    <div class="flex flex-wrap items-end gap-3">
+      <label class="grid gap-1 text-sm"
+        >Balance sources
+        <select v-model="sourceView" :class="inputClass" aria-label="Balance sources">
+          <option value="all">Automatic + personal records</option>
+          <option value="personal">Personal records only</option>
+        </select>
+      </label>
+      <label class="grid gap-1 text-sm"
+        >Through date
+        <input
+          v-model="throughDate"
+          :class="inputClass"
+          type="date"
+          :max="today()"
+          aria-label="Balances through date"
+        />
+      </label>
+      <Button v-if="throughDate" variant="ghost" size="sm" @click="throughDate = ''">Latest balances</Button>
+      <p class="text-muted-foreground max-w-2xl text-xs">
+        Before November 5, 2026, recorded Sheet history is primary. From that date, connected accounts can use automatic
+        balances; dated manual corrections and fallback records remain available.
+      </p>
+    </div>
+    <SheetsSyncPanel
+      :accounts="data?.accounts ?? []"
+      @updated="refreshBalances"
+      @review-principal="reviewPrincipalLedger"
+    />
+    <PrincipalReviewPanel
+      :accounts="data?.accounts ?? []"
+      @updated="refreshBalances"
+      @record="
+        (accountId, date) => {
+          recordCashFlow();
+          flowForm.accountId = accountId;
+          if (date) flowForm.date = date;
+        }
+      "
+    />
     <div v-if="loading && !data" class="grid grid-cols-2 gap-4 lg:grid-cols-4">
       <div v-for="i in 4" :key="i" class="bg-muted h-28 animate-pulse rounded-lg" />
     </div>
@@ -642,7 +766,7 @@ const inputClass =
               {
                 accounts: accountForm.id ? 'Edit reporting account' : 'Add reporting account',
                 snapshot: 'Record a verified balance',
-                cashflow: 'Record principal or growth',
+                cashflow: flowCorrectionId ? 'Correct a principal record' : 'Record principal or growth',
                 import: 'Import historical balances',
                 categories: 'Customize categories',
               }[activePanel]
@@ -726,6 +850,7 @@ const inputClass =
         </form>
         <form
           v-else-if="activePanel === 'snapshot'"
+          ref="snapshotFormElement"
           class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"
           @submit.prevent="submitSnapshot"
         >
@@ -770,7 +895,7 @@ const inputClass =
           @submit.prevent="submitCashFlow"
         >
           <label class="grid gap-1.5 text-sm"
-            >Account<select v-model="flowForm.accountId" :class="inputClass" required>
+            >Account<select v-model="flowForm.accountId" :class="inputClass" :disabled="!!flowCorrectionId" required>
               <option value="" disabled>Select account</option>
               <option v-for="account in data.accounts" :key="account.id" :value="account.id">{{ account.name }}</option>
             </select></label
@@ -779,7 +904,7 @@ const inputClass =
             >Actual date<input v-model="flowForm.date" :class="inputClass" type="date" :max="today()" required
           /></label>
           <label class="grid gap-1.5 text-sm"
-            >Type<select v-model="flowForm.type" :class="inputClass">
+            >Type<select v-model="flowForm.type" :class="inputClass" :disabled="!!flowCorrectionId">
               <option value="contribution">External contribution / deposit</option>
               <option value="withdrawal">Withdrawal</option>
               <option value="transfer">Transfer between my accounts</option>
@@ -798,7 +923,12 @@ const inputClass =
               required
           /></label>
           <label v-if="flowForm.type === 'transfer'" class="grid gap-1.5 text-sm"
-            >Destination account<select v-model="flowForm.toAccountId" :class="inputClass" required>
+            >Destination account<select
+              v-model="flowForm.toAccountId"
+              :class="inputClass"
+              :disabled="!!flowCorrectionId"
+              required
+            >
               <option value="" disabled>Select destination</option>
               <option
                 v-for="account in data.accounts.filter((a) => a.id !== flowForm.accountId)"
@@ -812,11 +942,23 @@ const inputClass =
           <label class="grid gap-1.5 text-sm"
             >Description (optional)<input v-model="flowForm.description" :class="inputClass" maxlength="1000"
           /></label>
+          <label v-if="flowForm.type === 'contribution'" class="grid gap-1.5 text-sm"
+            >Contribution source
+            <select v-model="flowForm.contributionKind" :class="inputClass">
+              <option value="unspecified">Not separately identified</option>
+              <option value="employee">Employee contribution</option>
+              <option value="employer">Employer contribution / match</option>
+            </select>
+          </label>
           <label
             v-if="['adjustment', 'contribution'].includes(flowForm.type)"
             class="flex items-start gap-2 text-sm sm:col-span-2 lg:col-span-3"
-            ><input v-model="flowForm.opening" type="checkbox" class="accent-primary mt-0.5 size-4 shrink-0" />This
-            establishes my known opening principal. I have entered the complete contribution basis from this
+            ><input
+              v-model="flowForm.opening"
+              type="checkbox"
+              :disabled="!!flowCorrectionId"
+              class="accent-primary mt-0.5 size-4 shrink-0"
+            />This establishes my known opening principal. I have entered the complete contribution basis from this
             date.</label
           >
           <p class="text-muted-foreground text-xs sm:col-span-2 lg:col-span-3">
@@ -825,7 +967,9 @@ const inputClass =
             basis before displaying investment gains.
           </p>
           <div class="sm:col-span-2 lg:col-span-3">
-            <Button type="submit" :disabled="busy || !data.accounts.length">Save cash flow</Button>
+            <Button type="submit" :disabled="busy || !data.accounts.length">{{
+              flowCorrectionId ? 'Save principal correction' : 'Save cash flow'
+            }}</Button>
           </div>
         </form>
         <div v-else-if="activePanel === 'categories'" class="space-y-4">
@@ -1014,7 +1158,7 @@ const inputClass =
         <div class="flex flex-wrap gap-2">
           <Button variant="ghost" size="sm" @click="activePanel = 'categories'"
             ><Settings2Icon class="size-4" />Categories</Button
-          ><Button variant="outline" size="sm" @click="activePanel = 'cashflow'"
+          ><Button variant="outline" size="sm" @click="recordCashFlow()"
             ><ArrowDownUpIcon class="size-4" />Record cash flow</Button
           ><Button variant="outline" size="sm" @click="editAccount()"><PlusIcon class="size-4" />Add account</Button>
         </div>
@@ -1061,6 +1205,7 @@ const inputClass =
                     {{ account.balanceKind === 'liability' ? 'Liability' : 'Asset' }} ·
                     {{ account.included ? 'Included' : 'Excluded from net worth' }}
                   </p>
+                  <p class="text-muted-foreground mt-1 text-xs">{{ accountManagementLabel(account) }}</p>
                   <p v-if="account.nativeAccountIds?.length" class="text-muted-foreground mt-1 max-w-80 text-xs">
                     Linked:
                     <template v-for="(nativeId, index) in account.nativeAccountIds" :key="nativeId">
@@ -1092,7 +1237,8 @@ const inputClass =
                 <td class="p-4 text-xs whitespace-nowrap">
                   <p>{{ account.valuationDate ?? 'No valuation yet' }}</p>
                   <p class="text-muted-foreground mt-1">
-                    {{ account.valuationSource ?? account.preferredSource }}{{ account.verified ? ' · verified' : '' }}
+                    {{ valuationSourceLabel(account.valuationSource ?? account.preferredSource)
+                    }}{{ account.verified ? ' · verified' : '' }}
                   </p>
                   <p
                     v-if="account.staleDays !== null && account.staleDays !== undefined && account.staleDays > 7"
@@ -1110,10 +1256,23 @@ const inputClass =
                 <td class="p-4 text-right whitespace-nowrap tabular-nums">
                   {{ money(account.principal, account.currencyCode)
                   }}<span v-if="account.principal === null" class="text-muted-foreground mt-1 block text-xs"
-                    >Opening basis needed</span
+                    >{{
+                      account.knownPrincipal !== null && account.knownPrincipal !== undefined
+                        ? `${money(account.knownPrincipal, account.currencyCode)} recorded · later contributions need verification`
+                        : 'Opening basis needed'
+                    }}
+                    <span v-if="account.principalValidThrough" class="mt-1 block"
+                      >Verified through {{ account.principalValidThrough }}</span
+                    > </span
                   ><span v-else class="text-muted-foreground mt-1 block text-xs"
                     >{{ money(account.contributions, account.currencyCode) }} in ·
                     {{ money(account.withdrawals, account.currencyCode) }} out</span
+                  >
+                  <span
+                    v-if="account.employeeContributions || account.employerContributions"
+                    class="text-muted-foreground mt-1 block text-xs"
+                    >{{ money(account.employeeContributions ?? 0, account.currencyCode) }} employee ·
+                    {{ money(account.employerContributions ?? 0, account.currencyCode) }} employer</span
                   >
                 </td>
                 <td class="p-4 text-right whitespace-nowrap tabular-nums">
@@ -1141,6 +1300,12 @@ const inputClass =
                 </td>
                 <td class="p-3 whitespace-nowrap">
                   <Button variant="ghost" size="sm" @click="openDetails('account', account.id)">History</Button
+                  ><Button
+                    variant="ghost"
+                    size="sm"
+                    :aria-label="`Record ${account.name} balance`"
+                    @click="recordBalance(account.id)"
+                    >Record balance</Button
                   ><Button variant="ghost" size="sm" @click="editAccount(account)">Edit</Button>
                 </td>
               </tr>
@@ -1186,7 +1351,14 @@ const inputClass =
           </table>
         </div>
       </details>
-      <details v-if="data.cashFlows.length" class="border-border rounded-lg border">
+      <details
+        v-if="data.cashFlows.length"
+        id="contribution-ledger"
+        ref="ledgerElement"
+        :open="ledgerOpen"
+        class="border-border rounded-lg border"
+        @toggle="ledgerOpen = ($event.target as HTMLDetailsElement).open"
+      >
         <summary class="cursor-pointer p-4 text-sm font-medium">Contribution & transfer ledger</summary>
         <div class="max-h-80 overflow-auto border-t">
           <table class="w-full text-left text-xs">
@@ -1196,7 +1368,9 @@ const inputClass =
                 <th class="p-3">Account / destination</th>
                 <th class="p-3">Type</th>
                 <th class="p-3 text-right">Amount</th>
+                <th class="p-3">Source / verification</th>
                 <th class="p-3">Description</th>
+                <th class="p-3" />
               </tr>
             </thead>
             <tbody>
@@ -1206,11 +1380,33 @@ const inputClass =
                   {{ accountById(flow.accountId)?.name
                   }}<span v-if="flow.toAccountId"> → {{ accountById(flow.toAccountId)?.name }}</span>
                 </td>
-                <td class="p-3">{{ flow.type }}{{ flow.opening ? ' · opening basis' : '' }}</td>
+                <td class="p-3">
+                  {{ flow.type }}{{ flow.opening ? ' · opening basis' : '' }}
+                  <span
+                    v-if="flow.contributionKind && flow.contributionKind !== 'unspecified'"
+                    class="text-muted-foreground mt-1 block"
+                    >{{ flow.contributionKind === 'employer' ? 'Employer / match' : 'Employee' }}</span
+                  >
+                </td>
                 <td class="p-3 text-right whitespace-nowrap tabular-nums">
                   {{ money(flow.amount, accountById(flow.accountId)?.currencyCode) }}
                 </td>
+                <td class="p-3">
+                  {{ valuationSourceLabel(flow.source ?? 'manual') }}
+                  <span class="text-muted-foreground mt-1 block">{{
+                    flow.verified === false ? 'Needs verification' : 'Verified record'
+                  }}</span>
+                </td>
                 <td class="p-3">{{ flow.description }}</td>
+                <td class="p-3">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    :aria-label="`Correct principal record ${flow.date}`"
+                    @click="recordCashFlow(flow)"
+                    >Correct</Button
+                  >
+                </td>
               </tr>
             </tbody>
           </table>
@@ -1258,6 +1454,19 @@ const inputClass =
               size="sm"
               @click="openDetails('category', detailAccounts[0]?.categoryId ?? '')"
               >Back to category</Button
+            >
+            <Button
+              v-if="detailScope === 'account' && detailAccounts[0]"
+              variant="outline"
+              size="sm"
+              @click="
+                recordBalance(
+                  detailAccounts[0].id,
+                  detailPoint?.date ?? today(),
+                  detailPoint?.balances[detailAccounts[0].id],
+                )
+              "
+              >Correct selected balance</Button
             >
             <label class="grid gap-1 text-sm"
               >Snapshot date<select
@@ -1338,7 +1547,7 @@ const inputClass =
                           ? 'text-muted-foreground'
                           : 'text-warning-text',
                       ]"
-                      >Missing</span
+                      >{{ detailPoint?.inactiveAccountIds?.includes(account.id) ? 'Not opened yet' : 'Missing' }}</span
                     >
                   </td>
                   <td class="p-3 whitespace-nowrap">
@@ -1349,11 +1558,13 @@ const inputClass =
                   </td>
                   <td class="text-muted-foreground p-3 text-xs">
                     {{
-                      (data.snapshots ?? []).find(
-                        (s) =>
-                          s.accountId === account.id &&
-                          s.date === (detailPoint?.valuationDates?.[account.id] ?? detailPoint?.date),
-                      )?.source ?? '—'
+                      valuationSourceLabel(
+                        (data.snapshots ?? []).find(
+                          (s) =>
+                            s.accountId === account.id &&
+                            s.date === (detailPoint?.valuationDates?.[account.id] ?? detailPoint?.date),
+                        )?.source,
+                      )
                     }}
                   </td>
                 </tr>

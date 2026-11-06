@@ -178,7 +178,7 @@ export interface CombinedBalanceHistoryEntity {
   vehiclesBalance: number;
   loansBalance: number;
   totalBalance: number;
-  historySource?: 'imported';
+  historySource?: 'imported' | 'manual';
   complete?: boolean;
 }
 
