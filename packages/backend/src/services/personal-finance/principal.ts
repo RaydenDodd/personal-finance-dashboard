@@ -283,7 +283,7 @@ export async function importPrincipalRecords(
           transaction,
         );
       };
-      if (!record.verified) {
+      if (!record.verified && !(record.evidence?.ownerAccepted === true && record.evidence?.estimated === true)) {
         await conflict('Unverified contribution evidence');
         continue;
       }
