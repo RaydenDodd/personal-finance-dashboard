@@ -36,7 +36,7 @@ import { useCurrenciesStore } from '@/stores';
 import * as d3 from 'd3';
 import { useResizeObserver } from '@vueuse/core';
 import { storeToRefs } from 'pinia';
-import { reactive, ref, watch } from 'vue';
+import { onBeforeUnmount, reactive, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 
 import {
@@ -785,6 +785,19 @@ const renderChart = () => {
   });
 };
 
-useResizeObserver(containerRef, renderChart);
-watch([() => props.flow, locale, currentTheme, baseCurrency], renderChart, { deep: true });
+// Rendering changes the SVG/container height. Only width changes need a resize
+// redraw, and DOM writes must happen outside the ResizeObserver delivery cycle.
+let renderFrame = 0;
+let observedWidth = -1;
+const scheduleRender = () => {
+  cancelAnimationFrame(renderFrame);
+  renderFrame = requestAnimationFrame(renderChart);
+};
+useResizeObserver(containerRef, ([entry]) => {
+  if (!entry || entry.contentRect.width === observedWidth) return;
+  observedWidth = entry.contentRect.width;
+  scheduleRender();
+});
+watch([() => props.flow, locale, currentTheme, baseCurrency], scheduleRender, { deep: true, flush: 'post' });
+onBeforeUnmount(() => cancelAnimationFrame(renderFrame));
 </script>
