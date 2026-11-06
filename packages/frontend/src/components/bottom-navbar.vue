@@ -1,7 +1,8 @@
 <template>
   <div
     ref="navbarRef"
-    class="bg-background border-border sticky right-0 bottom-0 left-0 z-40 shrink-0 border-t pt-1 pb-[max(0.25rem,env(safe-area-inset-bottom))]"
+    class="finance-bottom-bar bg-background border-border fixed inset-x-0 bottom-0 z-40 border-t pt-1 pb-[max(0.25rem,env(safe-area-inset-bottom))]"
+    data-testid="mobile-bottom-bar"
   >
     <nav aria-label="Primary navigation" class="mobile-bottom-navigation grid grid-cols-5 gap-0.5 px-1">
       <RouterLink

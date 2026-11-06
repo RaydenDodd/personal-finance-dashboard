@@ -23,6 +23,7 @@ import { VUE_QUERY_CACHE_KEYS } from '@/common/const';
 import { Button } from '@/components/lib/ui/button';
 import { Callout } from '@/components/lib/ui/callout';
 import { Card } from '@/components/lib/ui/card';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/lib/ui/popover';
 import { Dialog, DialogScrollContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/lib/ui/dialog';
 import { ROUTES_NAMES } from '@/routes/constants';
 import {
@@ -65,6 +66,7 @@ const chart = ref('total');
 const categoryFilter = ref('all');
 const categoryDisplay = ref<'stacked' | 'overlay'>('stacked');
 const showTotalComparison = ref(false);
+const chartOptionsOpen = ref(false);
 const toolPanel = ref<HTMLElement | null>(null);
 const filteredAccounts = computed(() =>
   (data.value?.accounts ?? []).filter((a) => categoryFilter.value === 'all' || a.categoryId === categoryFilter.value),
@@ -832,53 +834,77 @@ const inputClass =
         >{{ allMissing.map((a) => a.name).join(', ') }}. Missing balances are never treated as zero.</Callout
       >
       <Card class="p-4 sm:p-5">
-        <div class="mb-5 flex flex-wrap items-center justify-between gap-3">
-          <div class="flex flex-wrap items-center gap-2">
-            <ChartLineIcon class="text-muted-foreground size-4" /><label class="sr-only" for="finance-chart"
-              >Chart</label
-            ><select id="finance-chart" v-model="chart" :class="[inputClass, 'w-auto']">
-              <option v-for="option in chartOptions" :key="option[0]" :value="option[0]">
-                {{ option[1] }}
-              </option></select
-            ><select
+        <div class="mb-4 space-y-4" data-testid="finance-chart-controls">
+          <div class="flex items-center justify-between gap-3">
+            <h2 class="flex items-center gap-2 text-base font-semibold">
+              <ChartLineIcon class="text-muted-foreground size-4" />Balance history
+            </h2>
+            <Popover v-model:open="chartOptionsOpen">
+              <PopoverTrigger as-child>
+                <Button variant="ghost" size="icon" aria-label="Chart options" title="Chart options">
+                  <Settings2Icon class="size-4" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="end" class="w-[min(20rem,calc(100vw-2rem))] space-y-4">
+                <p class="text-sm font-semibold">Chart options</p>
+                <label class="grid gap-2 text-sm" for="finance-category"
+                  >Category filter
+                  <select
+                    id="finance-category"
+                    v-model="categoryFilter"
+                    :class="inputClass"
+                    aria-label="Category filter"
+                  >
+                    <option value="all">All Categories</option>
+                    <option v-for="category in data.categories" :key="category.id" :value="category.id">
+                      {{ category.name }}
+                    </option>
+                  </select>
+                </label>
+                <label v-if="chart === 'categories'" class="grid gap-2 text-sm"
+                  >Category display
+                  <select v-model="categoryDisplay" :class="inputClass" aria-label="Category display">
+                    <option value="stacked">Stacked categories</option>
+                    <option value="overlay">Overlaid categories</option>
+                  </select>
+                </label>
+                <label
+                  v-if="chart === 'categories' && categoryDisplay === 'overlay'"
+                  class="flex min-h-11 items-center gap-2 text-sm"
+                >
+                  <input v-model="showTotalComparison" type="checkbox" />Show Total Net Worth
+                </label>
+                <label class="grid gap-2 text-sm"
+                  >Interval
+                  <select v-model="granularity" :class="inputClass" aria-label="Chart granularity">
+                    <option value="monthly">Monthly</option>
+                    <option value="daily">Daily</option>
+                  </select>
+                </label>
+                <Button variant="outline" class="w-full" @click="chartOptionsOpen = false">Done</Button>
+              </PopoverContent>
+            </Popover>
+          </div>
+          <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+            <label class="sr-only" for="finance-chart">Chart</label>
+            <select id="finance-chart" v-model="chart" :class="[inputClass, 'sm:max-w-72']">
+              <option v-for="option in chartOptions" :key="option[0]" :value="option[0]">{{ option[1] }}</option>
+            </select>
+            <select
               v-if="accountIsRequired"
               v-model="selectedAccount"
-              :class="[inputClass, 'max-w-64']"
+              :class="[inputClass, 'sm:max-w-64']"
               aria-label="Chart account"
             >
               <option v-for="account in filteredAccounts" :key="account.id" :value="account.id">
                 {{ account.name }}
               </option>
             </select>
-          </div>
-          <div class="flex flex-wrap items-center gap-2">
-            <label class="sr-only" for="finance-category">Category filter</label
-            ><select
-              id="finance-category"
-              v-model="categoryFilter"
-              :class="[inputClass, 'w-auto']"
-              aria-label="Category filter"
+            <div
+              class="bg-muted grid w-full grid-cols-6 rounded-lg p-1 sm:ml-auto sm:w-auto"
+              role="group"
+              aria-label="Chart date range"
             >
-              <option value="all">All Categories</option>
-              <option v-for="category in data.categories" :key="category.id" :value="category.id">
-                {{ category.name }}
-              </option>
-            </select>
-            <select
-              v-if="chart === 'categories'"
-              v-model="categoryDisplay"
-              :class="[inputClass, 'w-auto']"
-              aria-label="Category display"
-            >
-              <option value="stacked">Stacked categories</option>
-              <option value="overlay">Overlaid categories</option>
-            </select>
-            <label
-              v-if="chart === 'categories' && categoryDisplay === 'overlay'"
-              class="flex min-h-11 items-center gap-2 text-xs"
-              ><input v-model="showTotalComparison" type="checkbox" />Show Total Net Worth</label
-            >
-            <div class="bg-muted flex flex-wrap rounded-md p-1">
               <button
                 v-for="option in [
                   ['1', '1M'],
@@ -891,8 +917,8 @@ const inputClass =
                 :key="option[0]"
                 type="button"
                 :class="[
-                  'rounded px-2.5 py-1.5 text-xs',
-                  period === option[0] ? 'bg-background shadow-sm' : 'text-muted-foreground',
+                  'min-h-11 min-w-0 rounded-md px-2 text-xs sm:min-h-9 sm:min-w-10',
+                  period === option[0] ? 'bg-background font-medium shadow-sm' : 'text-muted-foreground',
                 ]"
                 :aria-pressed="period === option[0]"
                 @click="period = option[0]!"
@@ -900,10 +926,6 @@ const inputClass =
                 {{ option[1] }}
               </button>
             </div>
-            <select v-model="granularity" :class="[inputClass, 'w-auto']" aria-label="Chart granularity">
-              <option value="monthly">Monthly</option>
-              <option value="daily">Daily</option>
-            </select>
           </div>
         </div>
         <div :class="{ 'opacity-50': loading }">
@@ -920,15 +942,18 @@ const inputClass =
             @select="selectChartPoint"
           />
         </div>
-        <p class="text-muted-foreground mt-4 text-xs">
-          {{
-            chart === 'principal' || chart === 'gains'
-              ? 'Gain = current value − net contributed principal. This is a contribution-based gain, not annualized performance. No gain is shown without a known opening basis.'
-              : chart === 'allocation'
-                ? 'Allocation shows positive included asset balances. Liabilities remain included in total net worth.'
-                : 'Every recorded date is shown, including partial subtotals (open dots and dashed lines). Missing accounts stay missing. Lines join recorded observations; no balances are inferred between them. Drag horizontally to inspect values, scroll vertically, or tap a date for details.'
-          }}
-        </p>
+        <details class="text-muted-foreground mt-3 text-xs">
+          <summary class="cursor-pointer py-2">How to read this chart</summary>
+          <p class="mt-2 leading-relaxed">
+            {{
+              chart === 'principal' || chart === 'gains'
+                ? 'Gain = current value − net contributed principal. This is a contribution-based gain, not annualized performance. No gain is shown without a known opening basis.'
+                : chart === 'allocation'
+                  ? 'Allocation shows positive included asset balances. Liabilities remain included in total net worth.'
+                  : 'Every recorded date is shown, including partial subtotals (open dots and dashed lines). Missing accounts stay missing. Lines join recorded observations; no balances are inferred between them. Drag horizontally to inspect values, scroll vertically, or tap a date for details.'
+            }}
+          </p>
+        </details>
       </Card>
       <div class="flex flex-wrap items-center justify-between gap-3">
         <h2 class="text-lg font-semibold">Accounts & contribution basis</h2>

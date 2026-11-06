@@ -200,6 +200,11 @@ try {
     .toBeGreaterThan(0);
   await page.getByRole('button', { name: 'Latest balances', exact: true }).click();
   await page.locator('#finance-tools > summary').click();
+  await expect(page.getByTestId('finance-history-shading')).toHaveCount(1);
+  await page
+    .getByTestId('finance-chart-controls')
+    .locator('..')
+    .screenshot({ path: resolve(out, 'total-history-gradient.png') });
   const datedPointPositions = await page
     .locator('svg[aria-label="Financial history chart"] circle')
     .evaluateAll((points) => points.map((point) => Number(point.getAttribute('cx'))));
@@ -276,7 +281,10 @@ try {
     cumulative += dot.raw;
     expect(dot.plotted).toBe(cumulative);
   }
+  await page.getByRole('button', { name: 'Chart options', exact: true }).click();
   await page.getByLabel('Category display', { exact: true }).selectOption('overlay');
+  await page.getByRole('button', { name: 'Done', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Done', exact: true })).toBeHidden();
   areaBounds = await page.getByTestId('finance-chart-surface').boundingBox();
   await page.mouse.move(areaBounds.x + areaBounds.width - 1, areaBounds.y + areaBounds.height / 2);
   const overlayDots = await page.locator('circle[data-hover-series]').evaluateAll((nodes) =>
@@ -286,8 +294,14 @@ try {
     })),
   );
   for (const dot of overlayDots) expect(dot.plotted).toBe(dot.raw);
+  await page.getByRole('button', { name: 'Chart options', exact: true }).click();
   await page.getByLabel('Show Total Net Worth', { exact: true }).check();
+  await page.getByRole('button', { name: 'Done', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Done', exact: true })).toBeHidden();
+  await page.getByRole('button', { name: 'Chart options', exact: true }).click();
   await page.getByLabel('Category filter', { exact: true }).selectOption('savings');
+  await page.getByRole('button', { name: 'Done', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Done', exact: true })).toBeHidden();
   await expect(page.getByRole('button', { name: 'Toggle Savings', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Toggle Investments', exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Toggle Savings', exact: true }).click();
@@ -298,9 +312,15 @@ try {
   await page.getByRole('button', { name: 'Toggle Savings', exact: true }).click();
   await page.locator('#finance-chart').selectOption('account');
   await expect(page.getByLabel('Chart account', { exact: true }).locator('option')).toHaveCount(1);
+  await page.getByRole('button', { name: 'Chart options', exact: true }).click();
   await page.getByLabel('Category filter', { exact: true }).selectOption('all');
+  await page.getByRole('button', { name: 'Done', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Done', exact: true })).toBeHidden();
   await page.locator('#finance-chart').selectOption('categories');
+  await page.getByRole('button', { name: 'Chart options', exact: true }).click();
   await page.getByLabel('Category display', { exact: true }).selectOption('stacked');
+  await page.getByRole('button', { name: 'Done', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Done', exact: true })).toBeHidden();
   await page.screenshot({ path: resolve(out, 'desktop-dark.png'), fullPage: true });
   await page.getByRole('button', { name: 'Record balance', exact: true }).click();
   await page.getByLabel('Balance', { exact: true }).fill('2575.25');
@@ -383,7 +403,10 @@ try {
   await expect(page.getByLabel('Balance', { exact: true })).toHaveCSS('font-size', '16px');
   await page.getByRole('button', { name: 'Cancel', exact: true }).tap();
   await page.locator('#finance-chart').selectOption('categories');
+  await page.getByRole('button', { name: 'Chart options', exact: true }).click();
   await page.getByLabel('Category display', { exact: true }).selectOption('overlay');
+  await page.getByRole('button', { name: 'Done', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Done', exact: true })).toBeHidden();
   await page.getByTestId('finance-chart-surface').scrollIntoViewIfNeeded();
   await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
   const touchBounds = await page.getByTestId('finance-chart-surface').boundingBox();

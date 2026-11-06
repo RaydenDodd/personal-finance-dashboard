@@ -5,7 +5,7 @@ import { getChartColors } from '@/composable/charts/chart-colors';
 import { formatAxisCurrency } from '@/composable/charts/format-axis-currency';
 import { useResizeObserver } from '@vueuse/core';
 import * as d3 from 'd3';
-import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, reactive, ref, useId, watch } from 'vue';
 import { chartTooltipPosition, stackedUpperBoundary } from './chart-geometry';
 
 export interface ChartRow {
@@ -34,6 +34,7 @@ const container = ref<HTMLDivElement | null>(null);
 const svg = ref<SVGSVGElement | null>(null);
 const tooltipElement = ref<HTMLDivElement | null>(null);
 const width = ref(700);
+const gradientNamespace = useId().replace(/:/g, '');
 const hiddenSeries = ref<string[]>([]);
 const visibleSeries = computed(() => props.series.filter((s) => !hiddenSeries.value.includes(s.id)));
 function toggleSeries(id: string) {
@@ -180,7 +181,7 @@ function render() {
         .tickFormat(() => ''),
     )
     .call((g) => g.select('.domain').remove())
-    .call((g) => g.selectAll('line').attr('stroke', colors.grid).attr('stroke-opacity', 0.6));
+    .call((g) => g.selectAll('line').attr('stroke', colors.grid).attr('stroke-opacity', 0.4));
   plot
     .append('g')
     .call(
@@ -264,13 +265,30 @@ function render() {
         .attr('rx', 2);
     });
   } else {
-    visibleSeries.value.forEach((series) => {
+    const definitions = root.append('defs');
+    const curve = props.rows.some((row) => row.partial) ? d3.curveLinear : d3.curveMonotoneX;
+    visibleSeries.value.forEach((series, index) => {
       const available = (r: ChartRow) => r.values[series.id] !== null && r.values[series.id] !== undefined;
       const line = d3
         .line<ChartRow>()
+        .curve(curve)
         .x((r) => x(r.label))
         .y((r) => y(r.values[series.id]!));
-      if (props.mode === 'overlay' && !series.lineOnly)
+      if (!series.lineOnly) {
+        const gradientId = `finance-area-${gradientNamespace}-${index}`;
+        const gradient = definitions
+          .append('linearGradient')
+          .attr('id', gradientId)
+          .attr('x1', '0%')
+          .attr('y1', '0%')
+          .attr('x2', '0%')
+          .attr('y2', '100%');
+        gradient
+          .append('stop')
+          .attr('offset', '0%')
+          .attr('stop-color', series.color)
+          .attr('stop-opacity', props.mode === 'overlay' ? 0.22 : 0.35);
+        gradient.append('stop').attr('offset', '100%').attr('stop-color', series.color).attr('stop-opacity', 0);
         plot
           .append('path')
           .datum(props.rows)
@@ -278,13 +296,15 @@ function render() {
             'd',
             d3
               .area<ChartRow>()
+              .curve(curve)
               .defined(available)
               .x((r) => x(r.label))
               .y0(y(0))
               .y1((r) => y(r.values[series.id]!)),
           )
-          .attr('fill', series.color)
-          .attr('fill-opacity', 0.08);
+          .attr('data-testid', 'finance-history-shading')
+          .attr('fill', `url(#${gradientId})`);
+      }
       plot
         .append('path')
         .datum(props.rows)

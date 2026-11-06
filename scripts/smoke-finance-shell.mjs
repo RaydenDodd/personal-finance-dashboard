@@ -95,6 +95,12 @@ try {
     await page.setViewportSize(viewport);
     await expect(page.getByRole('button', { name: 'Open navigation', exact: true })).toBeVisible();
     await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await expect
+      .poll(async () => {
+        const bar = await page.getByTestId('mobile-bottom-bar').boundingBox();
+        return Math.abs(bar.y + bar.height - viewport.height);
+      })
+      .toBeLessThanOrEqual(1);
     const targets = await nav
       .locator('a,button')
       .evaluateAll((nodes) => nodes.map((n) => n.getBoundingClientRect().height));

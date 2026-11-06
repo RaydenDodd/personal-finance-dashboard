@@ -8,6 +8,7 @@
     <ScrollArea
       ref="scrollAreaRef"
       class="min-h-0 min-w-0 flex-1"
+      :style="isMobileView ? { paddingBottom: 'var(--bottom-navbar-height, 4.5rem)' } : undefined"
       scrollbar-class="z-40"
       :scroll-area-id="SCROLL_AREA_IDS.dashboard"
     >
