@@ -5,9 +5,9 @@ FROM nginx:1.27-alpine
 LABEL org.opencontainers.image.source="https://github.com/RaydenDodd/personal-finance-dashboard"
 
 RUN apk add --no-cache gettext \
-    && mkdir -p /app /landing /etc/nginx/includes /etc/nginx/templates \
+    && mkdir -p /app /landing /etc/nginx/includes /etc/nginx/http-includes /etc/nginx/templates \
     && touch /etc/nginx/nginx.conf \
-    && chown nginx:nginx /app /landing /etc/nginx/includes /etc/nginx/nginx.conf
+    && chown nginx:nginx /app /landing /etc/nginx/includes /etc/nginx/http-includes /etc/nginx/nginx.conf
 
 COPY --chown=nginx:nginx frontend-dist/ /app/
 COPY --chown=nginx:nginx nginx.conf /etc/nginx/templates/nginx.conf.template

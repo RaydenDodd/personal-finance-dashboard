@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily backup of private finance authentication state
+
+[Timer]
+OnCalendar=daily
+RandomizedDelaySec=20m
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+

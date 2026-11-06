@@ -1,0 +1,29 @@
+name: finance-gateway
+
+services:
+  authelia:
+    image: authelia/authelia:4.39.28@sha256:bd97cff4fcbf715b5ff1f9ae286afbe6033afce385302520b0368122d43a6f54
+    user: '${FINANCE_UID:-1000}:${FINANCE_GID:-1000}'
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    ports: ['127.0.0.1:9091:9091']
+    environment:
+      TZ: America/New_York
+      AUTHELIA_SESSION_SECRET_FILE: /secrets/session
+      AUTHELIA_STORAGE_ENCRYPTION_KEY_FILE: /secrets/storage
+      AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET_FILE: /secrets/identity
+    volumes:
+      - ../../private/finance-gateway/configuration.yml:/config/configuration.yml:ro
+      - ../../private/finance-gateway/users_database.yml:/config/users_database.yml:ro
+      - ../../private/finance-gateway/secrets:/secrets:ro
+      - ../../private/finance-gateway/state:/state
+      # Authelia writes its Docker healthcheck metadata at startup.
+      - ../../private/finance-gateway/healthcheck.env:/app/.healthcheck.env
+    tmpfs: ['/tmp:rw,noexec,nosuid,size=16m']
+    mem_limit: 256m
+    cpus: 0.75
+    logging:
+      driver: json-file
+      options: { max-size: '5m', max-file: '3' }

@@ -5,8 +5,8 @@ import { getChartColors } from '@/composable/charts/chart-colors';
 import { formatAxisCurrency } from '@/composable/charts/format-axis-currency';
 import { useResizeObserver } from '@vueuse/core';
 import * as d3 from 'd3';
-import { computed, onMounted, reactive, ref, watch } from 'vue';
-import { stackedUpperBoundary } from './chart-geometry';
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
+import { chartTooltipPosition, stackedUpperBoundary } from './chart-geometry';
 
 export interface ChartRow {
   label: string;
@@ -32,6 +32,7 @@ const props = withDefaults(
 const emit = defineEmits<{ select: [row: ChartRow] }>();
 const container = ref<HTMLDivElement | null>(null);
 const svg = ref<SVGSVGElement | null>(null);
+const tooltipElement = ref<HTMLDivElement | null>(null);
 const width = ref(700);
 const hiddenSeries = ref<string[]>([]);
 const visibleSeries = computed(() => props.series.filter((s) => !hiddenSeries.value.includes(s.id)));
@@ -54,12 +55,26 @@ const hasValues = computed(() =>
   props.rows.some((r) => visibleSeries.value.some((s) => r.values[s.id] !== null && r.values[s.id] !== undefined)),
 );
 
+function positionTooltip(anchor: { x: number; y: number }) {
+  const bounds = container.value?.getBoundingClientRect();
+  const measured = tooltipElement.value?.getBoundingClientRect();
+  if (!bounds || !measured) return;
+  Object.assign(
+    tooltip,
+    chartTooltipPosition({
+      anchor,
+      container: bounds,
+      tooltip: measured,
+      viewport: { width: innerWidth, height: innerHeight },
+    }),
+  );
+}
 function showTooltip(event: MouseEvent, row: ChartRow) {
   const bounds = container.value!.getBoundingClientRect();
-  tooltip.x = Math.max(4, Math.min(event.clientX - bounds.left + 12, width.value - 235));
-  tooltip.y = Math.max(4, event.clientY - bounds.top - 60);
+  const anchor = { x: event.clientX - bounds.left, y: event.clientY - bounds.top };
   tooltip.row = row;
   tooltip.visible = true;
+  void nextTick(() => positionTooltip(anchor));
 }
 function render() {
   if (!svg.value || !hasValues.value) return;
@@ -95,9 +110,12 @@ function render() {
       .attr('fill', (d) => d.data.color)
       .attr('stroke', colors.card)
       .attr('stroke-width', 3)
-      .on('mousemove', (event) => showTooltip(event, row))
+      .on('pointermove', (event) => showTooltip(event, row))
+      .on('pointerdown', (event) => showTooltip(event, row))
       .on('click', () => emit('select', row))
-      .on('mouseleave', () => (tooltip.visible = false));
+      .on('pointerleave', (event: PointerEvent) => {
+        if (event.pointerType !== 'touch') tooltip.visible = false;
+      });
     root
       .append('text')
       .attr('x', w / 2)
@@ -354,9 +372,8 @@ function render() {
     if (event) showTooltip(event, row);
     else {
       tooltip.row = row;
-      tooltip.x = Math.max(4, Math.min(x(row.label), width.value - 235));
-      tooltip.y = 10;
       tooltip.visible = true;
+      void nextTick(() => positionTooltip({ x: x(row.label) + margin.left, y: plotH / 2 }));
     }
   }
   function dismiss() {
@@ -371,6 +388,8 @@ function render() {
     );
   }
   const hitW = Math.max(8, plotW / Math.max(1, props.rows.length));
+  let touch: { id: number; x: number; y: number; mode: 'pending' | 'inspect' | 'scroll' } | null = null;
+  let suppressClickUntil = 0;
   plot
     .selectAll('.hit')
     .data(props.rows)
@@ -403,11 +422,45 @@ function render() {
     .attr('height', plotH)
     .attr('fill', 'transparent')
     .attr('cursor', 'crosshair')
+    .style('touch-action', 'pan-y pinch-zoom')
     .attr('aria-hidden', 'true')
-    .on('pointermove', (event: PointerEvent) => activate(nearest(event), event))
-    .on('pointerdown', (event: PointerEvent) => activate(nearest(event), event))
-    .on('pointerleave', dismiss)
-    .on('click', (event: PointerEvent) => emit('select', nearest(event)));
+    .on('pointermove', (event: PointerEvent) => {
+      if (event.pointerType !== 'touch') return activate(nearest(event), event);
+      if (!touch || touch.id !== event.pointerId) return;
+      const dx = Math.abs(event.clientX - touch.x),
+        dy = Math.abs(event.clientY - touch.y);
+      if (touch.mode === 'pending' && Math.max(dx, dy) > 8) {
+        touch.mode = dx > dy ? 'inspect' : 'scroll';
+        if (touch.mode === 'inspect') (event.currentTarget as SVGRectElement).setPointerCapture(event.pointerId);
+      }
+      if (touch.mode === 'scroll') return dismiss();
+      activate(nearest(event), event);
+    })
+    .on('pointerdown', (event: PointerEvent) => {
+      if (event.pointerType === 'touch')
+        touch = { id: event.pointerId, x: event.clientX, y: event.clientY, mode: 'pending' };
+      activate(nearest(event), event);
+    })
+    .on('pointerup', (event: PointerEvent) => {
+      if (event.pointerType !== 'touch' || !touch || touch.id !== event.pointerId) return;
+      suppressClickUntil = performance.now() + 700;
+      if (touch.mode !== 'scroll') {
+        activate(nearest(event), event);
+        // A tap opens dated details; a drag leaves the selected value visible.
+        if (touch.mode === 'pending') emit('select', nearest(event));
+      }
+      touch = null;
+    })
+    .on('pointercancel', () => {
+      touch = null;
+      dismiss();
+    })
+    .on('pointerleave', (event: PointerEvent) => {
+      if (event.pointerType !== 'touch') dismiss();
+    })
+    .on('click', (event: PointerEvent) => {
+      if (event.pointerType !== 'touch' && performance.now() >= suppressClickUntil) emit('select', nearest(event));
+    });
 }
 useResizeObserver(container, (entries) => {
   width.value = entries[0]!.contentRect.width;
@@ -437,14 +490,22 @@ onMounted(render);
     <div v-if="!hasValues" class="text-muted-foreground flex h-72 items-center justify-center text-sm">
       No recorded values in this period.
     </div>
-    <div v-else ref="container" class="relative h-75 w-full">
-      <svg ref="svg" class="h-full w-full" role="img" aria-label="Financial history chart" />
+    <div v-else ref="container" class="relative h-75 w-full" style="touch-action: pan-y pinch-zoom">
+      <svg
+        ref="svg"
+        class="h-full w-full"
+        style="touch-action: pan-y pinch-zoom"
+        role="img"
+        aria-label="Financial history chart"
+      />
       <div
         v-if="tooltip.visible && tooltip.row"
-        class="pointer-events-none absolute z-20 max-w-60"
-        :style="{ left: `${tooltip.x}px`, top: `${tooltip.y}px` }"
+        ref="tooltipElement"
+        data-testid="finance-chart-tooltip"
+        class="pointer-events-none absolute z-20"
+        :style="{ left: `${tooltip.x}px`, top: `${tooltip.y}px`, width: `${Math.min(288, width - 8)}px` }"
       >
-        <ChartTooltip>
+        <ChartTooltip class="w-full min-w-0">
           <ChartTooltipHeader>{{ tooltip.row.label }}</ChartTooltipHeader>
           <ChartTooltipRow
             v-for="series in visibleSeries"
@@ -474,7 +535,10 @@ onMounted(render);
         :aria-pressed="!hiddenSeries.includes(series.id)"
         :aria-label="`Toggle ${series.name}`"
         @click="toggleSeries(series.id)"
-        :class="['text-muted-foreground flex items-center gap-2', hiddenSeries.includes(series.id) && 'opacity-40']"
+        :class="[
+          'text-muted-foreground flex min-h-11 items-center gap-2 px-1 sm:min-h-0',
+          hiddenSeries.includes(series.id) && 'opacity-40',
+        ]"
       >
         <span class="size-2.5 rounded-sm" :style="{ backgroundColor: series.color }" />{{ series.name }}
       </button>

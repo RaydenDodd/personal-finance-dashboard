@@ -7,7 +7,7 @@ export const useLogout = () => {
   const { logout } = useAuthStore();
 
   const logOutHandler = async () => {
-    logout();
+    await logout();
     // Use replace instead of push to prevent going back to authenticated pages
     await router.replace({ name: ROUTES_NAMES.signIn });
   };

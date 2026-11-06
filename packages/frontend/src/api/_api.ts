@@ -6,6 +6,8 @@ import { useImportBatchDeleteJobStatus } from '@/composable/use-import-batch-del
 import { useRestoreJobStatus } from '@/composable/use-restore-job-status';
 import { getCurrentLocale, i18n } from '@/i18n';
 import * as errors from '@/js/errors';
+import { markConnectionUnavailable } from '@/lib/connection-status';
+import { handleFinanceGatewayResponse } from '@/lib/gateway-response';
 import { router } from '@/routes';
 import { ROUTES_NAMES } from '@/routes/constants';
 import { useAuthStore } from '@/stores';
@@ -28,6 +30,7 @@ interface ApiRequestConfig {
   };
   body?: BodyInit;
   credentials: RequestCredentials;
+  cache: RequestCache;
   signal?: AbortSignal;
 }
 
@@ -237,6 +240,7 @@ class ApiCaller {
       },
       // Include credentials (cookies) for session-based authentication
       credentials: 'include',
+      cache: 'no-store',
     };
 
     if (opts.rawBody !== undefined) {
@@ -264,6 +268,7 @@ class ApiCaller {
         throw e;
       }
       if (e instanceof TypeError && errors.FETCH_NETWORK_FAILURE_MESSAGES.some((msg) => e.message.includes(msg))) {
+        markConnectionUnavailable('server');
         // Self-hosters and local devs are the system operators – give them the
         // actionable hint (backend not running, CORS misconfigured). Cloud users
         // can't act on either and should see a generic message.
@@ -294,6 +299,13 @@ class ApiCaller {
       }
 
       throw new errors.UnexpectedError(message, {});
+    }
+
+    if (await handleFinanceGatewayResponse(result)) {
+      throw new errors.AuthError(
+        { code: API_ERROR_CODES.unauthorized, message: 'Secure gateway authentication required' },
+        url,
+      );
     }
 
     const sessionId = result.headers.get(SESSION_ID_HEADER_KEY);

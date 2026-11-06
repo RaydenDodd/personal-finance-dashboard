@@ -1,12 +1,17 @@
 <template>
-  <div class="bg-background flex h-dvh max-md:flex-col">
+  <div class="finance-app-shell bg-background flex h-dvh min-h-0" :class="{ 'flex-col': isMobileView }">
     <template v-if="!isMobileView">
       <SidebarRail v-if="isCollapsed" />
       <Sidebar v-else />
     </template>
 
-    <ScrollArea ref="scrollAreaRef" class="flex-1" scrollbar-class="z-40" :scroll-area-id="SCROLL_AREA_IDS.dashboard">
-      <ui-header class="bg-card dark:bg-background sticky top-0 z-30" />
+    <ScrollArea
+      ref="scrollAreaRef"
+      class="min-h-0 min-w-0 flex-1"
+      scrollbar-class="z-40"
+      :scroll-area-id="SCROLL_AREA_IDS.dashboard"
+    >
+      <ui-header class="finance-app-header bg-card dark:bg-background sticky top-0 z-30" />
 
       <template v-if="isAppInitialized">
         <div class="max-md:pb-4">

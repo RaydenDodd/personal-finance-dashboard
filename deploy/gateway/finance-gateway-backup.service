@@ -1,0 +1,9 @@
+[Unit]
+Description=Back up private finance authentication state
+
+[Service]
+Type=oneshot
+User=rayden
+UMask=0077
+ExecStart=/usr/bin/python3 /home/rayden/personal-finance-dashboard/deploy/gateway/backup.py
+

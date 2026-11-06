@@ -10,7 +10,7 @@
         <template v-if="isMobileView">
           <Sheet.Sheet :open="isMobileSheetOpen" @update:open="isMobileSheetOpen = $event">
             <Sheet.SheetTrigger as-child>
-              <Button size="icon-sm" variant="secondary" class="shrink-0">
+              <Button size="icon-sm" variant="secondary" class="shrink-0" aria-label="Open navigation">
                 <MenuIcon class="size-4" />
               </Button>
             </Sheet.SheetTrigger>
@@ -21,8 +21,10 @@
                 'data-[state=closed]:duration-200 data-[state=open]:duration-300',
               ]"
             >
-              <Sheet.SheetTitle></Sheet.SheetTitle>
-              <Sheet.SheetDescription></Sheet.SheetDescription>
+              <Sheet.SheetTitle class="sr-only">Navigation</Sheet.SheetTitle>
+              <Sheet.SheetDescription class="sr-only"
+                >All MoneyMatter pages and account settings.</Sheet.SheetDescription
+              >
 
               <Sidebar mobile-view />
             </Sheet.SheetContent>
@@ -33,7 +35,9 @@
           <ManageTransactionDialog v-model:open="isCreateTransactionDialogOpen" :prefill="createTransactionPrefill">
             <Button variant="default" size="sm" class="rounded-r-none">
               <PlusIcon class="size-4" />
-              {{ isMobileView ? $t('header.add') : $t('header.newTransaction') }}
+              <span class="max-[360px]:hidden">{{
+                isMobileView ? $t('header.add') : $t('header.newTransaction')
+              }}</span>
             </Button>
           </ManageTransactionDialog>
 

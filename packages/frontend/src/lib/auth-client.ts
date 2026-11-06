@@ -1,5 +1,6 @@
 import { API_HTTP, API_VER } from '@/api/api-base-url';
 import { getCurrentLocale } from '@/i18n';
+import { handleFinanceGatewayResponse } from '@/lib/gateway-response';
 import { passkeyClient } from '@better-auth/passkey/client';
 import { createAuthClient } from 'better-auth/vue';
 
@@ -29,6 +30,10 @@ export const authClient = createAuthClient({
   plugins: [passkeyClient()],
   // Send current locale to backend for locale-aware operations (e.g., category creation)
   fetchOptions: {
+    cache: 'no-store',
+    onResponse: async ({ response }) => {
+      if (await handleFinanceGatewayResponse(response)) throw new Error('Secure gateway authentication required');
+    },
     headers: {
       // Use a getter function to get the current locale at request time
       get 'Accept-Language'() {

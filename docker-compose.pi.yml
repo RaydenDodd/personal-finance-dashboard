@@ -53,6 +53,8 @@ services:
       LISTEN_PORT: '8080'
       API_HTTP: ''
       API_VER: /api/v1
+      FINANCE_PUBLIC_ORIGIN: ${FINANCE_PUBLIC_ORIGIN:-}
+      FINANCE_PUBLIC_PROXY_ADDRESSES: ${FINANCE_PUBLIC_PROXY_ADDRESSES:-}
       BACKEND_URL: http://backend:8081
       MCP_BASE_URL: ${MCP_BASE_URL:-http://localhost:8095}
     volumes:

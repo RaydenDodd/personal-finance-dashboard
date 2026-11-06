@@ -1,4 +1,5 @@
 import { isPerfDebugEnabled, perfDebugMiddleware } from '@common/lib/perf/perf-debug';
+import { configuredPublicAuthOrigin, publicAuthOriginMiddleware } from '@config/public-auth-origin';
 import { resolveTrustedProxies, TRUSTED_PROXIES_ENV } from '@config/trusted-proxies';
 import { logger } from '@js/utils/logger';
 import { setClientIpHeaderMiddleware } from '@middlewares/client-ip-header';
@@ -21,6 +22,8 @@ export function setupMiddleware(app: Express) {
   // `req.ip` keys the per-IP rate limits and the address stored on auth sessions. Trusting private ranges
   // only (the default) means the first public address from the right wins, which a client cannot forge.
   app.set('trust proxy', resolveTrustedProxies({ raw: process.env[TRUSTED_PROXIES_ENV] }));
+
+  app.use(publicAuthOriginMiddleware(configuredPublicAuthOrigin(process.env.FINANCE_PUBLIC_ORIGIN)));
 
   app.use(requestIdMiddleware);
 

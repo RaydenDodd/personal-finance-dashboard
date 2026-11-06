@@ -1,11 +1,11 @@
 import '@/styles/global.css';
-import './registerServiceWorker';
 
 import { installChunkReloadHandler } from '@/common/utils/chunk-reload-handler';
 import { identifyCurrentTheme } from '@/common/utils/color-theme';
-import { patchMetaViewportMaxScaleForiOS } from '@/common/utils/meta-viewport-max-scale';
+import { installVisualViewportSizing } from '@/common/utils/visual-viewport';
 import { getDateFnsLocale } from '@/composable/use-date-locale';
 import { i18n, initializeLocale, loadChunks } from '@/i18n';
+import { installForegroundSessionCheck } from '@/lib/foreground-session';
 import { initPostHog, trackPageviews } from '@/lib/posthog';
 import { queryClient } from '@/lib/query-client';
 import { stashResetPasswordToken } from '@/lib/reset-password-token';
@@ -19,10 +19,12 @@ import { setDefaultOptions } from 'date-fns';
 import { createApp, watchEffect } from 'vue';
 
 import App from './app.vue';
+import { preparePrivateClientStorage } from './registerServiceWorker';
 
 stashResetPasswordToken();
 identifyCurrentTheme();
-patchMetaViewportMaxScaleForiOS();
+installVisualViewportSizing();
+installForegroundSessionCheck();
 if (!import.meta.env.DEV) {
   installChunkReloadHandler({ router });
 }
@@ -37,6 +39,7 @@ const initialLocale = initializeLocale();
 // Load common chunk for the initial locale (if not English, English is preloaded)
 // The route guard will load page-specific chunks on navigation
 const initI18n = async () => {
+  await preparePrivateClientStorage();
   if (initialLocale !== 'en') {
     // For non-English locales, load the common chunk
     await loadChunks({ locale: initialLocale, chunks: ['common'] });

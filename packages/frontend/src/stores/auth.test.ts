@@ -123,4 +123,19 @@ describe('useAuthStore logout', () => {
     expect(resetQueryCaches).toHaveBeenCalled();
     expect(assign).not.toHaveBeenCalled();
   });
+
+  it('clears app state before ending the public MFA session while leaving private logout unchanged', async () => {
+    vi.stubGlobal('location', {
+      origin: 'https://raydenfinance.duckdns.org',
+      href: 'https://raydenfinance.duckdns.org/personal-finance',
+      assign,
+    });
+    vi.mocked(signOut).mockResolvedValue({ data: { success: true }, error: null });
+    await useAuthStore().logout();
+    expect(assign).toHaveBeenCalledWith('https://raydenfinance.duckdns.org/authelia/logout');
+    expect(vi.mocked(resetQueryCaches).mock.invocationCallOrder[0]).toBeLessThan(assign.mock.invocationCallOrder[0]!);
+    expect(vi.mocked(resetAllDefinedStores).mock.invocationCallOrder[0]).toBeLessThan(
+      assign.mock.invocationCallOrder[0]!,
+    );
+  });
 });

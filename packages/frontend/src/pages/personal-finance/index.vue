@@ -47,11 +47,13 @@ import { recordedCategoryBalance, recordedNetWorth } from './history-display';
 import { accountManagementLabel, recordedPrincipal, valuationSourceLabel } from './balance-display';
 import SheetsSyncPanel from './sheets-sync-panel.vue';
 import PrincipalReviewPanel from './principal-review-panel.vue';
+import AccountSummaryCard from './account-summary-card.vue';
 
 const queryClient = useQueryClient();
 const route = useRoute();
 const data = ref<FinanceDashboard | null>(null);
 const loading = ref(true);
+const connectionError = ref(false);
 const busy = ref(false);
 const error = ref('');
 const notice = ref('');
@@ -70,7 +72,10 @@ const filteredAccounts = computed(() =>
 async function openPanel(panel: NonNullable<typeof activePanel.value>) {
   activePanel.value = panel;
   await nextTick();
-  toolPanel.value?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  toolPanel.value?.scrollIntoView({
+    behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+    block: 'start',
+  });
   toolPanel.value?.querySelector<HTMLElement>('input,select,button')?.focus({ preventScroll: true });
 }
 watch(categoryFilter, () => {
@@ -82,7 +87,10 @@ const activePanel = ref<'accounts' | 'snapshot' | 'cashflow' | 'import' | 'categ
 watch(activePanel, async (value) => {
   if (value) {
     await nextTick();
-    toolPanel.value?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    toolPanel.value?.scrollIntoView({
+      behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+      block: 'start',
+    });
   }
 });
 const nativeAccounts = ref<Array<{ id: string; name: string; currencyCode: string }>>([]);
@@ -441,13 +449,20 @@ async function reload() {
     });
     if (id !== requestId) return;
     data.value = result;
+    connectionError.value = false;
     categoryDraft.value = result.categories.map((c) => ({ ...c }));
     if (!selectedAccount.value || !result.accounts.some((a) => a.id === selectedAccount.value))
       selectedAccount.value = result.accounts[0]?.id ?? '';
     if (!snapshotForm.accountId) snapshotForm.accountId = result.accounts[0]?.id ?? '';
     if (!flowForm.accountId) flowForm.accountId = result.accounts[0]?.id ?? '';
-  } catch (e) {
-    if (id === requestId) error.value = e instanceof Error ? e.message : 'Could not load your dashboard.';
+  } catch {
+    if (id === requestId) {
+      data.value = null;
+      detailOpen.value = false;
+      connectionError.value = true;
+      error.value =
+        'Your financial data could not be refreshed. Reconnect or sign in again, then retry. Saved records are safe on the server.';
+    }
   } finally {
     if (id === requestId) loading.value = false;
   }
@@ -577,7 +592,12 @@ function reviewPrincipalLedger() {
     return;
   }
   ledgerOpen.value = true;
-  void nextTick(() => ledgerElement.value?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+  void nextTick(() =>
+    ledgerElement.value?.scrollIntoView({
+      behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+      block: 'start',
+    }),
+  );
 }
 function recordBalance(accountId: string, date = today(), balance?: number | null) {
   Object.assign(snapshotForm, {
@@ -588,7 +608,12 @@ function recordBalance(accountId: string, date = today(), balance?: number | nul
   });
   detailOpen.value = false;
   activePanel.value = 'snapshot';
-  void nextTick(() => snapshotFormElement.value?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+  void nextTick(() =>
+    snapshotFormElement.value?.scrollIntoView({
+      behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+      block: 'start',
+    }),
+  );
 }
 async function selectFile(event: Event) {
   const file = (event.target as HTMLInputElement).files?.[0];
@@ -691,7 +716,7 @@ onBeforeUnmount(() => {
   if (refreshTimer) clearInterval(refreshTimer);
 });
 const inputClass =
-  'border-input bg-background focus-visible:ring-ring h-10 w-full rounded-md border px-3 text-sm focus-visible:outline-none focus-visible:ring-2';
+  'border-input bg-background focus-visible:ring-ring h-11 w-full min-w-0 rounded-md border px-3 text-base focus-visible:outline-none focus-visible:ring-2 sm:h-10 sm:text-sm';
 </script>
 
 <template>
@@ -710,13 +735,24 @@ const inputClass =
         <Button variant="outline" size="sm" :disabled="loading || busy" @click="reload"
           ><RefreshCwIcon class="size-4" />Refresh</Button
         >
-        <Button variant="outline" size="sm" @click="openPanel('import')"
+        <Button variant="outline" size="sm" :disabled="loading || busy || !data" @click="openPanel('import')"
           ><UploadIcon class="size-4" />Import history</Button
         >
-        <Button size="sm" @click="openPanel('snapshot')"><PlusIcon class="size-4" />Record balance</Button>
+        <Button size="sm" :disabled="loading || busy || !data" @click="openPanel('snapshot')"
+          ><PlusIcon class="size-4" />Record balance</Button
+        >
       </div>
     </div>
-    <Callout v-if="error" variant="destructive" title="Couldn't complete this action" role="alert">{{ error }}</Callout>
+    <Callout
+      v-if="error"
+      variant="destructive"
+      :title="connectionError ? 'Unable to refresh your finances' : `Couldn't complete this action`"
+      role="alert"
+      >{{ error }}</Callout
+    >
+    <Button v-if="connectionError" variant="outline" :disabled="loading" @click="reload">{{
+      loading ? 'Connecting…' : 'Retry connection'
+    }}</Button>
     <Callout v-if="notice" variant="success" title="Saved" role="status">{{ notice }}</Callout>
     <div v-if="loading && !data" class="grid grid-cols-2 gap-4 lg:grid-cols-4">
       <div v-for="i in 4" :key="i" class="bg-muted h-28 animate-pulse rounded-lg" />
@@ -839,7 +875,7 @@ const inputClass =
             </select>
             <label
               v-if="chart === 'categories' && categoryDisplay === 'overlay'"
-              class="flex items-center gap-2 text-xs"
+              class="flex min-h-11 items-center gap-2 text-xs"
               ><input v-model="showTotalComparison" type="checkbox" />Show Total Net Worth</label
             >
             <div class="bg-muted flex flex-wrap rounded-md p-1">
@@ -890,7 +926,7 @@ const inputClass =
               ? 'Gain = current value − net contributed principal. This is a contribution-based gain, not annualized performance. No gain is shown without a known opening basis.'
               : chart === 'allocation'
                 ? 'Allocation shows positive included asset balances. Liabilities remain included in total net worth.'
-                : 'Every recorded date is shown, including partial subtotals (open dots and dashed lines). Missing accounts stay missing. Lines join recorded observations; no balances are inferred between them. Move across the chart or click a date for details.'
+                : 'Every recorded date is shown, including partial subtotals (open dots and dashed lines). Missing accounts stay missing. Lines join recorded observations; no balances are inferred between them. Drag horizontally to inspect values, scroll vertically, or tap a date for details.'
           }}
         </p>
       </Card>
@@ -913,7 +949,20 @@ const inputClass =
         </p>
         <Button class="mt-5" @click="editAccount()">Add your first account</Button></Card
       >
-      <Card v-else class="overflow-hidden"
+      <div v-else class="grid gap-3 lg:hidden" aria-label="Account balances" data-testid="finance-mobile-accounts">
+        <AccountSummaryCard
+          v-for="account in filteredAccounts"
+          :key="account.id"
+          :account="account"
+          :category="categoryById(account.categoryId)"
+          :native-accounts="nativeAccounts"
+          @history="openDetails('account', account.id)"
+          @record="recordBalance(account.id)"
+          @edit="editAccount(account)"
+        />
+        <p v-if="!filteredAccounts.length" class="text-muted-foreground py-4 text-sm">No accounts in this category.</p>
+      </div>
+      <Card v-if="data.accounts.length" class="hidden overflow-hidden lg:block" data-testid="finance-desktop-accounts"
         ><div class="overflow-x-auto">
           <table class="w-full text-left text-sm">
             <thead class="bg-muted/50 text-muted-foreground text-xs">
@@ -1232,7 +1281,7 @@ const inputClass =
                 }[activePanel]
               }}
             </h2>
-            <Button variant="ghost" size="sm" @click="activePanel = null">Close</Button>
+            <Button variant="ghost" size="sm" :disabled="busy" @click="activePanel = null">Close</Button>
           </div>
           <form
             v-if="activePanel === 'accounts'"
@@ -1307,6 +1356,7 @@ const inputClass =
             </p>
             <div class="sm:col-span-2 lg:col-span-3">
               <Button type="submit" :disabled="busy">{{ busy ? 'Saving…' : 'Save account' }}</Button>
+              <Button type="button" variant="ghost" :disabled="busy" @click="activePanel = null">Cancel</Button>
             </div>
           </form>
           <form
@@ -1336,6 +1386,7 @@ const inputClass =
                 v-model="snapshotForm.balance"
                 :class="inputClass"
                 type="number"
+                inputmode="decimal"
                 step="0.01"
                 required
                 placeholder="0.00"
@@ -1349,7 +1400,8 @@ const inputClass =
             </p>
             <div class="sm:col-span-2 lg:col-span-4">
               <Button type="submit" :disabled="busy || !data.accounts.length">Save verified balance</Button
-              ><Button type="button" variant="link" @click="editAccount()">Add an account</Button>
+              ><Button type="button" variant="ghost" :disabled="busy" @click="activePanel = null">Cancel</Button
+              ><Button type="button" variant="link" :disabled="busy" @click="editAccount()">Add an account</Button>
             </div>
           </form>
           <form
@@ -1383,6 +1435,7 @@ const inputClass =
                 v-model="flowForm.amount"
                 :class="inputClass"
                 type="number"
+                inputmode="decimal"
                 step="0.01"
                 :min="flowForm.type === 'adjustment' ? undefined : '0.01'"
                 required
@@ -1447,6 +1500,7 @@ const inputClass =
               <Button type="submit" :disabled="busy || !data.accounts.length">{{
                 flowCorrectionId ? 'Save principal correction' : 'Save cash flow'
               }}</Button>
+              <Button type="button" variant="ghost" :disabled="busy" @click="activePanel = null">Cancel</Button>
             </div>
           </form>
           <div v-else-if="activePanel === 'categories'" class="space-y-4">
@@ -1676,7 +1730,44 @@ const inputClass =
             :currency="detailCurrency"
             @select="(row) => (detailDate = row.label)"
           />
-          <div class="overflow-x-auto rounded-md border">
+          <div class="grid gap-2 sm:hidden" aria-label="Selected snapshot accounts">
+            <div v-for="account in detailAccounts" :key="account.id" class="rounded-md border p-3">
+              <button
+                type="button"
+                class="focus-visible:ring-ring grid min-h-11 w-full grid-cols-[minmax(0,1fr)_auto] items-start gap-3 rounded text-left focus-visible:ring-2"
+                :aria-label="`View ${account.name} history from details`"
+                @click="openDetails('account', account.id)"
+              >
+                <span class="min-w-0 font-medium break-words">{{ account.name }}</span>
+                <span class="text-right font-medium tabular-nums">{{
+                  money(detailPoint?.balances[account.id], account.currencyCode)
+                }}</span>
+              </button>
+              <p class="text-muted-foreground text-xs">
+                {{
+                  detailPoint?.valuationDates?.[account.id] ??
+                  (typeof detailPoint?.balances[account.id] === 'number' ? detailPoint.date : 'No recorded valuation')
+                }}
+                ·
+                {{
+                  valuationSourceLabel(
+                    (data.snapshots ?? []).find(
+                      (s) =>
+                        s.accountId === account.id &&
+                        s.date === (detailPoint?.valuationDates?.[account.id] ?? detailPoint?.date),
+                    )?.source,
+                  )
+                }}
+              </p>
+              <p
+                v-if="detailPoint?.balances[account.id] === null || detailPoint?.balances[account.id] === undefined"
+                class="text-muted-foreground mt-1 text-xs"
+              >
+                {{ detailPoint?.inactiveAccountIds?.includes(account.id) ? 'Not opened yet' : 'Balance missing' }}
+              </p>
+            </div>
+          </div>
+          <div class="hidden overflow-x-auto rounded-md border sm:block">
             <table class="w-full text-left text-sm" aria-label="Snapshot account balances">
               <thead class="bg-muted/50 text-muted-foreground text-xs">
                 <tr>

@@ -626,3 +626,78 @@ select:focus-visible,
   --ph-survey-rating-active-bg-color: var(--primary) !important;
   --ph-survey-rating-active-text-color: var(--primary-foreground) !important;
 }
+
+/* iPhone uses the existing MoneyMatter controls and palette. Keep desktop sizing intact. */
+@media (max-width: 767px), (pointer: coarse) and (max-width: 1000px) and (max-height: 500px) {
+  .finance-app-shell {
+    height: var(--app-visible-height, 100dvh);
+    padding-right: env(safe-area-inset-right);
+    padding-left: env(safe-area-inset-left);
+  }
+
+  .finance-app-header {
+    padding-top: env(safe-area-inset-top);
+  }
+
+  input:not([type='checkbox']):not([type='radio']),
+  select,
+  textarea {
+    font-size: max(1rem, 16px);
+    scroll-margin-block: 5rem;
+  }
+
+  input:not([type='checkbox']):not([type='radio']):not([type='range']),
+  select {
+    min-height: 44px;
+  }
+
+  [data-finance-dialog] {
+    top: calc(var(--app-visible-height, 100dvh) / 2);
+    max-height: calc(var(--app-visible-height, 100dvh) - 1rem - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    max-width: calc(100vw - 1rem - env(safe-area-inset-left) - env(safe-area-inset-right));
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .mobile-bottom-navigation a,
+  .mobile-bottom-navigation button {
+    touch-action: manipulation;
+  }
+}
+
+@media (max-width: 767px) and (pointer: coarse), (pointer: coarse) and (max-width: 1000px) and (max-height: 500px) {
+  button:not([role='checkbox']):not([role='radio']):not([role='switch']):not([role='slider']),
+  [role='tab'],
+  [role='combobox'],
+  [role='menuitem'] {
+    min-height: 44px;
+  }
+
+  button[data-size='icon'],
+  button[data-size='icon-sm'],
+  button:has(> svg:only-child) {
+    min-width: 44px;
+  }
+}
+
+@media (max-width: 360px) {
+  .finance-app-header > div {
+    padding-right: 8px;
+    padding-left: 8px;
+  }
+
+  .finance-app-header > div > div {
+    gap: 8px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

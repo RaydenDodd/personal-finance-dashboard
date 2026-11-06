@@ -1,17 +1,21 @@
 <template>
   <main class="bg-background">
-    <router-view />
+    <div v-if="!isConnectionBlocked" :class="{ invisible: checkingForegroundSession }" :inert="checkingForegroundSession" :aria-hidden="checkingForegroundSession || undefined">
+      <router-view />
 
-    <base-currency-change-overlay />
-    <restore-in-progress-overlay />
-    <import-batch-delete-overlay />
-    <notification-toaster />
-    <update-available-banner />
+      <base-currency-change-overlay />
+      <restore-in-progress-overlay />
+      <import-batch-delete-overlay />
+      <notification-toaster />
+      <update-available-banner />
+    </div>
+    <connection-status-overlay />
   </main>
 </template>
 
 <script setup lang="ts">
 import BaseCurrencyChangeOverlay from '@/components/common/base-currency-change-overlay.vue';
+import ConnectionStatusOverlay from '@/components/common/connection-status-overlay.vue';
 import ImportBatchDeleteOverlay from '@/components/common/import-batch-delete-overlay.vue';
 import RestoreInProgressOverlay from '@/components/common/restore-in-progress-overlay.vue';
 import UpdateAvailableBanner from '@/components/common/update-available-banner.vue';
@@ -19,6 +23,7 @@ import NotificationToaster from '@/components/notification-center/notification-t
 import { useExchangeRates } from '@/composable/data-queries/currencies';
 import { useUserSettings } from '@/composable/data-queries/user-settings';
 import { useAiCategorizationEvents } from '@/composable/use-ai-categorization-events';
+import { checkingForegroundSession, isConnectionBlocked } from '@/lib/connection-status';
 import { useSSE } from '@/composable/use-sse';
 import { currencyDisplayPreference } from '@/js/helpers';
 import { ROUTES_NAMES } from '@/routes';

@@ -1,0 +1,60 @@
+---
+# Nonsecret template; initialization copies it to the ignored private directory.
+server:
+  address: tcp://0.0.0.0:9091/authelia
+log:
+  level: warn
+theme: auto
+default_2fa_method: totp
+totp:
+  issuer: My Finances
+  period: 30
+  skew: 1
+webauthn:
+  display_name: My Finances
+  selection_criteria:
+    user_verification: required
+authentication_backend:
+  password_reset:
+    disable: true
+  file:
+    path: /config/users_database.yml
+    watch: true
+    password:
+      algorithm: argon2
+      argon2:
+        variant: argon2id
+        iterations: 3
+        memory: 65536
+        parallelism: 2
+password_policy:
+  standard:
+    enabled: true
+    min_length: 16
+access_control:
+  default_policy: deny
+  rules:
+    - domain: raydenfinance.duckdns.org
+      subject: user:rayden
+      policy: two_factor
+session:
+  name: __Secure-my_finances_gateway
+  same_site: lax
+  inactivity: 30m
+  expiration: 12h
+  remember_me: -1
+  cookies:
+    - domain: raydenfinance.duckdns.org
+      authelia_url: https://raydenfinance.duckdns.org/authelia
+      default_redirection_url: https://raydenfinance.duckdns.org/personal-finance
+regulation:
+  max_retries: 5
+  find_time: 2m
+  ban_time: 15m
+  modes: [user, ip]
+storage:
+  local:
+    path: /state/db.sqlite3
+notifier:
+  filesystem:
+    filename: /state/notifications.txt

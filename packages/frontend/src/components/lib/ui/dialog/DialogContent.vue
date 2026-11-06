@@ -46,6 +46,7 @@ const describedByAttrs = useDescribedByAttrs();
       ]"
     />
     <DialogContent
+      data-finance-dialog
       v-bind="{ ...forwarded, ...describedByAttrs }"
       :class="
         cn(

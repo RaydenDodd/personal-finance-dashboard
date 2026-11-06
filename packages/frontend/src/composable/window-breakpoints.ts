@@ -1,4 +1,4 @@
-import { useDebounce, useWindowSize } from '@vueuse/core';
+import { useDebounce, useMediaQuery, useWindowSize } from '@vueuse/core';
 import { ComputedRef, computed } from 'vue';
 
 interface Options {
@@ -23,15 +23,21 @@ export function useWindowBreakpoints(
   const { wait = 300, direction = 'down' } = options;
   const { width: windowWidth } = useWindowSize();
   const debouncedWindowWidth = useDebounce(windowWidth, wait);
+  // A rotated iPhone is wider than the desktop breakpoint but still needs the
+  // touch layout. Other desktop/tablet breakpoint comparisons stay unchanged.
+  const isTouchLandscape = useMediaQuery('(pointer: coarse) and (max-width: 1000px) and (max-height: 500px)');
+  const matches = (breakpoint: Breakpoint) =>
+    direction === 'down'
+      ? debouncedWindowWidth.value <= breakpoint ||
+        (breakpoint === CUSTOM_BREAKPOINTS.uiMobile && isTouchLandscape.value)
+      : debouncedWindowWidth.value >= breakpoint;
 
   const isExpectedSize = computed(() => {
     if (Array.isArray(size)) {
-      return size.map((breakpoint) =>
-        direction === 'down' ? debouncedWindowWidth.value <= breakpoint : debouncedWindowWidth.value >= breakpoint,
-      );
+      return size.map(matches);
     }
 
-    return direction === 'down' ? debouncedWindowWidth.value <= size : debouncedWindowWidth.value >= size;
+    return matches(size);
   });
 
   return isExpectedSize;

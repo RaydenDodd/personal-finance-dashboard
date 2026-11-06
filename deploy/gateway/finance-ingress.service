@@ -1,0 +1,14 @@
+[Unit]
+Description=Restrict direct Docker ingress to private finance services
+After=docker.service network-online.target
+Requires=docker.service
+PartOf=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/sh /home/rayden/personal-finance-dashboard/deploy/gateway/guard-ports.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target docker.service
+

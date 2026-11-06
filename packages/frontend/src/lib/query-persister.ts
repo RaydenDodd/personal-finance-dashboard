@@ -1,3 +1,4 @@
+import { config } from '@/common/config';
 import {
   type AsyncStorage,
   type PersistedQuery,
@@ -64,22 +65,25 @@ const idbStorage: AsyncStorage<string> | undefined = persistedQueryStore
     }
   : undefined;
 
-const persister = idbStorage
-  ? experimental_createQueryPersister<string>({
-      storage: idbStorage,
-      maxAge: MAX_PERSISTED_AGE_MS,
-      prefix: PERSISTER_KEY_PREFIX,
-      // Bust every persisted entry when a new build ships: __APP_VERSION__ is the
-      // commit hash baked into the bundle, so a deploy invalidates stale shapes.
-      buster: __APP_VERSION__,
-      serialize: (persistedQuery) =>
-        isEmptyQueryData(persistedQuery.state.data) ? SKIP_PERSIST_SENTINEL : JSON.stringify(persistedQuery),
-      deserialize: (cached) => JSON.parse(cached) as PersistedQuery,
-      // `persistedQueryFn` below drives the confirming refetch on a delay instead;
-      // the built-in `refetchOnRestore` fires it instantly, defeating that deferral.
-      refetchOnRestore: false,
-    })
-  : undefined;
+// Self-hosted finance responses stay in memory only. The legacy store remains
+// addressable above solely so startup/logout can erase earlier persisted data.
+const persister =
+  idbStorage && !config.isSelfHost
+    ? experimental_createQueryPersister<string>({
+        storage: idbStorage,
+        maxAge: MAX_PERSISTED_AGE_MS,
+        prefix: PERSISTER_KEY_PREFIX,
+        // Bust every persisted entry when a new build ships: __APP_VERSION__ is the
+        // commit hash baked into the bundle, so a deploy invalidates stale shapes.
+        buster: __APP_VERSION__,
+        serialize: (persistedQuery) =>
+          isEmptyQueryData(persistedQuery.state.data) ? SKIP_PERSIST_SENTINEL : JSON.stringify(persistedQuery),
+        deserialize: (cached) => JSON.parse(cached) as PersistedQuery,
+        // `persistedQueryFn` below drives the confirming refetch on a delay instead;
+        // the built-in `refetchOnRestore` fires it instantly, defeating that deferral.
+        refetchOnRestore: false,
+      })
+    : undefined;
 
 // Mirrors `useIdleEnabled` minus the Vue scope – runs from a query's fetch path,
 // which has no component lifetime to tie a handle to.

@@ -116,12 +116,17 @@ const dashboard = {
 const errors = [];
 const nativeAccounts = [0, 1, 2].map((i) => ({ id: `native-${i}`, name: `Synthetic bank ${i}`, currencyCode: 'USD' }));
 const calls = [];
+let dashboardUnavailable = false;
 const browser = await chromium.launch({
   channel: process.env.PLAYWRIGHT_CHANNEL || (process.platform === 'win32' ? 'msedge' : undefined),
   headless: true,
 });
 try {
-  const context = await browser.newContext({ viewport: { width: 1440, height: 1080 }, colorScheme: 'dark' });
+  const context = await browser.newContext({
+    viewport: { width: 1440, height: 1080 },
+    colorScheme: 'dark',
+    hasTouch: true,
+  });
   await context.route('**/*', async (route) => {
     const req = route.request(),
       url = new URL(req.url());
@@ -132,6 +137,12 @@ try {
         body = req.postDataJSON();
       } catch {}
       calls.push({ method: req.method(), path, query: Object.fromEntries(url.searchParams), body });
+      if (path === '/personal-finance/dashboard' && dashboardUnavailable)
+        return route.fulfill({
+          status: 503,
+          contentType: 'application/json',
+          body: JSON.stringify({ message: 'Synthetic connection failure' }),
+        });
       let response;
       if (path === '/personal-finance/dashboard') response = dashboard;
       else if (path === '/personal-finance/principal') response = { entries: [], rules: [], reviews: [] };
@@ -173,7 +184,9 @@ try {
   page.on('pageerror', (error) => errors.push(error.message));
   await page.goto(`${previewOrigin}/__qa-personal-finance.html`);
   await expect(page.getByRole('heading', { name: 'Personal net worth', exact: true })).toBeVisible({ timeout: 60000 });
-  await expect(page.getByText('Synthetic Spendable Money', { exact: true }).first()).toBeVisible({ timeout: 30000 });
+  await expect(
+    page.getByTestId('finance-desktop-accounts').getByText('Synthetic Spendable Money', { exact: true }),
+  ).toBeVisible({ timeout: 30000 });
   await page.locator('#finance-tools > summary').click();
   await expect(page.getByLabel('Balance sources', { exact: true })).toHaveValue('all');
   await page.getByLabel('Balance sources', { exact: true }).selectOption('personal');
@@ -251,15 +264,13 @@ try {
   await page.locator('#finance-chart').selectOption('categories');
   let areaBounds = await page.getByTestId('finance-chart-surface').boundingBox();
   await page.mouse.move(areaBounds.x + areaBounds.width - 1, areaBounds.y + areaBounds.height / 2);
-  const stackedDots = await page
-    .locator('circle[data-hover-series]')
-    .evaluateAll((nodes) =>
-      nodes.map((node) => ({
-        id: node.getAttribute('data-hover-series'),
-        raw: Number(node.getAttribute('data-hover-value')),
-        plotted: Number(node.getAttribute('data-plotted-value')),
-      })),
-    );
+  const stackedDots = await page.locator('circle[data-hover-series]').evaluateAll((nodes) =>
+    nodes.map((node) => ({
+      id: node.getAttribute('data-hover-series'),
+      raw: Number(node.getAttribute('data-hover-value')),
+      plotted: Number(node.getAttribute('data-plotted-value')),
+    })),
+  );
   let cumulative = 0;
   for (const dot of stackedDots) {
     cumulative += dot.raw;
@@ -268,14 +279,12 @@ try {
   await page.getByLabel('Category display', { exact: true }).selectOption('overlay');
   areaBounds = await page.getByTestId('finance-chart-surface').boundingBox();
   await page.mouse.move(areaBounds.x + areaBounds.width - 1, areaBounds.y + areaBounds.height / 2);
-  const overlayDots = await page
-    .locator('circle[data-hover-series]')
-    .evaluateAll((nodes) =>
-      nodes.map((node) => ({
-        raw: Number(node.getAttribute('data-hover-value')),
-        plotted: Number(node.getAttribute('data-plotted-value')),
-      })),
-    );
+  const overlayDots = await page.locator('circle[data-hover-series]').evaluateAll((nodes) =>
+    nodes.map((node) => ({
+      raw: Number(node.getAttribute('data-hover-value')),
+      plotted: Number(node.getAttribute('data-plotted-value')),
+    })),
+  );
   for (const dot of overlayDots) expect(dot.plotted).toBe(dot.raw);
   await page.getByLabel('Show Total Net Worth', { exact: true }).check();
   await page.getByLabel('Category filter', { exact: true }).selectOption('savings');
@@ -356,12 +365,100 @@ try {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.locator('#finance-chart').selectOption('total');
   await expect(page.locator('svg[aria-label="Financial history chart"]')).toBeVisible();
+  await expect(page.getByTestId('finance-mobile-accounts')).toBeVisible();
+  await expect(page.getByTestId('finance-desktop-accounts')).toBeHidden();
+  await expect(page.getByTestId('finance-account-card')).toHaveCount(4);
+  const savingsCard = page.getByTestId('finance-account-card').filter({ hasText: 'Synthetic Savings' });
+  await expect(savingsCard).toContainText('$5,000.00');
+  await expect(savingsCard).toContainText('2026-11-01');
+  await expect(savingsCard).toContainText('$4,500.00');
+  await savingsCard.getByRole('button', { name: 'View Synthetic Savings balance history', exact: true }).tap();
+  await expect(
+    page.getByRole('dialog').getByRole('heading', { name: 'Synthetic Savings history', exact: true }),
+  ).toBeVisible();
+  await expect(page.getByRole('dialog').getByLabel('Selected snapshot accounts')).toBeVisible();
+  await page.getByRole('dialog').getByRole('button', { name: 'Close', exact: true }).tap();
+  await savingsCard.getByRole('button', { name: 'Record Synthetic Savings balance', exact: true }).tap();
+  await expect(page.getByLabel('Balance', { exact: true })).toHaveAttribute('inputmode', 'decimal');
+  await expect(page.getByLabel('Balance', { exact: true })).toHaveCSS('font-size', '16px');
+  await page.getByRole('button', { name: 'Cancel', exact: true }).tap();
+  await page.locator('#finance-chart').selectOption('categories');
+  await page.getByLabel('Category display', { exact: true }).selectOption('overlay');
+  await page.getByTestId('finance-chart-surface').scrollIntoViewIfNeeded();
+  await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))));
+  const touchBounds = await page.getByTestId('finance-chart-surface').boundingBox();
+  const touchSession = await context.newCDPSession(page);
+  const touchY = touchBounds.y + touchBounds.height / 2;
+  await touchSession.send('Input.dispatchTouchEvent', {
+    type: 'touchStart',
+    touchPoints: [{ x: touchBounds.x + 8, y: touchY }],
+  });
+  for (const fraction of [0.15, 0.4, 0.75, 0.98])
+    await touchSession.send('Input.dispatchTouchEvent', {
+      type: 'touchMove',
+      touchPoints: [{ x: touchBounds.x + touchBounds.width * fraction, y: touchY }],
+    });
+  await touchSession.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.getByTestId('finance-chart-tooltip')).toBeVisible();
+  await expect(page.getByTestId('finance-chart-tooltip')).toContainText('2026-11-01');
+  const tooltipBounds = await page.getByTestId('finance-chart-tooltip').boundingBox();
+  expect(tooltipBounds.x).toBeGreaterThanOrEqual(0);
+  expect(tooltipBounds.x + tooltipBounds.width).toBeLessThanOrEqual(390);
+  expect(tooltipBounds.y).toBeGreaterThanOrEqual(0);
+  expect(tooltipBounds.y + tooltipBounds.height).toBeLessThanOrEqual(844);
+  const overlayTouchDots = await page.locator('circle[data-hover-series]').evaluateAll((dots) =>
+    dots.map((dot) => ({
+      raw: Number(dot.getAttribute('data-hover-value')),
+      plotted: Number(dot.getAttribute('data-plotted-value')),
+    })),
+  );
+  expect(overlayTouchDots.every((dot) => dot.raw === dot.plotted)).toBe(true);
+  const beforeScroll = await page.evaluate(() => scrollY);
+  await touchSession.send('Input.dispatchTouchEvent', {
+    type: 'touchStart',
+    touchPoints: [{ x: touchBounds.x + touchBounds.width / 2, y: touchY }],
+  });
+  for (const dy of [16, 38, 65, 95])
+    await touchSession.send('Input.dispatchTouchEvent', {
+      type: 'touchMove',
+      touchPoints: [{ x: touchBounds.x + touchBounds.width / 2, y: touchY - dy }],
+    });
+  await touchSession.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await expect.poll(() => page.evaluate(() => scrollY)).toBeGreaterThan(beforeScroll);
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await page
+    .getByTestId('finance-chart-surface')
+    .tap({ position: { x: touchBounds.width - 2, y: touchBounds.height / 2 } });
+  await expect(page.getByRole('dialog').getByLabel('Detail snapshot date')).toHaveValue('2026-11-01');
+  await page.getByRole('dialog').getByRole('button', { name: 'Close', exact: true }).tap();
+  await touchSession.detach();
+  for (const viewport of [
+    { width: 320, height: 568 },
+    { width: 844, height: 390 },
+    { width: 390, height: 844 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await expect(page.getByTestId('finance-mobile-accounts')).toBeVisible();
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  }
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth);
   expect(overflow).toBe(false);
   await page.screenshot({ path: resolve(out, 'mobile-dark.png'), fullPage: true });
   await page.evaluate(() => window.__qaTheme('light'));
   await page.setViewportSize({ width: 1440, height: 1080 });
   await page.screenshot({ path: resolve(out, 'desktop-light.png'), fullPage: true });
+  dashboardUnavailable = true;
+  await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Retry connection', exact: true })).toBeVisible();
+  await expect(page.getByTestId('finance-account-card')).toHaveCount(0);
+  await expect(page.locator('svg[aria-label="Financial history chart"]')).toHaveCount(0);
+  await expect(
+    page.getByRole('button', { name: 'View total net worth balances and history', exact: true }),
+  ).toHaveCount(0);
+  dashboardUnavailable = false;
+  await page.getByRole('button', { name: 'Retry connection', exact: true }).click();
+  await expect(page.getByTestId('finance-desktop-accounts')).toBeVisible();
   expect(errors).toEqual([]);
   await writeFile(
     resolve(out, 'result.json'),
@@ -378,6 +475,12 @@ try {
         previewAndCommit: true,
         categoryAdd: true,
         mobileOverflow: false,
+        mobileAccountCards: true,
+        touchDragAndTap: true,
+        verticalChartScroll: true,
+        phoneTooltipBounds: true,
+        decimalKeyboard: true,
+        hidesStaleDataAfterFailure: true,
         browserErrors: errors,
         apiCalls: calls.length,
       },

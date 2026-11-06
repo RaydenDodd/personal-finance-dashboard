@@ -79,9 +79,9 @@ ENV DEFAULT_SENTRY_RELEASE=$VITE_SENTRY_RELEASE
 RUN apk add --no-cache gettext
 
 # Create app directories with proper permissions
-RUN mkdir -p /app /landing /etc/nginx/includes /etc/nginx/templates \
+RUN mkdir -p /app /landing /etc/nginx/includes /etc/nginx/http-includes /etc/nginx/templates \
     && touch /etc/nginx/nginx.conf \
-    && chown nginx:nginx /app /landing /etc/nginx/includes /etc/nginx/nginx.conf
+    && chown nginx:nginx /app /landing /etc/nginx/includes /etc/nginx/http-includes /etc/nginx/nginx.conf
 
 # Copy built assets
 COPY --from=build-stage --chown=nginx:nginx /app/packages/frontend/dist /app

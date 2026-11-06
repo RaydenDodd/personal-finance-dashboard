@@ -12,6 +12,8 @@ import {
   markDemoOrigin,
   markSignedInOnDevice,
 } from '@/lib/demo-origin';
+import { financeGatewayLogoutUrl } from '@/lib/finance-gateway';
+import { beginFinanceGatewayLogout } from '@/lib/gateway-response';
 import { setLastLoginMethod, setPendingLoginMethod } from '@/lib/last-login-method';
 import { identifyUser, resetUser, startSessionRecording, trackAnalyticsEvent } from '@/lib/posthog';
 import { collectPersistedQueryGarbage, resetQueryCaches } from '@/lib/query-persister';
@@ -277,6 +279,8 @@ export const useAuthStore = defineStore('auth', () => {
   /** `demoEndReason` only matters for a demo account; it labels the demo funnel's terminal event. */
   const logout = async ({ demoEndReason = 'logout' }: { demoEndReason?: DemoEndReason } = {}) => {
     const wasDemo = userStore.isDemo;
+    const gatewayLogoutUrl = financeGatewayLogoutUrl(window.location.origin);
+    if (gatewayLogoutUrl) beginFinanceGatewayLogout();
 
     // Set only when the server ends the IdP session too (OIDC_PROVIDER_LOGOUT=true).
     let providerLogoutUrl: string | undefined;
@@ -312,10 +316,11 @@ export const useAuthStore = defineStore('auth', () => {
     // persisted store so no financial data survives logout on a shared device.
     await resetQueryCaches(queryClient);
     resetAllDefinedStores();
+    window.sessionStorage?.removeItem('session-id');
 
     // The IdP ends its session and sends the user back to the sign-in page.
-    if (providerLogoutUrl) {
-      window.location.assign(providerLogoutUrl);
+    if (gatewayLogoutUrl || providerLogoutUrl) {
+      window.location.assign(gatewayLogoutUrl || providerLogoutUrl!);
     }
   };
 

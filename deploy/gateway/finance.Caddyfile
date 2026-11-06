@@ -1,0 +1,91 @@
+# Imported by the existing host Caddyfile. No second proxy or public app port.
+(finance_authorize) {
+  forward_auth 127.0.0.1:9091 {
+    uri /api/authz/forward-auth
+    header_up -Authorization
+    header_up -Remote-User
+    header_up -Remote-Groups
+    header_up -Remote-Email
+  }
+}
+
+raydenfinance.duckdns.org {
+  header {
+    Strict-Transport-Security "max-age=31536000"
+    X-Content-Type-Options nosniff
+    Referrer-Policy same-origin
+    X-Frame-Options DENY
+    -Server
+  }
+
+  # These endpoints stay private even after successful gateway authentication.
+  @private_only path_regexp private_only (?i)(^|/)mcp(/|\.|$)|^/(\.well-known|\.git|private|backups?|config|credentials?)(/|\.|$)|(^|/)\.env(/|\.|$)|^/(authorize|token|register|health|metrics|debug)(/|$)|^/api/v1/auth/(oauth2|\.well-known)(/|$)|\.(dump|sql|sqlite3?|bak|pem|key)$
+  handle @private_only {
+    header Cache-Control no-store
+    respond 404
+  }
+
+  # The authorization endpoint is reached directly on loopback by Caddy only.
+  @internal_authz path /authelia/api/authz/* /authelia/api/health /authelia/metrics /authelia/debug/*
+  handle @internal_authz {
+    respond 404
+  }
+
+  handle /authelia {
+    redir /authelia/ 308
+  }
+  # Explicit app logout must also remove app cookies if gateway MFA expired.
+  @finance_logout path /authelia/logout /authelia/api/logout
+  handle @finance_logout {
+    header {
+      Cache-Control no-store
+      +Set-Cookie "__Secure-bt_auth_public.session_token=; Path=/; Max-Age=0; Secure; HttpOnly; SameSite=Lax"
+      +Set-Cookie "__Secure-bt_auth_public.session_data=; Path=/; Max-Age=0; Secure; HttpOnly; SameSite=Lax"
+      +Set-Cookie "__Secure-bt_auth_public.account_data=; Path=/; Max-Age=0; Secure; HttpOnly; SameSite=Lax"
+      +Set-Cookie "__Secure-bt_auth_public.dont_remember=; Path=/; Max-Age=0; Secure; HttpOnly; SameSite=Lax"
+      +Set-Cookie "__Secure-bt_auth_public.state=; Path=/; Max-Age=0; Secure; HttpOnly; SameSite=Lax"
+      +Set-Cookie "__Secure-bt_auth_public.session_data.0=; Path=/; Max-Age=0; Secure; HttpOnly; SameSite=Lax"
+      +Set-Cookie "__Secure-bt_auth_public.session_data.1=; Path=/; Max-Age=0; Secure; HttpOnly; SameSite=Lax"
+      +Set-Cookie "__Secure-bt_auth_public.session_data.2=; Path=/; Max-Age=0; Secure; HttpOnly; SameSite=Lax"
+      +Set-Cookie "__Secure-bt_auth_public.session_data.3=; Path=/; Max-Age=0; Secure; HttpOnly; SameSite=Lax"
+      +Set-Cookie "__Secure-bt_auth_public.session_data.4=; Path=/; Max-Age=0; Secure; HttpOnly; SameSite=Lax"
+      +Set-Cookie "__Secure-bt_auth_public.session_data.5=; Path=/; Max-Age=0; Secure; HttpOnly; SameSite=Lax"
+      +Set-Cookie "__Secure-bt_auth_public.session_data.6=; Path=/; Max-Age=0; Secure; HttpOnly; SameSite=Lax"
+      +Set-Cookie "__Secure-bt_auth_public.session_data.7=; Path=/; Max-Age=0; Secure; HttpOnly; SameSite=Lax"
+      +Set-Cookie "__Secure-bt_auth_public.account_data.0=; Path=/; Max-Age=0; Secure; HttpOnly; SameSite=Lax"
+      +Set-Cookie "__Secure-bt_auth_public.account_data.1=; Path=/; Max-Age=0; Secure; HttpOnly; SameSite=Lax"
+      +Set-Cookie "__Secure-bt_auth_public.account_data.2=; Path=/; Max-Age=0; Secure; HttpOnly; SameSite=Lax"
+      +Set-Cookie "__Secure-bt_auth_public.account_data.3=; Path=/; Max-Age=0; Secure; HttpOnly; SameSite=Lax"
+      +Set-Cookie "__Secure-bt_auth_public.account_data.4=; Path=/; Max-Age=0; Secure; HttpOnly; SameSite=Lax"
+      +Set-Cookie "__Secure-bt_auth_public.account_data.5=; Path=/; Max-Age=0; Secure; HttpOnly; SameSite=Lax"
+      +Set-Cookie "__Secure-bt_auth_public.account_data.6=; Path=/; Max-Age=0; Secure; HttpOnly; SameSite=Lax"
+      +Set-Cookie "__Secure-bt_auth_public.account_data.7=; Path=/; Max-Age=0; Secure; HttpOnly; SameSite=Lax"
+    }
+    reverse_proxy 127.0.0.1:9091
+  }
+
+  handle /authelia/* {
+    header Cache-Control no-store
+    reverse_proxy 127.0.0.1:9091 {
+      header_up -Remote-User
+      header_up -Remote-Groups
+      header_up -Remote-Email
+    }
+  }
+
+  # Harmless enrollment/authentication probe, never a financial response.
+  handle /__finance_security_check {
+    route {
+      import finance_authorize
+      header Cache-Control no-store
+      respond 204
+    }
+  }
+
+  # Initially a 503 maintenance response. A separate activation step requires
+  # owner enrollment evidence and passing security checks before replacing it.
+  handle {
+    import /etc/caddy/finance/access.caddy
+  }
+}
+

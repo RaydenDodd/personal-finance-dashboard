@@ -103,6 +103,50 @@ envsubst '$CSP_EXTRA_CONNECT $CSP_EXTRA_FORM_ACTION $CSP_EXTRA_ANALYTICS $LANDIN
   < /etc/nginx/templates/nginx.conf.template \
   > /etc/nginx/nginx.conf
 
+# Caddy is the public HTTPS edge. Only its explicitly listed socket peers may
+# supply the protocol/client IP for this exact public hostname. Other callers'
+# forwarded headers are discarded, including direct LAN requests.
+mkdir -p /etc/nginx/http-includes
+public_origin=${FINANCE_PUBLIC_ORIGIN:-}
+public_origin=${public_origin%/}
+public_host=''
+trusted_peers=''
+if [ -n "$public_origin" ]; then
+  case "$public_origin" in https://*) public_host=${public_origin#https://} ;; *) echo 'FINANCE_PUBLIC_ORIGIN requires HTTPS' >&2; exit 1 ;; esac
+  case "$public_host" in ''|*[!A-Za-z0-9.:-]*) echo 'FINANCE_PUBLIC_ORIGIN must contain only an HTTPS hostname and optional port' >&2; exit 1 ;; esac
+  [ -n "${FINANCE_PUBLIC_PROXY_ADDRESSES:-}" ] || { echo 'FINANCE_PUBLIC_PROXY_ADDRESSES must explicitly name the host reverse proxy' >&2; exit 1; }
+  for address in $(printf '%s' "$FINANCE_PUBLIC_PROXY_ADDRESSES" | tr ',' ' '); do
+    case "$address" in ''|*[!0-9A-Fa-f.:]*) echo 'Public proxy addresses must be individual IP addresses' >&2; exit 1 ;; esac
+    trusted_peers="$trusted_peers $address 1;"
+  done
+fi
+cat > /etc/nginx/http-includes/finance-origin.conf <<EOF
+geo \$bt_caddy_peer {
+  default 0;
+  $trusted_peers
+}
+map "\$bt_caddy_peer:\$http_host:\$http_x_forwarded_proto" \$bt_public_request {
+  default 0;
+  "1:$public_host:https" 1;
+}
+map \$bt_public_request \$bt_forwarded_proto {
+  default \$scheme;
+  1 https;
+}
+map \$bt_public_request \$bt_forwarded_for {
+  default \$remote_addr;
+  1 \$http_x_forwarded_for;
+}
+map \$bt_public_request \$bt_auth_origin {
+  default "";
+  1 "$public_origin";
+}
+map \$http_upgrade \$bt_connection_upgrade {
+  default upgrade;
+  "" "";
+}
+EOF
+
 # --- Conditional /api reverse proxy -----------------------------------------
 
 # Only emit the proxy block when BACKEND_URL is set (same-origin deployments).
@@ -114,12 +158,16 @@ if [ -n "${BACKEND_URL-}" ]; then
 location /api/ {
   proxy_pass ${BACKEND_URL};
   proxy_http_version 1.1;
-  proxy_set_header Host \$host;
+  proxy_set_header Host \$http_host;
   proxy_set_header X-Real-IP \$remote_addr;
-  proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-  proxy_set_header X-Forwarded-Proto \$scheme;
-  proxy_set_header X-Forwarded-Host \$host;
-  proxy_set_header Connection "";
+  proxy_set_header X-Forwarded-For \$bt_forwarded_for;
+  proxy_set_header X-Forwarded-Proto \$bt_forwarded_proto;
+  proxy_set_header X-Forwarded-Host \$http_host;
+  proxy_set_header X-Bt-Auth-Origin \$bt_auth_origin;
+  proxy_set_header Upgrade \$http_upgrade;
+  proxy_set_header Connection \$bt_connection_upgrade;
+  proxy_hide_header Cache-Control;
+  add_header Cache-Control "no-store" always;
   # Backend streams Server-Sent Events; buffering would stall them.
   proxy_buffering off;
   proxy_read_timeout 3600s;
@@ -148,10 +196,10 @@ if [ -n "${BACKEND_URL-}" ]; then
 location = /mcp {
   proxy_pass ${BACKEND_URL};
   proxy_http_version 1.1;
-  proxy_set_header Host \$host;
+  proxy_set_header Host \$http_host;
   proxy_set_header X-Real-IP \$remote_addr;
-  proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-  proxy_set_header X-Forwarded-Proto \$scheme;
+  proxy_set_header X-Forwarded-For \$bt_forwarded_for;
+  proxy_set_header X-Forwarded-Proto \$bt_forwarded_proto;
   proxy_set_header X-Forwarded-Host \$host;
   proxy_set_header Connection "";
   # MCP responses stream over SSE; buffering would stall them.
@@ -169,49 +217,49 @@ location = /mcp/ {
 # those with 307s to their real /api/v1/auth/oauth2/* paths.
 location = /authorize {
   proxy_pass ${BACKEND_URL};
-  proxy_set_header Host \$host;
-  proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-  proxy_set_header X-Forwarded-Proto \$scheme;
+  proxy_set_header Host \$http_host;
+  proxy_set_header X-Forwarded-For \$bt_forwarded_for;
+  proxy_set_header X-Forwarded-Proto \$bt_forwarded_proto;
 }
 location = /token {
   proxy_pass ${BACKEND_URL};
-  proxy_set_header Host \$host;
-  proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-  proxy_set_header X-Forwarded-Proto \$scheme;
+  proxy_set_header Host \$http_host;
+  proxy_set_header X-Forwarded-For \$bt_forwarded_for;
+  proxy_set_header X-Forwarded-Proto \$bt_forwarded_proto;
 }
 location = /register {
   proxy_pass ${BACKEND_URL};
-  proxy_set_header Host \$host;
-  proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-  proxy_set_header X-Forwarded-Proto \$scheme;
+  proxy_set_header Host \$http_host;
+  proxy_set_header X-Forwarded-For \$bt_forwarded_for;
+  proxy_set_header X-Forwarded-Proto \$bt_forwarded_proto;
 }
 
 location = /.well-known/oauth-authorization-server {
   proxy_pass ${BACKEND_URL};
-  proxy_set_header Host \$host;
-  proxy_set_header X-Forwarded-Proto \$scheme;
+  proxy_set_header Host \$http_host;
+  proxy_set_header X-Forwarded-Proto \$bt_forwarded_proto;
 }
 location = /.well-known/oauth-authorization-server/mcp {
   proxy_pass ${BACKEND_URL};
-  proxy_set_header Host \$host;
-  proxy_set_header X-Forwarded-Proto \$scheme;
+  proxy_set_header Host \$http_host;
+  proxy_set_header X-Forwarded-Proto \$bt_forwarded_proto;
 }
 # RFC 8414 3.1 path-aware form: the AS issuer carries the /api/v1/auth path,
 # so clients look here (well-known segment after the host, then issuer path).
 location = /.well-known/oauth-authorization-server/api/v1/auth {
   proxy_pass ${BACKEND_URL};
-  proxy_set_header Host \$host;
-  proxy_set_header X-Forwarded-Proto \$scheme;
+  proxy_set_header Host \$http_host;
+  proxy_set_header X-Forwarded-Proto \$bt_forwarded_proto;
 }
 location = /.well-known/oauth-protected-resource {
   proxy_pass ${BACKEND_URL};
-  proxy_set_header Host \$host;
-  proxy_set_header X-Forwarded-Proto \$scheme;
+  proxy_set_header Host \$http_host;
+  proxy_set_header X-Forwarded-Proto \$bt_forwarded_proto;
 }
 location = /.well-known/oauth-protected-resource/mcp {
   proxy_pass ${BACKEND_URL};
-  proxy_set_header Host \$host;
-  proxy_set_header X-Forwarded-Proto \$scheme;
+  proxy_set_header Host \$http_host;
+  proxy_set_header X-Forwarded-Proto \$bt_forwarded_proto;
 }
 EOF
 else
