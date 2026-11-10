@@ -1,5 +1,5 @@
 <template>
-  <WidgetWrapper :is-fetching="isWidgetDataFetching" class="min-h-80">
+  <WidgetWrapper :is-fetching="isWidgetDataFetching" class="min-h-80" data-testid="widget-balance-trend">
     <template #title>
       <div class="flex w-full items-center gap-4">
         <span>{{ $t('dashboard.widgets.balanceTrend.title') }}</span>
@@ -26,8 +26,7 @@
     </template>
     <template v-else>
       <p v-if="balanceHistory?.some((p) => p.historySource === 'imported')" class="text-muted-foreground mb-3 text-xs">
-        Imported historical snapshots at their recorded dates. Automated bank balances take over when the connection
-        starts.
+        {{ recordedHistoryCaption }}
       </p>
       <!-- Stats row - two columns with space between -->
       <div class="max-xs:px-2 mb-4 flex items-start justify-between gap-4">
@@ -66,7 +65,11 @@
             </span>
           </div>
           <div class="text-muted-foreground text-xs tracking-tight">
-            {{ $t('dashboard.widgets.balanceTrend.vsPreviousPeriod') }}
+            {{
+              recordedContext.baseline
+                ? $t('dashboard.widgets.balanceTrend.vsPreviousSnapshot')
+                : $t('dashboard.widgets.balanceTrend.vsPreviousPeriod')
+            }}
           </div>
         </div>
       </div>
@@ -190,7 +193,7 @@ import { SORT_DIRECTIONS } from '@bt/shared/types';
 import { useQuery } from '@tanstack/vue-query';
 import { useResizeObserver } from '@vueuse/core';
 import * as d3 from 'd3';
-import { differenceInDays, endOfDay, format, isSameMonth, min, startOfDay, subDays } from 'date-fns';
+import { endOfDay, format, isSameMonth, min, parseISO, startOfDay, subDays, subYears } from 'date-fns';
 import { ChartLineIcon } from '@lucide/vue';
 import { storeToRefs } from 'pinia';
 import type { Ref } from 'vue';
@@ -209,6 +212,11 @@ import LoadingState from './components/loading-state.vue';
 import SpikeTransactionsPanel from './components/spike-transactions-panel.vue';
 import WidgetWrapper from './components/widget-wrapper.vue';
 import { type NetWorthComponentBalances, type NetWorthIncludeSettings, composeNetWorth } from './net-worth-composition';
+import {
+  balanceTrendObservationTime,
+  previousBalanceTrendPeriod,
+  recordedBalanceTrendContext,
+} from './balance-trend-history';
 
 // Calculate it manually so chart will always have first and last ticks (dates)
 function generateDateSteps({
@@ -363,13 +371,11 @@ const { data: balanceHistory, isFetching: isBalanceHistoryFetching } = useQuery(
 // Fetch the previous period's balance to compare against
 // The previous period has the same duration and ends right before the current period starts
 const prevPeriod = computed(() => {
-  const durationInDays = differenceInDays(props.selectedPeriod.to, props.selectedPeriod.from) + 1;
-  const prevTo = subDays(props.selectedPeriod.from, 1); // Day before current period starts
-  const prevFrom = subDays(props.selectedPeriod.from, durationInDays);
+  const previous = previousBalanceTrendPeriod(props.selectedPeriod);
 
   return {
-    from: prevFrom,
-    to: min([prevTo, new Date()]),
+    from: previous.from,
+    to: min([previous.to, new Date()]),
   };
 });
 
@@ -380,7 +386,40 @@ const { data: prevPeriodBalance, isFetching: isPrevPeriodBalanceFetching } = use
   placeholderData: (prevData) => prevData,
 });
 
-const isWidgetDataFetching = computed(() => isBalanceHistoryFetching.value || isPrevPeriodBalanceFetching.value);
+const needsEarlierRecordedSnapshot = computed(
+  () =>
+    balanceHistory.value?.length === 1 &&
+    balanceHistory.value[0]?.historySource === 'imported' &&
+    !isPrevPeriodBalanceFetching.value &&
+    !prevPeriodBalance.value?.length,
+);
+const { data: earlierRecordedHistory, isFetching: isEarlierRecordedFetching } = useQuery({
+  queryKey: [...VUE_QUERY_CACHE_KEYS.widgetBalanceTrendPrev, 'recorded-context', periodQueryKey],
+  queryFn: () =>
+    loadCombinedBalanceTrendData({
+      from: subYears(props.selectedPeriod.from, 2),
+      to: subDays(props.selectedPeriod.from, 1),
+    }),
+  enabled: needsEarlierRecordedSnapshot,
+  staleTime: Infinity,
+});
+const recordedContext = computed(() =>
+  recordedBalanceTrendContext(balanceHistory.value ?? [], [
+    ...(prevPeriodBalance.value ?? []),
+    ...(earlierRecordedHistory.value ?? []),
+  ]),
+);
+const recordedHistoryCaption = computed(() =>
+  recordedContext.value.baseline
+    ? t('dashboard.widgets.balanceTrend.recordedRange', {
+        from: format(parseISO(recordedContext.value.baseline.date), 'MMM d, yyyy'),
+        to: format(parseISO(balanceHistory.value!.at(-1)!.date), 'MMM d, yyyy'),
+      })
+    : t('dashboard.widgets.balanceTrend.recordedOnly'),
+);
+const isWidgetDataFetching = computed(
+  () => isBalanceHistoryFetching.value || isPrevPeriodBalanceFetching.value || isEarlierRecordedFetching.value,
+);
 // Only show full loading state on initial load (when we have no data to display)
 const isInitialLoading = computed(() => isWidgetDataFetching.value && !balanceHistory.value);
 
@@ -570,7 +609,7 @@ const periodLabel = computed(() => {
 const chartData = computed(() => {
   if (!balanceHistory.value) return [];
 
-  return balanceHistory.value.map((point) => {
+  return recordedContext.value.points.map((point) => {
     const effectiveTotal = getEffectiveTotal(point);
 
     let value: number;
@@ -595,7 +634,8 @@ const chartData = computed(() => {
     }
 
     return {
-      date: startOfDay(new Date(point.date)).getTime(),
+      date: balanceTrendObservationTime(point.date),
+      historySource: point.historySource,
       value,
       accountsBalance: point.accountsBalance,
       portfoliosBalance: point.portfoliosBalance,
@@ -675,12 +715,16 @@ const projectionThroughDate = computed(() => formatPlannedDate({ time: projectio
 // unless a projection is drawn, whose dashed tail through the period end is itself the
 // latest data the axis has to fit.
 const chartXAxisEnd = computed(() => {
+  if (recordedContext.value.baseline) return parseISO(balanceHistory.value!.at(-1)!.date);
   if (!fitToLatestData.value || projection.value) return actualDataPeriod.value.to;
   return min([actualDataPeriod.value.to, new Date()]);
 });
 
 // Key for the chart component - changes when period changes to trigger CSS transition
-const chartKey = computed(() => `${actualDataPeriod.value.from.getTime()}-${chartXAxisEnd.value.getTime()}`);
+const chartXAxisStart = computed(() =>
+  recordedContext.value.baseline ? parseISO(recordedContext.value.baseline.date) : actualDataPeriod.value.from,
+);
+const chartKey = computed(() => `${chartXAxisStart.value.getTime()}-${chartXAxisEnd.value.getTime()}`);
 
 const isPortfolioMode = computed(() => selectedBalanceType.value.value === 'portfolios');
 
@@ -833,7 +877,7 @@ const renderChart = () => {
     top: 10,
     right: isMobile ? 30 : 40,
     bottom: 35,
-    left: isMobile ? 40 : 48,
+    left: isMobile ? 56 : 64,
   };
   const innerWidth = width - margin.left - margin.right;
   const innerHeight = height - margin.top - margin.bottom;
@@ -843,7 +887,7 @@ const renderChart = () => {
   // Calculate x-axis ticks - limit to 6-7 max
   const pixelsPerTick = isMobile ? 80 : 120;
   const ticksAmount = Math.min(7, Math.max(2, Math.round(innerWidth / pixelsPerTick)));
-  const fromDate = actualDataPeriod.value.from;
+  const fromDate = chartXAxisStart.value;
   const toDate = chartXAxisEnd.value;
   const xAxisTicks = generateDateSteps({ datesToShow: ticksAmount, fromDate, toDate });
 
@@ -907,14 +951,14 @@ const renderChart = () => {
     .x((d) => xScale(d.date))
     .y0(innerHeight)
     .y1((d) => yScale(d.value))
-    .curve(d3.curveMonotoneX);
+    .curve(chartData.value.every((p) => p.historySource === 'imported') ? d3.curveLinear : d3.curveMonotoneX);
 
   // Line generator
   const line = d3
     .line<(typeof chartData.value)[0]>()
     .x((d) => xScale(d.date))
     .y((d) => yScale(d.value))
-    .curve(d3.curveMonotoneX);
+    .curve(chartData.value.every((p) => p.historySource === 'imported') ? d3.curveLinear : d3.curveMonotoneX);
 
   // Draw area
   g.append('path').datum(chartData.value).attr('class', 'area').attr('fill', `url(#${gradientId})`).attr('d', area);
@@ -929,6 +973,16 @@ const renderChart = () => {
     .attr('d', line);
 
   // X axis with tick indicators
+  g.selectAll('.recorded-observation')
+    .data(chartData.value.filter((p) => p.historySource === 'imported'))
+    .join('circle')
+    .attr('class', 'recorded-observation')
+    .attr('cx', (p) => xScale(p.date))
+    .attr('cy', (p) => yScale(p.value))
+    .attr('r', 4)
+    .attr('fill', 'var(--primary)')
+    .attr('stroke', 'var(--card)')
+    .attr('stroke-width', 2);
   g.append('g')
     .attr('class', 'x-axis')
     .attr('transform', `translate(0,${innerHeight})`)
@@ -1166,9 +1220,10 @@ const displayBalance = computed(() => {
 
   // Get the latest (ending) balance from previous period for comparison
   const prevPeriodLastEntry =
-    prevPeriodBalance.value && prevPeriodBalance.value.length > 0
+    recordedContext.value.baseline ??
+    (prevPeriodBalance.value && prevPeriodBalance.value.length > 0
       ? prevPeriodBalance.value[prevPeriodBalance.value.length - 1]
-      : null;
+      : null);
 
   switch (selectedBalanceType.value!.value) {
     case 'accounts':

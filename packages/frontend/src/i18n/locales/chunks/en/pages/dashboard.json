@@ -32,6 +32,9 @@
         },
         "today": "Today",
         "vsPreviousPeriod": "vs previous period",
+        "vsPreviousSnapshot": "vs previous recorded balance",
+        "recordedRange": "Recorded asset balances: {from} – {to}. No daily records between snapshots.",
+        "recordedOnly": "Historical asset balances at their recorded dates. Daily balances and historical debt were not recorded.",
         "spikePanel": {
           "accounts": "Accounts",
           "portfolios": "Portfolios",
