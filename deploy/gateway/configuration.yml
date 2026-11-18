@@ -50,7 +50,7 @@ session:
   cookies:
     - domain: raydenfinance.duckdns.org
       authelia_url: https://raydenfinance.duckdns.org/authelia
-      default_redirection_url: https://raydenfinance.duckdns.org/personal-finance
+      default_redirection_url: https://raydenfinance.duckdns.org/dashboard
 regulation:
   max_retries: 5
   find_time: 2m
