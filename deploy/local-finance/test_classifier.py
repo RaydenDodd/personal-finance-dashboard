@@ -49,6 +49,10 @@ class LocalClassifierTests(unittest.TestCase):
     def test_feature_allowlist(self):
         self.assertNotIn('categoryId',operations.feature(row()))
         self.assertNotIn('categorizationMeta',operations.feature(row()))
+    def test_pending_write_is_not_relearned_after_interruption(self):
+        operations.save('applied.json',{'1':{'afterCategory':'Restaurant, fast-food','pending':True,'afterMeta':None}})
+        self.assertEqual(operations.model([row()],CATEGORIES).training_ids,[])
+        operations.save('applied.json',{})
     def test_transfer_and_pending_exclusions(self):
         rows=[row(),row('2',transferNature='transfer_out_wallet'),row('3',isPending=True),row('4',note='buy 3.0 shares of TEST for $2 each')]
         summary=operations.summarize(rows,dt.date(2026,10,1),dt.date(2026,10,2),{'Restaurant, fast-food':'Restaurant, fast-food'})

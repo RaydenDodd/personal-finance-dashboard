@@ -92,6 +92,27 @@
   ],
   "localVenues": [
     {
+      "name": "Bronson Bierhall",
+      "aliases": ["bronson bierhall", "bronson bier hall"],
+      "area": "Arlington",
+      "category": "Bars, alcohol",
+      "source": "https://bronsonbierhall.com/"
+    },
+    {
+      "name": "Spider Kelly's",
+      "aliases": ["spider kellys", "spider kelly s"],
+      "area": "Arlington",
+      "category": "Bars, alcohol",
+      "source": "https://www.arlingtonva.us/Government/Departments/Police-Department/Community-Engagement/Business-Outreach-Unit/Arlington-Restaurant-Initiative/ARI-Accredited-Restaurants"
+    },
+    {
+      "name": "Dacha Beer Garden",
+      "aliases": ["dacha beer garden", "dacha navy yard"],
+      "area": "Washington DC",
+      "category": "Bars, alcohol",
+      "source": "https://www.dachabeergarden.com/"
+    },
+    {
       "name": "Rivermill Bar and Grill",
       "aliases": ["rivermill", "river mill bar"],
       "area": "Blacksburg",

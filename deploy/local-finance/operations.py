@@ -88,7 +88,7 @@ def model(rows,categories,cutoff=None,overrides=True,held_merchants=None):
     training=[]
     for row in rows:
         prior=applied.get(row['id'])
-        if prior and prior['afterCategory']==row.get('categoryId') and prior.get('afterMeta')==row.get('categorizationMeta'):
+        if prior and prior['afterCategory']==row.get('categoryId') and (prior.get('pending') or prior.get('afterMeta')==row.get('categorizationMeta')):
             continue
         if held_merchants and merchant(row) in held_merchants:continue
         if cutoff:
@@ -119,13 +119,13 @@ def classify(api):
         if latest.get('categoryId')!=other or latest.get('categorizationMeta')!=row.get('categorizationMeta') or latest.get('payeeLocked'):continue
         # Persist the before-image and exclusion marker before any write.
         applied[row['id']]={'beforeCategory':other,'beforeMeta':row.get('categorizationMeta'),
-            'afterCategory':guess['categoryId'],'afterMeta':None,'method':guess['method'],'at':dt.datetime.now(dt.timezone.utc).isoformat()}
+            'afterCategory':guess['categoryId'],'afterMeta':None,'pending':True,'method':guess['method'],'at':dt.datetime.now(dt.timezone.utc).isoformat()}
         save('applied.json',applied)
         api.request('/transactions/'+row['id'],{'categoryId':guess['categoryId']},'PUT')
         actual=api.request('/transactions/'+row['id'])
         if isinstance(actual,list):actual=actual[0]
         if actual['categoryId']!=guess['categoryId']:raise RuntimeError('Categorization readback failed')
-        applied[row['id']]['afterMeta']=actual.get('categorizationMeta');save('applied.json',applied)
+        applied[row['id']]['afterMeta']=actual.get('categorizationMeta');applied[row['id']]['pending']=False;save('applied.json',applied)
         changed+=1
     save('latest-review.json',{'at':dt.datetime.now(dt.timezone.utc).isoformat(),'version':VERSION,'trainingRows':len(predictor.training_ids),'predictions':review,'changed':changed})
     return {'changed':changed,'reviewed':len(review),'trainingRows':len(predictor.training_ids)}
