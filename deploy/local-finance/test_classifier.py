@@ -66,6 +66,15 @@ class LocalClassifierTests(unittest.TestCase):
     def test_local_midnight_and_dst(self):
         self.assertEqual(operations.local_date(row(date='2026-11-09T04:59:59Z')),dt.date(2026,11,8))
         self.assertEqual(operations.local_date(row(date='2026-11-09T05:00:00Z')),dt.date(2026,11,9))
+        self.assertEqual(operations.local_date(row(date='2026-11-01T05:30:00Z')),dt.date(2026,11,1))
+        self.assertEqual(operations.local_date(row(date='2026-11-01T06:30:00Z')),dt.date(2026,11,1))
+    def test_missing_report_notifies_without_inventing_zero_spending(self):
+        now=dt.datetime(2026,11,24,9,0,tzinfo=operations.ZONE)
+        with patch.object(operations.dt,'datetime') as clock, patch.object(operations,'deliver',return_value={'smtpAccepted':True}) as delivery:
+            clock.now.return_value=now
+            operations.send()
+        self.assertIn('No spending totals',delivery.call_args.args[0])
+        self.assertNotIn('$0.00',delivery.call_args.args[0])
     def test_sent_marker_suppresses_smtp(self):
         operations.save('sent-test.json',{'accepted':True})
         self.assertEqual(operations.deliver('test','test','test'),{'alreadySent':True})

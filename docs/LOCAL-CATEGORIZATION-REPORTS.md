@@ -14,7 +14,7 @@ MCCs describe the merchant's business, not the purchased items. The bank/aggrega
 
 - `finance-classify.timer`: daily at 02:00, before the existing Monday 03:00 reboot. Persistent catch-up is enabled for missed classification.
 - `finance-report-prepare.timer`: Tuesday 08:40, queues or joins bank sync, waits up to three minutes for fresh per-account completion, then runs local categorization and stages the report.
-- `finance-report-send.timer`: Tuesday 09:00, sends only a prepared report from the last hour. Reports cover the previous Monday–Sunday, with a separate Friday–Sunday subtotal. These are local-date intervals with exclusive end dates and DST-aware conversion.
+- `finance-report-send.timer`: Tuesday 09:00, sends a prepared report from the last hour. If preparation is missing or stale, it sends an unavailability notice with no invented totals. Reports cover the previous Monday–Sunday, with a separate Friday–Sunday subtotal. These are local-date intervals with exclusive end dates and DST-aware conversion.
 
 If banks fail or time out, the report visibly warns that available posted data may be incomplete. Pending purchases are counted separately. Transfers, recognized investment movements, balance adjustments and excluded accounts do not count toward spending. Linked refunds reduce net spending and are shown separately. No unknown FX conversion is invented. Apparent duplicate records are flagged rather than deleted. Mail includes purchases still categorized Other, their suggestions, and a link to review transactions.
 

@@ -178,7 +178,10 @@ def prepare(api,refresh_banks=True):
         status=refresh(api) if refresh_banks else {'complete':False,'warning':'Preview only: no fresh bank sync requested'}
     except Exception:
         status={'complete':False,'warning':'Bank sync could not be refreshed. Totals reflect available posted data and may be incomplete.'}
-    classification=classify(api)
+    try:
+        classification={'complete':True,**classify(api)}
+    except Exception:
+        classification={'complete':False,'warning':'Automatic categorization did not finish. Review uncategorized purchases in the app.'}
     rows=api.transactions();categories=api.request('/categories');names={c['id']:c['name'] for c in categories}
     start,end=previous_week(dt.datetime.now(ZONE).date())
     report={'preparedAt':dt.datetime.now(dt.timezone.utc).isoformat(),'week':summarize(rows,start,end,names),
@@ -195,6 +198,8 @@ def report_text(report):
     money=lambda value:f'${value/100:,.2f}'
     lines=['MoneyMatter spending checkup','', 'All dates are Eastern time.']
     if not report['sync']['complete']:lines+=['', 'INCOMPLETE BANK DATA: '+report['sync']['warning']]
+    if report.get('classifier',{}).get('complete') is False:
+        lines+=['','CLASSIFICATION INCOMPLETE: '+report['classifier']['warning']]
     for title,key in [('Full week','week'),('Friday–Sunday weekend','weekend')]:
         data=report[key]
         lines+=['',f'{title}: {data["from"]} through {data["through"]}',
@@ -238,9 +243,10 @@ def send():
     now=dt.datetime.now(ZONE)
     if now.weekday()!=1 or now.hour!=9:raise RuntimeError('Weekly mail is restricted to Tuesday 09:00–09:59 Eastern')
     start,_=previous_week(now.date());report=read('report-'+str(start)+'.json',None)
-    if not report:raise RuntimeError('No completed preparation for this week; email not sent')
-    age=(dt.datetime.now(dt.timezone.utc)-dt.datetime.fromisoformat(report['preparedAt'])).total_seconds()
-    if age>3600:raise RuntimeError('Report preparation stale; email not sent')
+    age=(dt.datetime.now(dt.timezone.utc)-dt.datetime.fromisoformat(report['preparedAt'])).total_seconds() if report else None
+    if not report or age>3600:
+        return deliver('The weekly and Friday–Sunday report could not be prepared with recent data. No spending totals are being presented. Check MoneyMatter at https://raydenfinance.duckdns.org/dashboard and review bank synchronization. This notice replaces this week\'s report; no duplicate report will be sent automatically.',
+                       'MoneyMatter spending report unavailable — '+str(start),str(start))
     return deliver(report_text(report),'MoneyMatter weekly and weekend spending — '+str(start),str(start))
 
 def evaluate(api,start,end):
