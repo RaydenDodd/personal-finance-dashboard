@@ -22,6 +22,14 @@ def tokens(row):
 def contains(text, term):
     return (' '+normalize(term)+' ') in (' '+text+' ')
 
+def bar_name_matches(text, name):
+    # Preserve digits: 622 North and 9:30 Club must not degrade to "north" or "club".
+    def clean(value):
+        value=unicodedata.normalize('NFKD',str(value or '')).encode('ascii','ignore').decode().lower()
+        value=value.replace("'",'').replace('&',' and ')
+        return ' '.join(re.findall(r'[a-z0-9]+',value))
+    return (' '+clean(name)+' ') in (' '+clean(text)+' ')
+
 def spend(row):
     return (row.get('transactionType') == 'expense'
             and row.get('transferNature') == 'not_transfer'
@@ -90,10 +98,10 @@ class Classifier:
             if any(contains(text, alias) for alias in group['merchants']):
                 return self.result(group['category'], 'merchant_catalog', .95, group['automatic'] and not ambiguous,
                                    'Known merchant; mixed-purpose merchants require review')
-        for venue in self.catalog['localVenues']:
-            if any(contains(text, alias) for alias in venue['aliases']):
-                return self.result(venue['category'], 'local_directory', .8, False,
-                                   venue['area']+' venue; food versus alcohol needs review')
+        for name in self.catalog.get('barNames',[]):
+            if bar_name_matches(row.get('merchant') or row.get('note'),name):
+                return self.result('Bars, alcohol', 'local_directory', .8, False,
+                                   'Listed bar or venue; food versus alcohol needs review')
         if re.search(r'\b(bar|tavern|brewery|bierhall|pub|saloon)\b', text):
             return self.result('Bars, alcohol','name_hint',.65,False,'Whole-word venue hint, not proof of purchase contents')
         known = [token for token in tokens(row) if token in self.vocabulary]

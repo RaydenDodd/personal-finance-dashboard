@@ -5,7 +5,7 @@ import pathlib
 import tempfile
 import unittest
 from unittest.mock import patch
-from classifier import Classifier, merchant, predicted_transfer, spend
+from classifier import Classifier, bar_name_matches, merchant, predicted_transfer, spend
 
 temp=tempfile.TemporaryDirectory()
 os.environ['FINANCE_REPORT_STATE']=temp.name
@@ -32,6 +32,13 @@ class LocalClassifierTests(unittest.TestCase):
         model=Classifier([],CATEGORIES,CATALOG)
         self.assertEqual(model.predict({'note':'A barber shop'})['method'],'abstain')
         self.assertFalse(model.predict({'note':'New tavern'})['automatic'])
+    def test_flat_bar_names_preserve_digits_and_existing_review_policy(self):
+        self.assertTrue(bar_name_matches('TST* 622 NORTH BLACKSBURG','622 North'))
+        self.assertFalse(bar_name_matches('NORTH FACE STORE','622 North'))
+        model=Classifier([],CATEGORIES,{**CATALOG,'barNames':["Sharkey's Wing & Rib Joint"]})
+        result=model.predict({'note':'SHARKEYS WING AND RIB JOINT'})
+        self.assertEqual(result['label'],'Bars, alcohol')
+        self.assertFalse(result['automatic'])
     def test_mixed_purpose_merchants_require_review(self):
         model=Classifier([row('1','Sheetz','Fuel'),row('2','Sheetz','Fuel')],CATEGORIES,CATALOG)
         self.assertFalse(model.predict({'note':'Sheetz'})['automatic'])
