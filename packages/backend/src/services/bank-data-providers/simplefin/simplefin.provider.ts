@@ -42,6 +42,7 @@ import { linkAndEmitSyncedTransactions } from '../utils/link-and-emit-synced-tra
 import { notifyPlannedConfirmations } from '../utils/notify-planned-confirmations';
 import { writeBankBalanceWithHistory } from '../utils/write-bank-balance-with-history';
 import { SimplefinApiClient } from './api-client';
+import { normalizeMerchantCategoryCode } from './merchant-category-code';
 import {
   SimplefinAccount,
   SimplefinAccountSet,
@@ -324,7 +325,13 @@ export class SimplefinProvider extends BaseBankDataProvider {
       date: new Date((tx.transacted_at ?? tx.posted) * 1000),
       description: tx.description || tx.payee || tx.memo || '',
       merchantName: tx.payee,
-      metadata: { payee: tx.payee, memo: tx.memo, posted: tx.posted, transactedAt: tx.transacted_at },
+      metadata: {
+        payee: tx.payee,
+        memo: tx.memo,
+        posted: tx.posted,
+        transactedAt: tx.transacted_at,
+        mcc: normalizeMerchantCategoryCode(tx.mcc ?? tx.extra?.mcc),
+      },
     }));
   }
 
@@ -848,7 +855,13 @@ export class SimplefinProvider extends BaseBankDataProvider {
         where: { accountId: account.id, originalId: tx.id },
         paranoid: false,
       });
-      if (existingTx) continue;
+      const mcc = normalizeMerchantCategoryCode(tx.mcc ?? tx.extra?.mcc);
+      if (existingTx) {
+        if (mcc && existingTx.externalData?.mcc !== mcc) {
+          await existingTx.update({ externalData: { ...existingTx.externalData, mcc } });
+        }
+        continue;
+      }
 
       // Secondary dedup: unlink→relink cleared originalId to null but preserved
       // the original value under externalData.originalSource.originalId.
@@ -864,7 +877,10 @@ export class SimplefinProvider extends BaseBankDataProvider {
       });
       if (existingByOriginalSource) {
         // Restore originalId so future syncs use the fast primary path.
-        await existingByOriginalSource.update({ originalId: tx.id });
+        await existingByOriginalSource.update({
+          originalId: tx.id,
+          ...(mcc ? { externalData: { ...existingByOriginalSource.externalData, mcc } } : {}),
+        });
         continue;
       }
 
@@ -885,6 +901,7 @@ export class SimplefinProvider extends BaseBankDataProvider {
         // bridges/banks that don't expose `transacted_at`.
         time,
         externalData: {
+          mcc,
           payee: tx.payee,
           memo: tx.memo,
           sfinAccountId: account.externalId,

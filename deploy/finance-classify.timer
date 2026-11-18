@@ -1,0 +1,7 @@
+[Unit]
+Description=Nightly local categorization at 2 AM Eastern
+[Timer]
+OnCalendar=*-*-* 02:00:00 America/New_York
+Persistent=true
+[Install]
+WantedBy=timers.target

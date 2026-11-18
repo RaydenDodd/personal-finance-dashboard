@@ -1,0 +1,8 @@
+[Unit]
+Description=Refresh banks and categorize before Tuesday report
+After=finance-boot.service network-online.target
+[Service]
+Type=oneshot
+UMask=0077
+ExecStart=/usr/bin/flock -n /var/lib/finance-reports/pipeline.lock /usr/bin/python3 /home/rayden/personal-finance-dashboard/deploy/local-finance/operations.py prepare
+TimeoutStartSec=900

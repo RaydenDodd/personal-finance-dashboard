@@ -22,6 +22,7 @@ import {
   getRawTransactionStatus,
   isPreBookingStatus,
 } from '@services/bank-data-providers/enablebanking/utils/transaction-metadata';
+import { normalizeMerchantCategoryCode } from '@services/bank-data-providers/simplefin/merchant-category-code';
 import type { PaymentLegParam, PaymentPart } from '@services/transactions/payment-legs';
 
 // ============================================================================
@@ -43,6 +44,10 @@ interface TransactionSplitApiResponse {
 }
 
 export interface TransactionApiResponse {
+  /** Bank-supplied merchant category code, retained as four-character text. */
+  mcc?: string | null;
+  merchantName?: string | null;
+  isBalanceAdjustment?: boolean;
   id: string;
   amount: number;
   refAmount: number;
@@ -253,6 +258,9 @@ export function serializeTransaction(
     originalAmount: centsToApiDecimalOrNull(tx.originalAmount),
     originalCurrencyCode: tx.originalCurrencyCode ?? null,
     note: tx.note,
+    mcc: normalizeMerchantCategoryCode(tx.externalData?.mcc),
+    merchantName: typeof tx.externalData?.payee === 'string' ? tx.externalData.payee : null,
+    isBalanceAdjustment: tx.externalData?.balanceAdjustment === true,
     externalUrl: tx.externalUrl ?? null,
     externalReference: tx.externalReference ?? null,
     location: tx.location ?? null,

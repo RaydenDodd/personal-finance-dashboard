@@ -1,0 +1,161 @@
+{
+  "version": 1,
+  "reviewedAt": "2026-11-18",
+  "sources": {
+    "restaurants": "https://www.mcdonalds.com/us/en-us.html",
+    "gas": "https://www.shell.us/motorist.html",
+    "mcc": "https://www.mastercard.us/content/dam/public/mastercardcom/na/global-site/documents/quick-reference-booklet-merchant.pdf"
+  },
+  "groups": [
+    {
+      "category": "Restaurant, fast-food",
+      "automatic": true,
+      "merchants": [
+        "mcdonalds",
+        "mcdonald s",
+        "burger king",
+        "wendys",
+        "wendy s",
+        "taco bell",
+        "chick fil a",
+        "chipotle",
+        "subway",
+        "popeyes",
+        "kfc",
+        "five guys",
+        "cook out",
+        "cookout",
+        "waffle house",
+        "panda express",
+        "dominos",
+        "domino s",
+        "pizza hut",
+        "papa johns",
+        "panera",
+        "qdoba",
+        "raising canes",
+        "jersey mikes",
+        "jimmy johns",
+        "shake shack",
+        "sonic drive",
+        "arbys",
+        "dunkin"
+      ]
+    },
+    { "category": "Bar, cafe", "automatic": false, "merchants": ["starbucks", "peets coffee", "caribou coffee"] },
+    {
+      "category": "Fuel",
+      "automatic": false,
+      "merchants": [
+        "shell",
+        "exxon",
+        "exxonmobil",
+        "mobil",
+        "chevron",
+        "texaco",
+        "sunoco",
+        "bp",
+        "citgo",
+        "marathon",
+        "speedway",
+        "sheetz",
+        "sheets",
+        "wawa",
+        "royal farms",
+        "7 eleven",
+        "7eleven",
+        "circle k",
+        "quiktrip",
+        "racetrac",
+        "buc ee s",
+        "bucees"
+      ]
+    },
+    {
+      "category": "Groceries",
+      "automatic": true,
+      "merchants": [
+        "kroger",
+        "food lion",
+        "aldi",
+        "lidl",
+        "harris teeter",
+        "trader joes",
+        "trader joe s",
+        "whole foods",
+        "giant food",
+        "publix",
+        "wegmans",
+        "safeway"
+      ]
+    }
+  ],
+  "localVenues": [
+    {
+      "name": "Rivermill Bar and Grill",
+      "aliases": ["rivermill", "river mill bar"],
+      "area": "Blacksburg",
+      "category": "Bars, alcohol",
+      "source": "https://rivermillblacksburg.com/"
+    },
+    {
+      "name": "Hokie House",
+      "aliases": ["hokie house"],
+      "area": "Blacksburg",
+      "category": "Bars, alcohol",
+      "source": "https://downtownblacksburg.com/images/student_info_card_11_x_8.5_in_reduced.pdf"
+    },
+    {
+      "name": "Ireland's Four Courts",
+      "aliases": ["irelands four courts", "ireland s four courts", "four courts"],
+      "area": "Arlington",
+      "category": "Bars, alcohol",
+      "source": "https://www.stayarlington.com/directory/irelands-four-courts/"
+    },
+    {
+      "name": "ChurchKey",
+      "aliases": ["churchkey", "church key"],
+      "area": "Washington DC",
+      "category": "Bars, alcohol",
+      "source": "https://www.churchkeydc.com/"
+    }
+  ],
+  "mcc": {
+    "5411": "Groceries",
+    "5541": "Fuel",
+    "5542": "Fuel",
+    "5812": "Restaurant, fast-food",
+    "5813": "Bars, alcohol",
+    "5814": "Restaurant, fast-food",
+    "5921": "Bars, alcohol",
+    "4112": "Long distance",
+    "4121": "Taxi",
+    "5912": "Drug-store, chemist",
+    "5691": "Clothes & shoes",
+    "5995": "Pets, animals",
+    "7997": "Active sport, fitness",
+    "4814": "Phone, cell phone",
+    "5734": "Software, apps, games"
+  },
+  "ambiguousMerchants": [
+    "amazon",
+    "walmart",
+    "target",
+    "costco",
+    "sams club",
+    "sheetz",
+    "sheets",
+    "wawa",
+    "shell",
+    "exxon",
+    "exxonmobil",
+    "mobil",
+    "bp",
+    "sunoco",
+    "circle k",
+    "7 eleven",
+    "buc ee s",
+    "wilderness run",
+    "smugglers cafe"
+  ]
+}

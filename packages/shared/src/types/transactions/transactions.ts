@@ -83,6 +83,10 @@ export interface TransactionLocation {
 }
 
 export interface TransactionModel {
+  /** Bank-supplied merchant category code. Null when unavailable; never inferred. */
+  mcc?: string | null;
+  merchantName?: string | null;
+  isBalanceAdjustment?: boolean;
   id: RecordId;
   amount: number;
   // Amount in base currency

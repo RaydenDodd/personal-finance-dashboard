@@ -1,0 +1,7 @@
+[Unit]
+Description=Prepare Tuesday spending report at 8:40 AM Eastern
+[Timer]
+OnCalendar=Tue *-*-* 08:40:00 America/New_York
+Persistent=false
+[Install]
+WantedBy=timers.target

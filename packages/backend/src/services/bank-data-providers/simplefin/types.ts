@@ -97,6 +97,8 @@ export interface SimplefinConnection {
 
 /** A single transaction within an account. */
 export interface SimplefinTransaction {
+  /** Optional Bridge extension; not all institutions supply a code. */
+  mcc?: string | number | null;
   id: string;
   /** UNIX epoch seconds. 0 when the transaction is still pending. */
   posted: number;

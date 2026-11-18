@@ -1,0 +1,7 @@
+[Unit]
+Description=Email Tuesday spending checkup at 9 AM Eastern
+[Timer]
+OnCalendar=Tue *-*-* 09:00:00 America/New_York
+Persistent=false
+[Install]
+WantedBy=timers.target

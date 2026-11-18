@@ -1576,6 +1576,9 @@ onUnmounted(() => {
           </template>
         </InputField>
       </FormRow>
+      <FormRow v-if="transaction?.mcc">
+        <InputField :model-value="transaction.mcc" label="MCC" disabled />
+      </FormRow>
       <FormRow v-if="shownFields.externalReference" data-optional-field="externalReference">
         <InputField
           v-model="form.externalReference"
