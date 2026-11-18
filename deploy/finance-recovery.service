@@ -1,0 +1,7 @@
+[Unit]
+Description=Check finance frontend and recover persistent failures
+After=docker.service finance-boot.service
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /home/rayden/personal-finance-dashboard/deploy/finance-recovery.py
+TimeoutStartSec=240

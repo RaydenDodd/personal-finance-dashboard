@@ -1,0 +1,7 @@
+[Unit]
+Description=Ensure unattended bank synchronization
+After=finance-boot.service network-online.target
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /home/rayden/personal-finance-dashboard/deploy/finance-bank-sync.py
+TimeoutStartSec=240

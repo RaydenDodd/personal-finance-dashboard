@@ -1,0 +1,13 @@
+[Unit]
+Description=Restore existing finance containers after boot
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+[Service]
+Type=oneshot
+WorkingDirectory=/home/rayden/personal-finance-dashboard
+ExecStart=/usr/bin/docker compose --env-file .env.pi.local -f docker-compose.pi.yml up -d --no-build --no-recreate --wait --wait-timeout 180
+TimeoutStartSec=240
+RemainAfterExit=yes
+[Install]
+WantedBy=multi-user.target
