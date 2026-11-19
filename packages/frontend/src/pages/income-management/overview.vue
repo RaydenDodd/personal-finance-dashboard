@@ -157,7 +157,7 @@ const pieSeries = computed(
 const pieRows = computed<ChartRow[]>(() => [
   {
     label: 'Monthly allocation',
-    values: Object.fromEntries(result.value?.allocations.map((a) => [a.id, a.monthly]) ?? []),
+    values: Object.fromEntries(result.value?.allocations.map((a) => [a.id, a.yearly / 12]) ?? []),
   },
 ]);
 const salaryRows = computed<ChartRow[]>(() => {

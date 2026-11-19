@@ -559,10 +559,7 @@ onMounted(load);
           </ul></Callout
         >
         <div class="flex flex-wrap gap-3">
-          <Button :disabled="busy || !name.trim() || !result" @click="save(false)">Save inputs</Button
-          ><Button variant="outline" :disabled="busy || !name.trim() || !result" @click="save(true)"
-            >Save as new dated scenario</Button
-          >
+          <Button :disabled="busy || !name.trim() || !result" @click="save(false)">Save changes</Button>
         </div>
         <details v-if="taxData" class="text-sm">
           <summary class="text-muted-foreground cursor-pointer">Tax-rule sources and last checks</summary>
