@@ -8,9 +8,10 @@ import { Dialog, DialogScrollContent, DialogHeader, DialogTitle, DialogDescripti
 import FinanceChart, { type ChartRow } from '@/pages/personal-finance/finance-chart.vue';
 import { calculateIncomePlan, createDefaultIncomePlan } from '@bt/shared/finance-income';
 import type { IncomeDashboard, IncomePlanVersion } from '@bt/shared/types/income-management';
-import { computed, nextTick, onMounted, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import IncomeSettings from './taxes.vue';
 import PaycheckManager from './index.vue';
+import PeriodButtons from './period-buttons.vue';
 const data = ref<IncomeDashboard | null>(null),
   error = ref(''),
   busy = ref(false);
@@ -156,8 +157,8 @@ const pieSeries = computed(
 );
 const pieRows = computed<ChartRow[]>(() => [
   {
-    label: 'Monthly allocation',
-    values: Object.fromEntries(result.value?.allocations.map((a) => [a.id, a.yearly / 12]) ?? []),
+    label: period.value + ' allocation',
+    values: Object.fromEntries(result.value?.allocations.map((a) => [a.id, a.yearly / divisor.value]) ?? []),
   },
 ]);
 const salaryRows = computed<ChartRow[]>(() => {
@@ -266,11 +267,6 @@ async function selectSlice(id: string) {
     } as Record<string, string[]>
   )[id] ?? [id];
   expanded.value = [...new Set([...expanded.value, ...ids])];
-  await nextTick();
-  document.getElementById('income-group-' + ids[0])?.scrollIntoView({
-    behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth',
-    block: 'center',
-  });
 }
 watch(settingsOpen, (open, old) => {
   if (!open && old) void load();
@@ -360,19 +356,23 @@ onMounted(load);
       <Card class="p-5 sm:p-6"
         ><div class="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 class="text-lg font-semibold">Monthly take-home allocation</h2>
+            <h2 class="text-lg font-semibold">Take-home allocation</h2>
             <p class="text-muted-foreground mt-1 text-sm">
-              Hover for amounts and percentages. Select a section to explore its breakdown.
+              Hover for details. Select a section to highlight its breakdown.
             </p>
           </div>
-          <Button variant="outline" @click="settingsOpen = true">Edit contributions</Button>
+          <div class="flex flex-wrap items-center gap-2">
+            <PeriodButtons v-model="period" /><Button variant="outline" @click="settingsOpen = true"
+              >Edit contributions</Button
+            >
+          </div>
         </div>
         <FinanceChart
           v-if="result?.available && result.flow"
           :rows="pieRows"
           :series="pieSeries"
           mode="donut"
-          donut-label="Monthly compensation"
+          :donut-label="`${period === 'biweekly' ? 'Biweekly' : period === 'monthly' ? 'Monthly' : 'Yearly'} compensation`"
           donut-details
           @select-series="selectSlice"
         />
@@ -386,16 +386,7 @@ onMounted(load);
       <Card class="overflow-hidden"
         ><div class="flex flex-wrap items-center justify-between gap-3 p-5">
           <h2 class="text-lg font-semibold">Take-home breakdown</h2>
-          <div class="flex gap-1">
-            <Button
-              v-for="p in ['monthly', 'yearly', 'biweekly'] as const"
-              :key="p"
-              size="sm"
-              :variant="period === p ? 'default' : 'ghost'"
-              @click="period = p"
-              >{{ p === 'biweekly' ? 'Biweekly' : p === 'monthly' ? 'Monthly' : 'Yearly' }}</Button
-            >
-          </div>
+          <PeriodButtons v-model="period" />
         </div>
         <div
           v-for="group in groups"
@@ -427,7 +418,7 @@ onMounted(load);
           <div
             v-if="expanded.includes(group.id)"
             :id="'income-details-' + group.id"
-            class="space-y-1 px-5 pb-4"
+            class="divide-border/50 divide-y px-5 pb-4"
             :style="{ background: group.color + '0a' }"
           >
             <div
@@ -495,7 +486,7 @@ onMounted(load);
             ><DialogDescription
               >Adjust retirement, savings and deductions. Your saved salary is already filled in.</DialogDescription
             ></DialogHeader
-          ><IncomeSettings v-if="settingsOpen" /></DialogScrollContent
+          ><IncomeSettings v-if="settingsOpen" @saved="settingsOpen = false" /></DialogScrollContent
       ></Dialog>
       <Dialog v-model:open="paychecksOpen"
         ><DialogScrollContent class="max-w-5xl"

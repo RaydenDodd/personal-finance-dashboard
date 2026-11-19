@@ -100,6 +100,22 @@ describe('categories store – categoryOrder', () => {
 });
 
 describe('categories store – loadCategories({ force: true })', () => {
+  it('invalidates cached historical months after a category moves to another parent', async () => {
+    const { VUE_QUERY_CACHE_KEYS } = await import('@/common/const');
+    const store = useCategoriesStore();
+    const june = [...VUE_QUERY_CACHE_KEYS.analyticsCashFlow, '2026-06'];
+    const october = [...VUE_QUERY_CACHE_KEYS.widgetExpensesStructureCurrentAmount, '2026-10'];
+    queryClient.setQueryData(june, { oldParent: 'Entertainment' });
+    queryClient.setQueryData(october, { oldParent: 'Entertainment' });
+    mockLoadSystemCategories.mockResolvedValue([FOOD, { ...GROCERIES, parentId: FOOD.id }]);
+
+    await store.loadCategories({ force: true });
+
+    expect(store.categoriesMap[GROCERIES.id]?.parentId).toBe(FOOD.id);
+    expect(queryClient.getQueryState(june)?.isInvalidated).toBe(true);
+    expect(queryClient.getQueryState(october)?.isInvalidated).toBe(true);
+  });
+
   it('reflects a newly created category', async () => {
     const store = useCategoriesStore();
 

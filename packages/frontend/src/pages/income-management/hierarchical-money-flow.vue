@@ -15,7 +15,46 @@ const props = withDefaults(
 );
 const containerRef = ref<HTMLElement | null>(null),
   tooltipRef = ref<HTMLElement | null>(null);
-const collapsed = ref<string[]>([]);
+const collapsed = ref<string[]>(['taxes', 'savingsInvestmentsRetirement', 'deductions']);
+const activeNode = ref<string | null>(null);
+const relatedIds = computed(() => {
+  const ids = new Set<string>();
+  function descend(n: IncomeFlowNode) {
+    ids.add(n.id);
+    for (const c of n.children ?? []) descend(c);
+  }
+  function find(n: IncomeFlowNode, parents: string[]): boolean {
+    if (n.id === activeNode.value) {
+      parents.forEach((id) => ids.add(id));
+      descend(n);
+      return true;
+    }
+    return (n.children ?? []).some((c) => find(c, [...parents, n.id]));
+  }
+  if (activeNode.value) find(props.root, []);
+  return ids;
+});
+const overview = computed(() => [
+  { id: props.root.id, name: 'Total income', amount: props.root.amount, color: '#7b65c1' },
+  {
+    id: 'taxes',
+    name: 'Taxes',
+    amount: props.root.children?.find((n) => n.id === 'taxes')?.amount ?? 0,
+    color: '#e77066',
+  },
+  {
+    id: 'savingsInvestmentsRetirement',
+    name: 'Savings and retirement',
+    amount: props.root.children?.find((n) => n.id === 'savingsInvestmentsRetirement')?.amount ?? 0,
+    color: '#62b58a',
+  },
+  {
+    id: 'spending',
+    name: 'Cash to spend',
+    amount: props.root.children?.find((n) => n.id === 'spending')?.amount ?? 0,
+    color: '#55aebc',
+  },
+]);
 const tooltip = reactive({ visible: false, x: 0, y: 0, node: null as IncomeFlowNode | null });
 const { updateTooltipPosition } = useChartTooltipPosition({ containerRef, tooltipRef, tooltip, strategy: 'fixed' });
 const money = (n: number) =>
@@ -31,14 +70,19 @@ const label = (n: IncomeFlowNode) =>
 const layout = computed(() => {
   const nodes: { node: IncomeFlowNode; depth: number; color: string; x: number; y: number; h: number }[] = [],
     links: { from: string; to: string; amount: number; color: string }[] = [];
-  const colors = ['#ef4444', '#7b65c1', '#f59e0b', '#5b83ed'];
+  const colors: Record<string, string> = {
+    taxes: '#e77066',
+    savingsInvestmentsRetirement: '#62b58a',
+    spending: '#55aebc',
+    deductions: '#9b79e8',
+  };
   function visit(node: IncomeFlowNode, depth: number, color: string) {
     if (node.amount <= 0) return;
     nodes.push({ node, depth, color, x: 210 + depth * 225, y: 0, h: 0 });
     if (!collapsed.value.includes(node.id))
-      for (const [index, child] of (node.children ?? []).entries()) {
+      for (const child of node.children ?? []) {
         if (child.amount <= 0) continue;
-        const tint = depth === 0 ? colors[index % colors.length]! : color;
+        const tint = depth === 0 ? (colors[child.id] ?? '#7b65c1') : color;
         links.push({ from: node.id, to: child.id, amount: child.amount, color: tint });
         visit(child, depth + 1, tint);
       }
@@ -103,9 +147,14 @@ function toggle(node: IncomeFlowNode) {
     : [...collapsed.value, node.id];
 }
 function show(event: PointerEvent, node: IncomeFlowNode) {
+  activeNode.value = node.id;
   tooltip.node = node;
   tooltip.visible = true;
   updateTooltipPosition(event);
+}
+function showLink(event: PointerEvent, id: string) {
+  const node = layout.value.nodes.find((n) => n.node.id === id)?.node;
+  if (node) show(event, node);
 }
 function lines(name: string) {
   const words = name.split(' '),
@@ -119,6 +168,20 @@ function lines(name: string) {
 </script>
 <template>
   <div ref="containerRef" class="relative">
+    <div class="divide-border/60 border-border/60 mb-5 grid grid-cols-2 gap-y-4 divide-x border-y py-4 sm:grid-cols-4">
+      <div
+        v-for="item in overview"
+        :key="item.name"
+        class="px-3"
+        @pointerenter="activeNode = item.id"
+        @pointerleave="activeNode = null"
+      >
+        <p class="text-muted-foreground flex items-center gap-2 text-xs">
+          <span class="size-2 rounded-sm" :style="{ background: item.color }" />{{ item.name }}
+        </p>
+        <p class="mt-2 text-lg font-semibold tabular-nums">{{ money(item.amount) }}</p>
+      </div>
+    </div>
     <p class="text-muted-foreground mb-3 text-xs">
       Every percentage uses Total Compensation. Tap a category to expand or collapse. Scroll horizontally for detailed
       branches.
@@ -147,7 +210,14 @@ function lines(name: string) {
           :key="link.from + '-' + link.to"
           :d="link.path"
           :fill="link.color"
-          opacity="0.18"
+          :opacity="!activeNode ? 0.18 : relatedIds.has(link.from) && relatedIds.has(link.to) ? 0.5 : 0.035"
+          class="transition-opacity"
+          @pointerenter="showLink($event, link.to)"
+          @pointermove="showLink($event, link.to)"
+          @pointerleave="
+            tooltip.visible = false;
+            activeNode = null;
+          "
         />
         <g
           v-for="entry in layout.nodes"
@@ -156,12 +226,19 @@ function lines(name: string) {
           tabindex="0"
           :aria-label="entry.node.name + ' ' + label(entry.node)"
           :aria-expanded="entry.node.children?.length ? !collapsed.includes(entry.node.id) : undefined"
-          class="cursor-pointer"
+          class="cursor-pointer transition-opacity"
+          style="outline: none"
+          :opacity="!activeNode || relatedIds.has(entry.node.id) ? 1 : 0.3"
           @click="toggle(entry.node)"
           @keydown.enter="toggle(entry.node)"
           @pointerenter="show($event, entry.node)"
           @pointermove="show($event, entry.node)"
-          @pointerleave="tooltip.visible = false"
+          @pointerleave="
+            tooltip.visible = false;
+            activeNode = null;
+          "
+          @focus="activeNode = entry.node.id"
+          @blur="activeNode = null"
           @pointerdown="show($event, entry.node)"
         >
           <rect :x="entry.x" :y="entry.y" width="12" :height="entry.h" rx="3" :fill="entry.color" />

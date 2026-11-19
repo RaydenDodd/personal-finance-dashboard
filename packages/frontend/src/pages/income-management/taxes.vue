@@ -13,6 +13,7 @@ import { calculateIncomePlan, createDefaultIncomePlan, type IncomePlanInput } fr
 import type { IncomeDocument, IncomePlanVersion } from '@bt/shared/types/income-management';
 import { computed, onMounted, ref } from 'vue';
 import AmountInput from './amount-input.vue';
+const emit = defineEmits<{ saved: [] }>();
 
 const document = ref<IncomeDocument>({ revision: 0, employers: [], paychecks: [], plans: [] });
 const input = ref<IncomePlanInput>(createDefaultIncomePlan());
@@ -152,6 +153,7 @@ async function save(asNew = false) {
     const next = { ...document.value, plans: [...document.value.plans.filter((p) => p.id !== id), plan] };
     document.value = await saveIncomeDocument(next);
     selected.value = id;
+    emit('saved');
     notice.value = 'Planning inputs saved. Actual paychecks and historical balances were not changed.';
   } catch {
     error.value = 'Unable to save. Check inputs and reload if this record changed in another window.';
@@ -265,13 +267,13 @@ onMounted(load);
               >Add match tier</Button
             >
             <label class="block space-y-1 text-sm"
-              >Unconditional employer 401k contribution %<input
+              >Employer 401(k) match %<input
                 v-model.number="input.employerBaseContributionPercent"
                 type="number"
                 min="0"
                 :class="field"
             /></label>
-            <label class="block space-y-1 text-sm"
+            <label v-if="input.employerOtherContributionPercent" class="block space-y-1 text-sm"
               >Other employer retirement contribution %<input
                 v-model.number="input.employerOtherContributionPercent"
                 type="number"

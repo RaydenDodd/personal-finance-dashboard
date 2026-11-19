@@ -38,9 +38,22 @@ const tooltipElement = ref<HTMLDivElement | null>(null);
 const width = ref(700);
 const gradientNamespace = useId().replace(/:/g, '');
 const hiddenSeries = ref<string[]>([]);
+const selectedPie = ref<string | null>(null);
+function highlightPie(id: string | null) {
+  d3.select(svg.value)
+    .selectAll<SVGPathElement, unknown>('path[data-income-slice]')
+    .style('opacity', function () {
+      return !id || this.getAttribute('data-income-slice') === id ? 1 : 0.35;
+    })
+    .style('filter', function () {
+      return this.getAttribute('data-income-slice') === id ? 'brightness(1.15)' : null;
+    });
+}
 const visibleSeries = computed(() => props.series.filter((s) => !hiddenSeries.value.includes(s.id)));
 function toggleSeries(id: string) {
   if (props.mode === 'donut' && props.donutDetails) {
+    selectedPie.value = id;
+    highlightPie(id);
     emit('selectSeries', id);
     return;
   }
@@ -114,6 +127,8 @@ function render() {
       )
       .join('path')
       .attr('d', arc)
+      .attr('data-income-slice', (d) => (props.donutDetails ? d.data.id : null))
+      .style('outline', 'none')
       .attr('fill', (d) => d.data.color)
       .attr('stroke', colors.card)
       .attr('stroke-width', 3)
@@ -135,16 +150,50 @@ function render() {
             : row,
         ),
       )
-      .on('click', (_event, d) => (props.donutDetails ? emit('selectSeries', d.data.id) : emit('select', row)))
+      .on('pointerenter focus', (_event, d) => {
+        if (props.donutDetails) highlightPie(d.data.id);
+      })
+      .on('blur', () => highlightPie(selectedPie.value))
+      .on('click', (_event, d) => {
+        if (props.donutDetails) {
+          selectedPie.value = d.data.id;
+          highlightPie(d.data.id);
+          emit('selectSeries', d.data.id);
+        } else emit('select', row);
+      })
       .on('keydown', (event, d) => {
         if (props.donutDetails && ['Enter', ' '].includes(event.key)) {
           event.preventDefault();
+          selectedPie.value = d.data.id;
+          highlightPie(d.data.id);
           emit('selectSeries', d.data.id);
         }
       })
       .on('pointerleave', (event: PointerEvent) => {
+        if (props.donutDetails) highlightPie(selectedPie.value);
         if (event.pointerType !== 'touch') tooltip.visible = false;
       });
+    if (props.donutDetails) {
+      const arcs = d3
+        .pie<(typeof data)[number]>()
+        .value((d) => d.value)
+        .sort(null)(data);
+      root
+        .append('g')
+        .attr('transform', `translate(${w / 2},150)`)
+        .selectAll('text')
+        .data(arcs.filter((d) => d.endAngle - d.startAngle > 0.16))
+        .join('text')
+        .attr('transform', (d) => `translate(${arc.centroid(d)})`)
+        .attr('text-anchor', 'middle')
+        .attr('dy', '.35em')
+        .attr('fill', '#171717')
+        .attr('font-size', 13)
+        .attr('font-weight', 650)
+        .style('pointer-events', 'none')
+        .text((d) => `${((d.data.value / data.reduce((n, s) => n + s.value, 0)) * 100).toFixed(1)}%`);
+      highlightPie(selectedPie.value);
+    }
     root
       .append('text')
       .attr('x', w / 2)
@@ -582,7 +631,7 @@ onMounted(render);
         v-for="series in props.series"
         :key="series.id"
         type="button"
-        :aria-pressed="!hiddenSeries.includes(series.id)"
+        :aria-pressed="props.donutDetails ? selectedPie === series.id : !hiddenSeries.includes(series.id)"
         :aria-label="`Toggle ${series.name}`"
         @click="toggleSeries(series.id)"
         :class="[
@@ -590,7 +639,19 @@ onMounted(render);
           hiddenSeries.includes(series.id) && 'opacity-40',
         ]"
       >
-        <span class="size-2.5 rounded-sm" :style="{ backgroundColor: series.color }" />{{ series.name }}
+        <span class="size-2.5 rounded-sm" :style="{ backgroundColor: series.color }" />{{ series.name
+        }}<span v-if="props.donutDetails"
+          >{{
+            (
+              ((rows.at(-1)?.values[series.id] ?? 0) /
+                Math.max(
+                  0.01,
+                  props.series.reduce((sum, s) => sum + (rows.at(-1)?.values[s.id] ?? 0), 0),
+                )) *
+              100
+            ).toFixed(1)
+          }}%</span
+        >
       </button>
     </div>
   </div>

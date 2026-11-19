@@ -1,5 +1,5 @@
 import { loadSystemCategories } from '@/api';
-import { VUE_QUERY_CACHE_KEYS } from '@/common/const';
+import { VUE_QUERY_CACHE_KEYS, VUE_QUERY_GLOBAL_PREFIXES } from '@/common/const';
 import { type FormattedCategory } from '@/common/types';
 import { useNotificationCenter } from '@/components/notification-center';
 import { userSettingsQueryOptions } from '@/composable/data-queries/user-settings';
@@ -42,6 +42,11 @@ export const useCategoriesStore = defineStore('categories', () => {
       if (result) {
         categories.value = result;
         isFetched.value = true;
+        // A parent change affects every historical category rollup, not only the
+        // visible month. Invalidate all period variants after category mutations.
+        if (force) {
+          await queryClient.invalidateQueries({ queryKey: [VUE_QUERY_GLOBAL_PREFIXES.transactionChange] });
+        }
       }
     } catch (err) {
       if (!(err instanceof errors.AuthError)) {
