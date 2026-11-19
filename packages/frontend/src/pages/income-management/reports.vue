@@ -186,8 +186,9 @@ const savedProjectionResults = computed(() =>
     }
   }),
 );
+const combinedScenarioIds = ref<string[]>([]);
 const combinedProjection = computed(() => {
-  const items = savedProjectionResults.value;
+  const items = savedProjectionResults.value.filter((item) => combinedScenarioIds.value.includes(item.id));
   if (!items.length || items.some((s) => !s.result) || new Set(items.map((s) => s.input.years)).size !== 1) return null;
   return {
     years: items[0]!.input.years,
@@ -597,9 +598,17 @@ onMounted(load);
             :key="item.id"
             class="flex flex-wrap justify-between gap-3 text-sm"
           >
-            <span
-              >{{ item.name }} · {{ item.input.years }} years · {{ percent(item.input.annualReturnPercent) }} assumed
-              return</span
+            <label class="flex items-start gap-2">
+              <input
+                v-model="combinedScenarioIds"
+                type="checkbox"
+                :value="item.id"
+                :aria-label="'Include ' + item.name + ' in combined wealth'"
+              />
+              <span
+                >{{ item.name }} · {{ item.input.years }} years · {{ percent(item.input.annualReturnPercent) }} assumed
+                return</span
+              > </label
             ><span>{{ money(item.result?.value) }}</span>
           </div>
           <div v-if="combinedProjection" class="border-border flex justify-between border-t pt-3 font-semibold">
@@ -607,8 +616,8 @@ onMounted(load);
             ><span>{{ money(combinedProjection.value) }}</span>
           </div>
           <p class="text-muted-foreground text-xs">
-            Combined values sum the saved component scenarios only when their horizons match. Starting balances are
-            source planning assumptions, not live account valuations.
+            Select separate, non-overlapping account groups to combine. Alternative scenarios should remain unselected.
+            Selected horizons must match. Starting balances are planning assumptions, not live account valuations.
           </p></Card
         ><Card v-if="comparison.length" class="overflow-hidden"
           ><div class="p-5"><h2 class="font-semibold">Scenario comparison</h2></div>
