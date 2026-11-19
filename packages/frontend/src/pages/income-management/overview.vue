@@ -227,6 +227,7 @@ async function saveSalary() {
       evidence: 'estimated',
       input: {
         ...(current.value?.input ?? createDefaultIncomePlan()),
+        taxYear: Number(since.value.slice(0, 4)),
         annualSalary: salary.value,
         annualBonus: bonus.value,
       },
