@@ -9,10 +9,20 @@ import {
 } from '@js/errors';
 import { logger } from '@js/utils/logger';
 import axios, { AxiosInstance } from 'axios';
+import { setTimeout as delay } from 'node:timers/promises';
 
 import { SimplefinAccountSet, SimplefinGetAccountsParams } from './types';
 
 const REQUEST_TIMEOUT_MS = 30_000;
+const GET_RETRY_DELAY_MS = 500;
+
+/** Only safe, transient GET failures receive one retry; auth/throttles never do. */
+const canRetryAccountsGet = (error: unknown): boolean => {
+  if (!axios.isAxiosError(error)) return false;
+  const status = error.response?.status;
+  if (status !== undefined) return [502, 503, 504].includes(status);
+  return ['ECONNABORTED', 'ETIMEDOUT', 'ECONNRESET'].includes(error.code ?? '');
+};
 
 /** Protocol version we request — v2 gives structured `errlist` + `connections`. */
 const SIMPLEFIN_PROTOCOL_VERSION = 2;
@@ -140,11 +150,19 @@ export class SimplefinApiClient {
     if (params.accountId) query['account'] = params.accountId;
     if (params.balancesOnly) query['balances-only'] = 1;
 
-    try {
-      const response = await this.client.get<SimplefinAccountSet>('/accounts', { params: query });
-      return response.data;
-    } catch (error) {
-      this.handleApiError(error, 'getAccounts');
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        const response = await this.client.get<SimplefinAccountSet>('/accounts', { params: query });
+        return response.data;
+      } catch (error) {
+        if (attempt === 0 && canRetryAccountsGet(error)) {
+          // Fixed text only: axios errors/config can contain the Access URL credentials.
+          logger.info('[SimplefinApiClient] Retrying accounts GET after a transient failure (attempt 2/2)');
+          await delay(GET_RETRY_DELAY_MS);
+          continue;
+        }
+        this.handleApiError(error, 'getAccounts');
+      }
     }
   }
 
