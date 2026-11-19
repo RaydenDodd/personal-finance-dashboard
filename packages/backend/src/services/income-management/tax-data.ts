@@ -38,6 +38,7 @@ export async function refreshTaxSources(userId: number) {
         'marylandtaxes.gov',
         'marylandcomptroller.gov',
         'wv.gov',
+        'wvlegislature.gov',
         'ncdor.gov',
       ].some((domain) => host === domain || host.endsWith('.' + domain))
     )
