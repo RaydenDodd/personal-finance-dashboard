@@ -113,7 +113,17 @@ async function load() {
     document.value = data.document;
     taxData.value = rules;
     if (data.document.plans.length) {
-      selected.value = data.document.plans.at(-1)!.id;
+      const today = new Date().toLocaleDateString('en-CA');
+      selected.value =
+        [...data.document.plans]
+          .filter(
+            (p) =>
+              p.evidence !== 'projected' &&
+              (!p.effectiveFrom || p.effectiveFrom <= today) &&
+              (!p.effectiveTo || p.effectiveTo >= today),
+          )
+          .sort((a, b) => (a.effectiveFrom ?? '').localeCompare(b.effectiveFrom ?? ''))
+          .at(-1)?.id ?? 'new';
       choose();
     }
   } catch {
@@ -182,10 +192,8 @@ onMounted(load);
     <div class="mx-auto w-full max-w-7xl space-y-6 p-4 md:p-6">
       <div class="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 class="text-2xl font-semibold">Taxes / Take Home Pay</h1>
-          <p class="text-muted-foreground mt-1 text-sm">
-            Editable planning inputs and calculated outputs. Actual income is managed separately.
-          </p>
+          <h1 class="text-2xl font-semibold">Contributions and taxes</h1>
+          <p class="text-muted-foreground mt-1 text-sm">Your saved income is used automatically.</p>
         </div>
         <Button variant="outline" :disabled="busy" @click="refresh">Refresh Tax Data</Button>
       </div>
@@ -196,44 +204,6 @@ onMounted(load);
       ><Callout v-if="notice">{{ notice }}</Callout>
       <p v-if="loading" class="text-muted-foreground">Loading income planning…</p>
       <template v-else>
-        <Card class="space-y-4 p-5">
-          <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <label class="space-y-1 text-sm"
-              >Saved plan<select v-model="selected" :class="field" @change="choose">
-                <option value="new">New scenario</option>
-                <option v-for="plan in document.plans" :key="plan.id" :value="plan.id">{{ plan.name }}</option>
-              </select></label
-            >
-            <label class="space-y-1 text-sm">Plan name<input v-model="name" :class="field" /></label>
-            <label class="space-y-1 text-sm"
-              >Employer / household<select v-model="employerId" :class="field">
-                <option value="">Household / combined</option>
-                <option v-for="employer in document.employers" :key="employer.id" :value="employer.id">
-                  {{ employer.person }} {{ employer.name }}
-                </option>
-              </select></label
-            >
-            <label class="space-y-1 text-sm"
-              >Evidence<select v-model="evidence" :class="field">
-                <option value="estimated">Estimated planning inputs</option>
-                <option value="projected">Projected scenario</option>
-              </select></label
-            >
-            <label class="space-y-1 text-sm"
-              >Effective from (if known)<input v-model="effectiveFrom" type="date" :class="field"
-            /></label>
-            <label class="space-y-1 text-sm"
-              >Effective through (optional)<input v-model="effectiveTo" type="date" :class="field"
-            /></label>
-          </div>
-          <label class="block space-y-1 text-sm"
-            >Source / notes<textarea v-model="notes" :class="field + ' h-20 py-2'" />
-          </label>
-          <p class="text-muted-foreground text-xs">
-            A source capture date is not a verified salary effective date. Save a new dated version when salary,
-            employer benefits or allocations change.
-          </p>
-        </Card>
         <div class="grid gap-6 lg:grid-cols-2">
           <Card class="space-y-4 p-5"
             ><h2 class="font-semibold">Income and Compensation</h2>

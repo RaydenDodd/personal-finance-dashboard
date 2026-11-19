@@ -26,10 +26,12 @@ const props = withDefaults(
     mode?: 'line' | 'overlay' | 'stacked' | 'bar' | 'donut';
     percentage?: boolean;
     currency?: string;
+    donutLabel?: string;
+    donutDetails?: boolean;
   }>(),
   { mode: 'line', percentage: false, currency: 'USD' },
 );
-const emit = defineEmits<{ select: [row: ChartRow] }>();
+const emit = defineEmits<{ select: [row: ChartRow]; selectSeries: [id: string] }>();
 const container = ref<HTMLDivElement | null>(null);
 const svg = ref<SVGSVGElement | null>(null);
 const tooltipElement = ref<HTMLDivElement | null>(null);
@@ -38,6 +40,10 @@ const gradientNamespace = useId().replace(/:/g, '');
 const hiddenSeries = ref<string[]>([]);
 const visibleSeries = computed(() => props.series.filter((s) => !hiddenSeries.value.includes(s.id)));
 function toggleSeries(id: string) {
+  if (props.mode === 'donut' && props.donutDetails) {
+    emit('selectSeries', id);
+    return;
+  }
   hiddenSeries.value = hiddenSeries.value.includes(id)
     ? hiddenSeries.value.filter((key) => key !== id)
     : [...hiddenSeries.value, id];
@@ -111,9 +117,31 @@ function render() {
       .attr('fill', (d) => d.data.color)
       .attr('stroke', colors.card)
       .attr('stroke-width', 3)
-      .on('pointermove', (event) => showTooltip(event, row))
-      .on('pointerdown', (event) => showTooltip(event, row))
-      .on('click', () => emit('select', row))
+      .attr('tabindex', props.donutDetails ? 0 : null)
+      .attr('role', props.donutDetails ? 'button' : null)
+      .attr(
+        'aria-label',
+        (d) => `${d.data.name} ${((d.data.value / data.reduce((sum, s) => sum + s.value, 0)) * 100).toFixed(1)}%`,
+      )
+      .style('cursor', () => (props.donutDetails ? 'pointer' : null))
+      .on('pointermove pointerdown', (event, d) =>
+        showTooltip(
+          event,
+          props.donutDetails
+            ? {
+                label: `${d.data.name} · ${((d.data.value / data.reduce((sum, s) => sum + s.value, 0)) * 100).toFixed(1)}%`,
+                values: { [d.data.id]: d.data.value },
+              }
+            : row,
+        ),
+      )
+      .on('click', (_event, d) => (props.donutDetails ? emit('selectSeries', d.data.id) : emit('select', row)))
+      .on('keydown', (event, d) => {
+        if (props.donutDetails && ['Enter', ' '].includes(event.key)) {
+          event.preventDefault();
+          emit('selectSeries', d.data.id);
+        }
+      })
       .on('pointerleave', (event: PointerEvent) => {
         if (event.pointerType !== 'touch') tooltip.visible = false;
       });
@@ -124,7 +152,7 @@ function render() {
       .attr('text-anchor', 'middle')
       .attr('fill', colors.text)
       .attr('font-size', 12)
-      .text('Included assets');
+      .text(props.donutLabel ?? 'Included assets');
     root
       .append('text')
       .attr('x', w / 2)
@@ -515,8 +543,8 @@ onMounted(render);
         ref="svg"
         class="h-full w-full"
         style="touch-action: pan-y pinch-zoom"
-        role="img"
-        aria-label="Financial history chart"
+        :role="props.donutDetails ? 'group' : 'img'"
+        :aria-label="props.donutDetails ? 'Monthly income allocation' : 'Financial history chart'"
       />
       <div
         v-if="tooltip.visible && tooltip.row"
@@ -528,7 +556,9 @@ onMounted(render);
         <ChartTooltip class="w-full min-w-0">
           <ChartTooltipHeader>{{ tooltip.row.label }}</ChartTooltipHeader>
           <ChartTooltipRow
-            v-for="series in visibleSeries"
+            v-for="series in visibleSeries.filter(
+              (s) => !props.donutDetails || tooltip.row?.values[s.id] !== undefined,
+            )"
             :key="series.id"
             :color="series.color"
             :label="series.name"

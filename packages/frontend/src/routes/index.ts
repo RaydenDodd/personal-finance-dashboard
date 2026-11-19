@@ -26,12 +26,12 @@ const routes: RouteRecordRaw[] = [
       {
         path: '/finances/income',
         name: ROUTES_NAMES.incomeManagement,
-        component: () => import('@/pages/income-management/index.vue'),
+        component: () => import('@/pages/income-management/overview.vue'),
       },
       {
         path: '/finances/taxes',
         name: ROUTES_NAMES.taxPlanning,
-        component: () => import('@/pages/income-management/taxes.vue'),
+        redirect: { name: ROUTES_NAMES.incomeManagement },
       },
       {
         path: '/personal-finance',

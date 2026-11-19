@@ -8,7 +8,6 @@ import { ROUTES_NAMES } from '@/routes/constants';
 import {
   CalendarClockIcon,
   BanknoteIcon,
-  CalculatorIcon,
   CarIcon,
   ChartColumnIcon,
   CreditCardIcon,
@@ -96,7 +95,6 @@ const navItems = computed<RailNavItem[]>(() => [
   { routeName: ROUTES_NAMES.home, icon: LayoutDashboardIcon, label: t('navigation.dashboard') },
   { routeName: ROUTES_NAMES.personalFinance, icon: WalletIcon, label: t('navigation.personalNetWorth') },
   { routeName: ROUTES_NAMES.incomeManagement, icon: BanknoteIcon, label: 'Income' },
-  { routeName: ROUTES_NAMES.taxPlanning, icon: CalculatorIcon, label: 'Taxes / Take Home Pay' },
   {
     routeName: ROUTES_NAMES.accounts,
     icon: LayersIcon,

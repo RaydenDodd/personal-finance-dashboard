@@ -5,7 +5,6 @@ import { ROUTES_NAMES } from '@/routes';
 import {
   CalendarClockIcon,
   ChartColumnIcon,
-  CalculatorIcon,
   ChevronRightIcon,
   CreditCardIcon,
   LayersIcon,
@@ -90,17 +89,6 @@ watch(
     >
       <BanknoteIcon :class="[navIconBase, isActive && navIconActive]" />
       <span>Income</span>
-    </ui-button>
-  </router-link>
-  <router-link v-if="!bottomNav" v-slot="{ isActive }" :to="{ name: ROUTES_NAMES.taxPlanning }">
-    <ui-button
-      variant="ghost"
-      as="span"
-      :class="[navItemBase, 'justify-start', isActive && navItemActive]"
-      size="default"
-    >
-      <CalculatorIcon :class="[navIconBase, isActive && navIconActive]" />
-      <span>Taxes / Take Home Pay</span>
     </ui-button>
   </router-link>
 
