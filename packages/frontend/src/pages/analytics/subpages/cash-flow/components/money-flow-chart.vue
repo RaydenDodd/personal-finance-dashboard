@@ -1,5 +1,12 @@
 <template>
-  <div ref="containerRef" class="relative w-full" @pointercancel="tooltip.visible = false">
+  <HierarchicalMoneyFlow
+    v-if="hierarchy"
+    :root="hierarchy"
+    :display-mode="incomeDisplayMode"
+    :period-divisor="incomePeriodDivisor"
+    :incoming-sources="incomingSources"
+  />
+  <div v-else ref="containerRef" class="relative w-full" @pointercancel="tooltip.visible = false">
     <svg ref="svgRef" class="block w-full"></svg>
 
     <div
@@ -27,6 +34,8 @@
 </template>
 
 <script setup lang="ts">
+import HierarchicalMoneyFlow from '@/pages/income-management/hierarchical-money-flow.vue';
+import type { IncomeFlowNode } from '@bt/shared/finance-income';
 import { currentTheme } from '@/common/utils/color-theme';
 import { ChartTooltip, ChartTooltipHeader, ChartTooltipRow } from '@/components/common/charts/chart-tooltip';
 import { useFormatCurrency } from '@/composable';
@@ -53,6 +62,10 @@ import { spreadTops } from '../utils/spread-tops';
 
 const props = defineProps<{
   flow: MoneyFlow;
+  hierarchy?: IncomeFlowNode;
+  incomeDisplayMode?: 'percent' | 'amount' | 'both';
+  incomePeriodDivisor?: number;
+  incomingSources?: { name: string; amount: number }[];
 }>();
 
 const { t } = useI18n();

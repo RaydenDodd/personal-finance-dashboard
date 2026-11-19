@@ -1,0 +1,8 @@
+[Unit]
+Description=Check authoritative tax data updates
+After=finance-boot.service network-online.target
+[Service]
+Type=oneshot
+UMask=0077
+ExecStart=/usr/bin/python3 /home/rayden/personal-finance-dashboard/deploy/local-finance/refresh_tax_data.py
+TimeoutStartSec=450

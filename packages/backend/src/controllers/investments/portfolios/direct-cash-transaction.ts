@@ -15,6 +15,10 @@ const schema = z.object({
     currencyCode: currencyCode(),
     date: dateString(),
     description: z.string().nullable().optional(),
+    sourceRowId: z
+      .string()
+      .regex(/^[a-f0-9]{64}$/)
+      .optional(),
     isAdjustment: z.boolean().optional(),
   }),
 });
@@ -28,6 +32,7 @@ export default createController(schema, async ({ user, params, body }) => {
     currencyCode: body.currencyCode,
     date: body.date,
     description: body.description || null,
+    sourceRowId: body.sourceRowId,
     isAdjustment: body.isAdjustment ?? false,
   });
 

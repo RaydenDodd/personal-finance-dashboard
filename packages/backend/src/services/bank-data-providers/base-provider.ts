@@ -8,6 +8,7 @@ import Accounts from '@models/accounts.model';
 import BankDataProviderConnections from '@models/bank-data-provider-connections.model';
 import { isBaseCurrencyChangeLocked } from '@services/currencies/base-currency-lock';
 
+import { requestLocalCategorization } from './sync/request-local-categorization';
 import { SyncStatus, setAccountSyncStatus } from './sync/sync-status-tracker';
 import {
   DateRange,
@@ -291,6 +292,7 @@ export abstract class BaseBankDataProvider implements IBankDataProvider {
       });
 
       await setAccountSyncStatus({ accountId: systemAccountId, status: SyncStatus.COMPLETED, userId });
+      await requestLocalCategorization(userId);
 
       return result;
     } catch (error) {

@@ -62,6 +62,34 @@ describe('POST /transaction (create investment transaction)', () => {
     expect(holding!.costBasis).toBeNumericEqual(100);
   });
 
+  it('replays a broker source row without purchasing its shares or debiting cash twice', async () => {
+    const payload = {
+      portfolioId: investmentPortfolio.id,
+      securityId: vooSecurity.id,
+      category: INVESTMENT_TRANSACTION_CATEGORY.buy,
+      quantity: '2',
+      price: '50',
+      sourceRowId: 'a'.repeat(64),
+      name: 'Observed broker execution',
+    };
+    const first = await helpers.createInvestmentTransaction({ payload, raw: true });
+    const retry = await helpers.createInvestmentTransaction({ payload, raw: true });
+    expect(retry.id).toBe(first.id);
+    const [holding] = await helpers.getHoldings({
+      portfolioId: investmentPortfolio.id,
+      payload: { securityId: vooSecurity.id },
+      raw: true,
+    });
+    expect(holding!.quantity).toBeNumericEqual(2);
+    expect(holding!.costBasis).toBeNumericEqual(100);
+    const [balance] = await helpers.getPortfolioBalance({
+      portfolioId: investmentPortfolio.id,
+      currencyCode: 'USD',
+      raw: true,
+    });
+    expect(balance!.totalCash).toBeNumericEqual(-100);
+  });
+
   it('should create a sell transaction successfully', async () => {
     // First create a buy transaction to have shares to sell
     await helpers.createInvestmentTransaction({

@@ -1,6 +1,28 @@
 <template>
   <div class="max-w-100 min-w-70 p-2">
     <p class="mb-3 text-sm">{{ $t('syncStatusTooltip.title') }}</p>
+    <dl v-if="accountStatuses.length" class="text-muted-foreground mb-3 grid gap-1 text-xs">
+      <div class="flex flex-wrap justify-between gap-2">
+        <dt>{{ $t('syncStatusTooltip.lastSuccessful') }}</dt>
+        <dd>
+          {{
+            scheduleStatus?.lastSuccessfulSyncAt
+              ? new Date(scheduleStatus.lastSuccessfulSyncAt).toLocaleString()
+              : $t('syncStatusTooltip.notYet')
+          }}
+        </dd>
+      </div>
+      <div class="flex flex-wrap justify-between gap-2">
+        <dt>{{ $t('syncStatusTooltip.nextScheduled') }}</dt>
+        <dd>
+          {{
+            scheduleStatus?.nextScheduledSyncAt
+              ? new Date(scheduleStatus.nextScheduledSyncAt).toLocaleString()
+              : $t('syncStatusTooltip.notYet')
+          }}
+        </dd>
+      </div>
+    </dl>
 
     <!-- Just completed: success / partial-failure banner -->
     <div
@@ -222,6 +244,7 @@ import Button from '@/components/lib/ui/button/Button.vue';
 import { Callout } from '@/components/lib/ui/callout';
 import { ScrollArea } from '@/components/lib/ui/scroll-area';
 import { useAiAllowance } from '@/composable/use-ai-allowance';
+import { useSyncStatus } from '@/composable/use-sync-status';
 import { ROUTES_NAMES } from '@/routes/constants';
 import { AI_FEATURE, type AiCategorizationProgressPayload } from '@bt/shared/types';
 import {
@@ -240,6 +263,7 @@ import { useI18n } from 'vue-i18n';
 
 const { t } = useI18n();
 const { showBadge } = useAiAllowance();
+const { syncStatusData: scheduleStatus } = useSyncStatus();
 
 const props = defineProps<{
   accountStatuses: AccountSyncStatus[];

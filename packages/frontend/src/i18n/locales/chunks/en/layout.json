@@ -131,6 +131,9 @@
     }
   },
   "syncStatusTooltip": {
+    "lastSuccessful": "Last successful sync",
+    "nextScheduled": "Next scheduled sync",
+    "notYet": "Not available yet",
     "title": "Banks connections sync status",
     "syncedSuccessfully": "Synced successfully",
     "syncCompletedWithErrors": "Some accounts failed to sync",

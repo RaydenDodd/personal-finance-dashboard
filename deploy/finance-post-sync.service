@@ -1,0 +1,8 @@
+[Unit]
+Description=Categorize purchases after manual or scheduled bank sync
+After=finance-boot.service
+[Service]
+Type=oneshot
+UMask=0077
+ExecStart=/usr/bin/flock -n /var/lib/finance-reports/pipeline.lock /usr/bin/python3 /home/rayden/personal-finance-dashboard/deploy/local-finance/post_sync.py
+TimeoutStartSec=600

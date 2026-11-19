@@ -7,6 +7,7 @@ import { Job, Queue, Worker } from 'bullmq';
 
 import { syncTransactionsForAccount, withAccountSyncLock } from '../connection/sync-transactions-for-account';
 import { bankProviderRegistry } from '../registry';
+import { requestLocalCategorization } from './request-local-categorization';
 import { SyncStatus, setAccountsSyncStatus } from './sync-status-tracker';
 
 interface AccountSyncJobData extends SentryTraceData {
@@ -135,6 +136,10 @@ export const accountSyncWorker = new Worker<AccountSyncJobData>(
   },
 );
 
+accountSyncWorker.on('completed', async (job) => {
+  await requestLocalCategorization(job.data.userId);
+});
+
 accountSyncWorker.on('failed', async (job, err) => {
   if (err instanceof ServiceUnavailableError) {
     logger.info('[Account Sync Worker] Job failed: bank provider unavailable', { jobId: job?.id });
@@ -143,6 +148,7 @@ accountSyncWorker.on('failed', async (job, err) => {
   }
 
   if (!job) return;
+  await requestLocalCategorization(job.data.userId);
 
   // Catch-all for jobs that never reached the processor's own handler — a
   // stalled job leaves its accounts SYNCING forever otherwise.

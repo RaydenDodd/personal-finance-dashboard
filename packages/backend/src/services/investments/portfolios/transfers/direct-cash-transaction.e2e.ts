@@ -26,6 +26,28 @@ describe('Direct Cash Transaction (POST /investments/portfolios/:id/cash-transac
   });
 
   describe('deposits', () => {
+    it('replays imported cash once while preserving two identical legitimate source rows', async () => {
+      const payload = {
+        type: 'deposit' as const,
+        amount: '200',
+        currencyCode,
+        date: '2025-06-15',
+        sourceRowId: 'a'.repeat(64),
+      };
+      const first = await helpers.directCashTransaction({ portfolioId: portfolio.id, payload, raw: true });
+      const retry = await helpers.directCashTransaction({ portfolioId: portfolio.id, payload, raw: true });
+      const distinct = await helpers.directCashTransaction({
+        portfolioId: portfolio.id,
+        payload: { ...payload, sourceRowId: 'b'.repeat(64) },
+        raw: true,
+      });
+      expect(retry.id).toBe(first.id);
+      expect(distinct.id).not.toBe(first.id);
+      const [balance] = await helpers.getPortfolioBalance({ portfolioId: portfolio.id, currencyCode, raw: true });
+      expect(balance!.availableCash).toBeNumericEqual(400);
+      expect(balance!.totalCash).toBeNumericEqual(400);
+    });
+
     it('should create a deposit, increase portfolio balance and appear in the transfer list', async () => {
       const transfer = await helpers.directCashTransaction({
         portfolioId: portfolio.id,

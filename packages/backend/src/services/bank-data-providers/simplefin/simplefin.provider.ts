@@ -420,6 +420,7 @@ export class SimplefinProvider extends BaseBankDataProvider {
       }),
     );
     const from = new Date(Math.min(...plans.map((plan) => plan.createFromDate.getTime())));
+    let failedAccounts = 0;
 
     let byExternalId: Map<string, AccountTransactionsBucket>;
     try {
@@ -477,11 +478,12 @@ export class SimplefinProvider extends BaseBankDataProvider {
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error';
         logger.error({ message: `[SimpleFIN] Sync error for account ${account.id}:`, error: error as Error });
+        failedAccounts++;
         await setAccountSyncStatus({ accountId: account.id, status: SyncStatus.FAILED, error: message, userId });
       }
     }
 
-    await this.updateLastSync(connectionId);
+    if (failedAccounts === 0) await this.updateLastSync(connectionId);
   }
 
   /**

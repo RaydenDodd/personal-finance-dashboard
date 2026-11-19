@@ -19,14 +19,15 @@ const loadDueUsers = async ({ now }: { now: Date }): Promise<DueUser[]> =>
     `SELECT DISTINCT u."id", u."role", u."plan", u."trialEndsAt", u."firstBudgetPlanAt"
        FROM "Users" u
        JOIN "BankDataProviderConnections" c ON c."userId" = u."id" AND c."isActive" = true
-       JOIN ba_session s ON s."userId" = u."authUserId" AND s."updatedAt" >= :activeSince
        LEFT JOIN "UserSettings" us ON us."userId" = u."id"
       WHERE COALESCE(us."settings"->'bankSyncHoursUtc', :defaultHours::jsonb) @> to_jsonb(:hour::int)
+        AND (:selfHosted OR EXISTS (SELECT 1 FROM ba_session s WHERE s."userId" = u."authUserId" AND s."updatedAt" >= :activeSince))
       ORDER BY u."id"`,
     {
       type: QueryTypes.SELECT,
       replacements: {
         hour: now.getUTCHours(),
+        selfHosted: process.env.IS_SELF_HOST === 'true',
         defaultHours: JSON.stringify(DEFAULT_BANK_SYNC_HOURS_UTC),
         activeSince: new Date(now.getTime() - ACTIVE_WITHIN_DAYS * 24 * 60 * 60 * 1000),
       },
@@ -36,7 +37,7 @@ const loadDueUsers = async ({ now }: { now: Date }): Promise<DueUser[]> =>
 /**
  * Queues a sync for every user whose schedule includes the current UTC hour.
  *
- * At most two slots per user, and a batch-capable provider spends one request per
+ * At most four slots per user, and a batch-capable provider spends one request per
  * connection per sync, so SimpleFIN's ~24 requests/day budget is never approached.
  */
 export const runBankAccountsSync = async ({ now = new Date() }: { now?: Date } = {}) => {

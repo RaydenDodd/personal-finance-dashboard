@@ -15,7 +15,9 @@ import { updatePortfolioBalance } from '@services/investments/portfolios/balance
 import { ensureUserCurrencyConnected } from '@services/sharing/auth/ensure-currency-connected.service';
 import { getExchangeRate } from '@services/user-exchange-rate/get-exchange-rate.service';
 import { Big } from 'big.js';
+import { Op } from 'sequelize';
 
+import { lockBrokerImportRow } from '../broker-import-provenance';
 import { calculateCashDelta } from './cash-balance-utils';
 import { resolveSettlement } from './settlement-utils';
 
@@ -29,6 +31,8 @@ interface CreateTxParams {
   price: string;
   fees: string;
   name?: string;
+  /** Stable identifier from the broker CSV parser. Replaying it returns the original row. */
+  sourceRowId?: string;
   /**
    * Settlement leg — the cash side of the trade when it differs from the
    * security's own currency (single-cash-currency brokers, e.g. a PLN account
@@ -56,6 +60,19 @@ interface CreateTxParams {
 
 const createInvestmentTransactionImpl = async (params: CreateTxParams) => {
   const { portfolioId, securityId, userId, category, quantity, price, fees, date, preloadedHolding } = params;
+
+  let sourceMarker: string | undefined;
+  if (params.sourceRowId) {
+    await findOrThrowNotFound({
+      query: Portfolios.findOne({ where: { id: portfolioId, userId } }),
+      message: t({ key: 'investments.portfolioNotFound' }),
+    });
+    sourceMarker = await lockBrokerImportRow({ userId, portfolioId, sourceRowId: params.sourceRowId });
+    const existing = await InvestmentTransaction.findOne({
+      where: { portfolioId, name: { [Op.like]: `${sourceMarker}%` } },
+    });
+    if (existing) return existing;
+  }
 
   let holding: Holdings;
   if (preloadedHolding) {
@@ -184,6 +201,7 @@ const createInvestmentTransactionImpl = async (params: CreateTxParams) => {
 
   const newTx = await InvestmentTransaction.create({
     ...params,
+    name: sourceMarker ? `${sourceMarker} ${params.name ?? ''}`.slice(0, 2000) : params.name,
     // Normalize the API string to a Date so the TIMESTAMPTZ column receives a
     // proper instant regardless of DB session timezone. A date-only input
     // (e.g. '2026-03-01') becomes UTC midnight; a full ISO datetime is kept at

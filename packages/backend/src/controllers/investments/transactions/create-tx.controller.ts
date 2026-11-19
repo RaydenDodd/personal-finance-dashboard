@@ -21,6 +21,10 @@ export default createController(
         price: numericString({ allowZero: true }),
         fees: numericString({ allowZero: true }).optional().default('0'),
         name: z.string().optional(),
+        sourceRowId: z
+          .string()
+          .regex(/^[a-f0-9]{64}$/)
+          .optional(),
         // Settlement leg: the actual cash side of the trade when it differs
         // from the security's currency, or when the user only knows the total
         // cash moved and wants the fee derived. Whether settlementFees is

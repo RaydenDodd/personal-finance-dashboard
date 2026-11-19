@@ -110,7 +110,7 @@ describe('Bank accounts sync cron', () => {
     }
   });
 
-  it.each([[[1, 2, 3]], [[9]], [[]]])('rejects sync hours %j', async (bankSyncHoursUtc) => {
+  it.each([[[0, 1, 2, 3, 4]], [[24]], [[-1]], [[]]])('rejects sync hours %j', async (bankSyncHoursUtc) => {
     const response = await helpers.patchUserSettings({ patch: { bankSyncHoursUtc } });
 
     expect(response.statusCode).toBe(422);

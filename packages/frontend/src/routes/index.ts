@@ -24,6 +24,16 @@ const routes: RouteRecordRaw[] = [
     },
     children: [
       {
+        path: '/finances/income',
+        name: ROUTES_NAMES.incomeManagement,
+        component: () => import('@/pages/income-management/index.vue'),
+      },
+      {
+        path: '/finances/taxes',
+        name: ROUTES_NAMES.taxPlanning,
+        component: () => import('@/pages/income-management/taxes.vue'),
+      },
+      {
         path: '/personal-finance',
         name: ROUTES_NAMES.personalFinance,
         component: () => import('@/pages/personal-finance/index.vue'),
@@ -131,6 +141,16 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/pages/analytics/index.vue'),
         meta: { i18nChunks: ['pages/analytics', 'pages/transactions'] },
         children: [
+          {
+            path: '/reports/income',
+            name: ROUTES_NAMES.incomeReports,
+            component: () => import('@/pages/income-management/income-report.vue'),
+          },
+          {
+            path: '/reports/taxes',
+            name: ROUTES_NAMES.taxReports,
+            component: () => import('@/pages/income-management/tax-report.vue'),
+          },
           {
             path: 'trends-comparison',
             name: ROUTES_NAMES.analyticsTrendsComparison,

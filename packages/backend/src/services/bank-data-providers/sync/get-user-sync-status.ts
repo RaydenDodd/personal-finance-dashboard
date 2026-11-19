@@ -1,5 +1,6 @@
 import {
   ACCOUNT_STATUSES,
+  DEFAULT_BANK_SYNC_HOURS_UTC,
   type ConnectionNeedingReauth,
   type ConnectionStatusSummary,
   DEACTIVATION_REASON,
@@ -8,10 +9,12 @@ import {
 import { logger } from '@js/utils/logger';
 import Accounts from '@models/accounts.model';
 import BankDataProviderConnections from '@models/bank-data-provider-connections.model';
+import UserSettings from '@models/user-settings.model';
 import { DatabaseError, Op, literal } from 'sequelize';
 
 import { computeConsentValidity } from '../connection/consent-validity';
 import { getConnectionBankName, resolveBankLogoDomain } from '../utils/bank-institutions';
+import { nextBankSyncAt } from './schedule';
 import {
   type AccountSyncStatus,
   SyncStatus,
@@ -166,6 +169,9 @@ async function getConnectionStatuses(userId: number): Promise<ConnectionStatusSu
  */
 export async function getUserAccountsSyncStatus(userId: number): Promise<{
   lastSyncAt: number | null;
+  lastSuccessfulSyncAt: number | null;
+  nextScheduledSyncAt: number | null;
+  scheduledHoursUtc: number[];
   accounts: Array<AccountSyncStatus & SyncAccountStatus>;
   connectionsNeedingReauth: ConnectionNeedingReauth[];
   connectionStatuses: ConnectionStatusSummary[];
@@ -179,6 +185,11 @@ export async function getUserAccountsSyncStatus(userId: number): Promise<{
   };
 }> {
   const accounts = await getUserBankAccounts(userId);
+  const settings = await UserSettings.findOne({ where: { userId } });
+  const scheduledHoursUtc = settings?.settings?.bankSyncHoursUtc ?? DEFAULT_BANK_SYNC_HOURS_UTC;
+  const successes = accounts
+    .map((account) => account.bankDataProviderConnection.lastSyncAt?.getTime())
+    .filter((time): time is number => typeof time === 'number' && Number.isFinite(time));
   const accountIds = accounts.map((a) => a.id);
 
   const [statuses, lastSyncAt, connectionsNeedingReauth, connectionStatuses] = await Promise.all([
@@ -230,6 +241,9 @@ export async function getUserAccountsSyncStatus(userId: number): Promise<{
 
   return {
     lastSyncAt,
+    lastSuccessfulSyncAt: successes.length ? Math.max(...successes) : null,
+    nextScheduledSyncAt: accounts.length ? nextBankSyncAt(scheduledHoursUtc) : null,
+    scheduledHoursUtc,
     accounts: enrichedStatuses,
     connectionsNeedingReauth,
     connectionStatuses,

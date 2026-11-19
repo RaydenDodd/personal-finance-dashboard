@@ -382,9 +382,9 @@ export const ZodSettingsSchema = z.object({
   // When true, Enable Banking sync stores PDNG/HOLD payloads before the bank books them.
   // Off by default: pending payloads often lack the merchant and final text.
   importPendingBankTransactions: z.boolean().optional(),
-  // UTC hours at which the bank-sync cron syncs this user; 06:00 and 18:00 when unset.
-  // The same hour twice means one sync a day.
-  bankSyncHoursUtc: z.array(z.number().int().min(0).max(23)).length(2).optional(),
+  // UTC hours for automatic bank sync; midnight, 06:00, noon and 18:00 when unset.
+  // Repeated hours still represent a single daily slot.
+  bankSyncHoursUtc: z.array(z.number().int().min(0).max(23)).min(1).max(4).optional(),
   // Categories whose legs leave the cash-flow report entirely, so money moved into them counts as
   // savings rather than spend. Descendants are expanded server-side. Plain z.uuid(), not
   // recordId(): the branded RecordId output breaks the SettingsPatchSchemaIsInSync assertion below.
@@ -500,7 +500,7 @@ export const ZodSettingsPatchSchema = z.object({
   hideSmartTrackingTip: z.boolean().optional(),
   matchTransfersWithManualAccounts: z.boolean().optional(),
   importPendingBankTransactions: z.boolean().optional(),
-  bankSyncHoursUtc: z.array(z.number().int().min(0).max(23)).length(2).optional(),
+  bankSyncHoursUtc: z.array(z.number().int().min(0).max(23)).min(1).max(4).optional(),
   savingsCategoryIds: z.array(z.uuid()).optional(),
   taxCategoryIds: z.array(z.uuid()).optional(),
   incomeCategoryIds: z.array(z.uuid()).optional(),

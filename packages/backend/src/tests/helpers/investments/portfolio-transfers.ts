@@ -163,6 +163,7 @@ export async function directCashTransaction<R extends boolean | undefined = fals
     date: string;
     description?: string | null;
     isAdjustment?: boolean;
+    sourceRowId?: string;
   };
   raw?: R;
 }) {

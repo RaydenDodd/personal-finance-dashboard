@@ -1,0 +1,7 @@
+[Unit]
+Description=Weekly tax source checks Sunday 4 AM Eastern
+[Timer]
+OnCalendar=Sun *-*-* 04:00:00 America/New_York
+Persistent=true
+[Install]
+WantedBy=timers.target

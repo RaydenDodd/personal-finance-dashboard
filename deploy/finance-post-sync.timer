@@ -1,0 +1,7 @@
+[Unit]
+Description=Watch for completed bank syncs without polling bank providers
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=30s
+[Install]
+WantedBy=timers.target

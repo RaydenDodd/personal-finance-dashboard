@@ -15,6 +15,7 @@ export function buildInvestmentTransactionPayload({
   price = '100',
   fees = '0',
   name = '',
+  sourceRowId,
   settlementCurrencyCode,
   settlementAmount,
   settlementFees,
@@ -28,6 +29,7 @@ export function buildInvestmentTransactionPayload({
   price?: string;
   fees?: string;
   name?: string;
+  sourceRowId?: string;
   settlementCurrencyCode?: string;
   settlementAmount?: string;
   settlementFees?: string;
@@ -42,6 +44,7 @@ export function buildInvestmentTransactionPayload({
     price,
     fees,
     name,
+    ...(sourceRowId !== undefined ? { sourceRowId } : {}),
     ...(settlementCurrencyCode !== undefined ? { settlementCurrencyCode } : {}),
     ...(settlementAmount !== undefined ? { settlementAmount } : {}),
     ...(settlementFees !== undefined ? { settlementFees } : {}),

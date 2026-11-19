@@ -5,11 +5,13 @@ import { ROUTES_NAMES } from '@/routes';
 import {
   CalendarClockIcon,
   ChartColumnIcon,
+  CalculatorIcon,
   ChevronRightIcon,
   CreditCardIcon,
   LayersIcon,
   LayoutDashboardIcon,
   WalletIcon,
+  BanknoteIcon,
 } from '@lucide/vue';
 import { watch } from 'vue';
 
@@ -66,6 +68,7 @@ watch(
     </ui-button>
   </router-link>
 
+  <p v-if="!bottomNav" class="text-muted-foreground px-3 pt-3 pb-1 text-xs font-medium">Finances</p>
   <router-link v-if="!bottomNav" v-slot="{ isActive }" :to="{ name: ROUTES_NAMES.personalFinance }">
     <ui-button
       variant="ghost"
@@ -75,6 +78,29 @@ watch(
     >
       <WalletIcon :class="[navIconBase, isActive && navIconActive]" />
       <span>{{ $t('navigation.personalNetWorth') }}</span>
+    </ui-button>
+  </router-link>
+
+  <router-link v-if="!bottomNav" v-slot="{ isActive }" :to="{ name: ROUTES_NAMES.incomeManagement }">
+    <ui-button
+      variant="ghost"
+      as="span"
+      :class="[navItemBase, 'justify-start', isActive && navItemActive]"
+      size="default"
+    >
+      <BanknoteIcon :class="[navIconBase, isActive && navIconActive]" />
+      <span>Income</span>
+    </ui-button>
+  </router-link>
+  <router-link v-if="!bottomNav" v-slot="{ isActive }" :to="{ name: ROUTES_NAMES.taxPlanning }">
+    <ui-button
+      variant="ghost"
+      as="span"
+      :class="[navItemBase, 'justify-start', isActive && navItemActive]"
+      size="default"
+    >
+      <CalculatorIcon :class="[navIconBase, isActive && navIconActive]" />
+      <span>Taxes / Take Home Pay</span>
     </ui-button>
   </router-link>
 

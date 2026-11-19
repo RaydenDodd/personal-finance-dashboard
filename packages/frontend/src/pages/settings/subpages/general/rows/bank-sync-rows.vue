@@ -37,7 +37,7 @@
     :label="$t('settings.general.bankSyncSchedule.label')"
     :description="$t('settings.general.bankSyncSchedule.description')"
   >
-    <div class="flex shrink-0 gap-2" role="group" aria-labelledby="bank-sync-schedule-label">
+    <div class="grid max-w-full shrink-0 grid-cols-2 gap-2" role="group" aria-labelledby="bank-sync-schedule-label">
       <SelectField
         v-for="(hour, index) in bankSyncHoursUtc"
         :key="index"

@@ -339,6 +339,9 @@ interface SyncStatusSummary {
 }
 
 export interface SyncStatusResponse {
+  lastSuccessfulSyncAt?: number | null;
+  nextScheduledSyncAt?: number | null;
+  scheduledHoursUtc?: number[];
   lastSyncAt: number | null;
   accounts: AccountSyncStatus[];
   connectionsNeedingReauth: ConnectionNeedingReauth[];

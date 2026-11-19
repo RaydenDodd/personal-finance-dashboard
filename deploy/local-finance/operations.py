@@ -53,11 +53,11 @@ class Api:
     def __init__(self):
         self.base = os.environ.get('FINANCE_API_BASE','http://192.168.0.32:8095')+'/api/v1'
         self.opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
-    def request(self,path,data=None,method=None):
+    def request(self,path,data=None,method=None,timeout=45):
         req=urllib.request.Request(self.base+path, method=method,
             data=json.dumps(data).encode() if data is not None else None,
             headers={'Content-Type':'application/json','Origin':'http://localhost:8095'})
-        with self.opener.open(req,timeout=45) as response:
+        with self.opener.open(req,timeout=timeout) as response:
             raw=response.read()
             value=json.loads(raw) if raw else None
             return value.get('response',value) if isinstance(value,dict) else value

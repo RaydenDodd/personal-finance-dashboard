@@ -15,6 +15,7 @@ import { updatePortfolioBalance } from '@services/investments/portfolios/balance
 import { ensureUserCurrencyConnected } from '@services/sharing/auth/ensure-currency-connected.service';
 import { Big } from 'big.js';
 
+import { preserveBrokerImportMarker } from '../broker-import-provenance';
 import { calculateCashDelta } from './cash-balance-utils';
 import { resolveSettlement } from './settlement-utils';
 
@@ -129,7 +130,7 @@ const updateInvestmentTransactionImpl = async (params: UpdateTransactionParams) 
   }
 
   if (updateFields.name !== undefined) {
-    updateData.name = updateFields.name;
+    updateData.name = preserveBrokerImportMarker({ previous: transaction.name, next: updateFields.name });
   }
 
   if (updateFields.quantity !== undefined) {

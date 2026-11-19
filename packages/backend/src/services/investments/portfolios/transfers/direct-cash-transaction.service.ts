@@ -2,7 +2,9 @@ import Currencies from '@models/currencies.model';
 import PortfolioTransfers from '@models/investments/portfolio-transfers.model';
 import Portfolios from '@models/investments/portfolios.model';
 import { withTransaction } from '@services/common/with-transaction';
+import { lockBrokerImportRow } from '@services/investments/broker-import-provenance';
 import { updatePortfolioBalance } from '@services/investments/portfolios/balances';
+import { Op } from 'sequelize';
 
 import {
   computeRefAmount,
@@ -20,6 +22,7 @@ interface DirectCashTransactionParams {
   currencyCode: string;
   date: string;
   description?: string | null;
+  sourceRowId?: string;
   /**
    * The deposit or withdrawal only reconciles the recorded cash to reality, so
    * contribution reporting must not read it as money the user added. The cash
@@ -36,11 +39,24 @@ const directCashTransactionImpl = async ({
   currencyCode,
   date,
   description,
+  sourceRowId,
   isAdjustment = false,
 }: DirectCashTransactionParams) => {
   validatePositiveAmount({ amount });
 
   await findPortfolioOrThrow({ portfolioId, userId, role: 'generic' });
+  let sourceMarker: string | undefined;
+  if (sourceRowId) {
+    sourceMarker = await lockBrokerImportRow({ userId, portfolioId, sourceRowId });
+    const existing = await PortfolioTransfers.findOne({
+      where: {
+        userId,
+        description: { [Op.like]: `${sourceMarker}%` },
+        [Op.or]: [{ fromPortfolioId: portfolioId }, { toPortfolioId: portfolioId }],
+      },
+    });
+    if (existing) return existing;
+  }
   await findCurrencyOrThrow({ currencyCode });
 
   const refAmount = await computeRefAmount({ amount, currencyCode, userId, date });
@@ -59,7 +75,7 @@ const directCashTransactionImpl = async ({
     refAmount,
     currencyCode,
     date,
-    description,
+    description: sourceMarker ? `${sourceMarker} ${description ?? ''}` : description,
     isAdjustment,
   });
 

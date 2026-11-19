@@ -13,8 +13,8 @@ try:
     request('/auth/sign-in/email', {key: credentials[key] for key in ('email','password')})
     status = request('/bank-data-providers/sync/status')
     accounts = status.get('accounts', [])
-    recent = time.time()*1000 - (status.get('lastSyncAt') or 0) < 10*3600*1000
-    if any(a.get('status') == 'syncing' for a in accounts):
+    recent = time.time()*1000 - (status.get('lastSuccessfulSyncAt') or status.get('lastSyncAt') or 0) < 5*3600*1000
+    if any(a.get('status') in ('syncing','queued') for a in accounts):
         print('Bank sync already running; skipped')
     elif accounts and recent and all(a.get('status') == 'completed' for a in accounts):
         print('Recent successful bank sync; skipped')

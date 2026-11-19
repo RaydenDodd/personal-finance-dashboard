@@ -55,10 +55,13 @@ const route = useRoute();
 const moreOpen = ref(false);
 const items = computed(() => [
   {
-    routeName: ROUTES_NAMES.personalFinance,
+    routeName: ROUTES_NAMES.home,
     label: 'Finances',
     icon: WalletIcon,
-    active: route.name === ROUTES_NAMES.personalFinance,
+    active:
+      route.name === ROUTES_NAMES.home ||
+      route.name === ROUTES_NAMES.personalFinance ||
+      route.path.startsWith('/finances'),
   },
   {
     routeName: ROUTES_NAMES.accounts,
@@ -76,7 +79,7 @@ const items = computed(() => [
     routeName: ROUTES_NAMES.analyticsNetWorthHistory,
     label: 'Reports',
     icon: ChartColumnIcon,
-    active: route.path.startsWith('/analytics'),
+    active: route.path.startsWith('/analytics') || route.path.startsWith('/reports'),
   },
 ]);
 watch(

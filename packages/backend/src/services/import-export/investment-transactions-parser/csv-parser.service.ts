@@ -207,6 +207,13 @@ export function parseInvestmentCsv({
 
   dataRows.forEach((dataRow, dataRowIdx) => {
     const rowIndex = dataRowIdx + 1;
+    const sideRaw = readCell({ row: dataRow, header: columnMapping.side, headers });
+    const side = resolveSide({ raw: sideRaw, mapping: columnMapping.sideValueMapping });
+    // Explicitly skipped cash/administrative rows commonly have no ticker/date.
+    if (side === INVESTMENT_IMPORT_SIDE_SKIP) {
+      skippedRowsCount += 1;
+      return;
+    }
     const rawSymbol = readCell({ row: dataRow, header: columnMapping.symbol, headers }).toUpperCase();
     if (!rawSymbol) {
       invalidRows.push({ rowIndex, code: 'CSV_ROW_MISSING_SYMBOL' });
@@ -223,8 +230,6 @@ export function parseInvestmentCsv({
       return;
     }
 
-    const sideRaw = readCell({ row: dataRow, header: columnMapping.side, headers });
-    const side = resolveSide({ raw: sideRaw, mapping: columnMapping.sideValueMapping });
     if (!side) {
       invalidRows.push({ rowIndex, code: 'CSV_ROW_UNMAPPED_SIDE', value: sideRaw });
       return;
@@ -233,10 +238,6 @@ export function parseInvestmentCsv({
     // count it so the controller can surface "N rows skipped on purpose" as a
     // warning. Without the count the user sees fewer transactions than their
     // file contained with no clue why.
-    if (side === INVESTMENT_IMPORT_SIDE_SKIP) {
-      skippedRowsCount += 1;
-      return;
-    }
 
     const quantityRaw = readCell({ row: dataRow, header: columnMapping.quantity, headers });
     const quantity = parseDecimal(quantityRaw);

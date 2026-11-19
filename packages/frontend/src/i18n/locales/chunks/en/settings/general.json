@@ -39,7 +39,7 @@
       },
       "bankSyncSchedule": {
         "label": "Bank sync schedule",
-        "description": "Connected bank accounts sync automatically at these times, shown in your local time. Pick the same time twice to sync once a day.",
+        "description": "Connected bank accounts sync automatically at these times, shown in your local time. The default is every six hours. Repeated times count as one sync.",
         "placeholder": "Select time",
         "successNotification": "Bank sync schedule updated",
         "errorNotification": "Failed to update bank sync schedule"
