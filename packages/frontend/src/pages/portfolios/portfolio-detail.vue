@@ -64,6 +64,9 @@
 
       <!-- Main Content -->
       <div v-if="portfolio" class="grid gap-6">
+        <p v-if="portfolio.description" class="text-muted-foreground border-border rounded-lg border p-4 text-sm">
+          {{ portfolio.description }}
+        </p>
         <PortfolioBalance :portfolio-id="portfolioId" />
         <HoldingsSummary :portfolio-id="portfolioId" />
         <PortfolioCashBalances :portfolio-id="portfolioId" :portfolio="portfolio" />

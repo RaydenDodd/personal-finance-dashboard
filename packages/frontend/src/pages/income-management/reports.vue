@@ -24,7 +24,7 @@ const historyPeriod = ref<'biweekly' | 'monthly' | 'yearly'>('monthly');
 const divisor = computed(() => (period.value === 'biweekly' ? 26 : period.value === 'monthly' ? 12 : 1));
 const plan = computed(() => data.value?.calculations.find((item) => item.plan.id === selected.value) ?? null);
 const result = computed<IncomePlanResult | null>(() => plan.value?.result ?? null);
-const field = 'border-input bg-background h-10 rounded-md border px-3 text-sm';
+const field = 'border-input bg-background h-10 min-w-0 max-w-full rounded-md border px-3 text-sm';
 const money = (n: number | null | undefined) =>
   n == null ? 'Unavailable' : new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' }).format(n);
 const percent = (n: number | null | undefined) => (n == null ? 'Unavailable' : n.toFixed(2) + '%');
@@ -364,9 +364,9 @@ onMounted(load);
       </template>
       <template v-if="activeTab === 'allocation'">
         <div class="flex flex-wrap gap-3">
-          <label class="text-sm"
+          <label class="max-w-full min-w-0 space-y-1 text-sm"
             >Saved plan
-            <select v-model="selected" :class="field">
+            <select v-model="selected" :class="field + ' block w-full'">
               <option v-for="item in data.calculations" :key="item.plan.id" :value="item.plan.id">
                 {{ item.plan.name }} ({{ item.plan.evidence }})
               </option>
