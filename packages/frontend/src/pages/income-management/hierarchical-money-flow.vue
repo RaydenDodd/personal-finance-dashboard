@@ -80,7 +80,8 @@ const layout = computed(() => {
     };
   });
   const sources = (props.incomingSources ?? []).filter((s) => s.amount > 0);
-  const root = map.get(props.root.id)!;
+  const root = map.get(props.root.id);
+  if (!root) return { nodes, paths, incomingSources: [], height: 180, width: 800 };
   let cursor = root.y;
   const incomingSources = sources.map((source) => {
     const h = source.amount * scale;
@@ -122,7 +123,10 @@ function lines(name: string) {
       Every percentage uses Total Compensation. Tap a category to expand or collapse. Scroll horizontally for detailed
       branches.
     </p>
-    <div class="overflow-x-auto">
+    <p v-if="root.amount <= 0" class="text-muted-foreground py-8 text-center text-sm">
+      Enter income to view its allocation.
+    </p>
+    <div v-else class="overflow-x-auto">
       <svg
         :width="layout.width"
         :height="layout.height"

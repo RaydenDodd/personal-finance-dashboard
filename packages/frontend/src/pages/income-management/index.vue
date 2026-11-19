@@ -78,6 +78,18 @@ async function persist() {
   data.value.document = await saveIncomeDocument(doc);
   await load();
 }
+async function saveEmployers() {
+  busy.value = true;
+  error.value = '';
+  try {
+    await persist();
+    notice.value = 'Employer details saved.';
+  } catch {
+    error.value = 'Employer details could not be saved. Reload before trying again.';
+  } finally {
+    busy.value = false;
+  }
+}
 async function addEmployer() {
   if (!data.value || !employerName.value.trim()) return;
   busy.value = true;
@@ -266,7 +278,7 @@ onMounted(load);
               >End date (optional)<input v-model="item.endDate" type="date" :class="field"
             /></label>
           </div>
-          <Button v-if="data.document.employers.length" variant="outline" :disabled="busy" @click="persist"
+          <Button v-if="data.document.employers.length" variant="outline" :disabled="busy" @click="saveEmployers"
             >Save employer changes</Button
           >
           <div class="grid items-end gap-3 border-t pt-4 sm:grid-cols-4">
