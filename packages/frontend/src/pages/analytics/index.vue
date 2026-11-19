@@ -207,16 +207,9 @@ const sections = computed<NavSection[]>(() => [
       {
         name: 'income',
         label: 'Income',
-        description: 'Paychecks, compensation, allocation and projections',
+        description: 'Received income, taxes and projections',
         to: { name: ROUTES_NAMES.incomeReports },
         icon: DollarSignIcon,
-      },
-      {
-        name: 'taxes',
-        label: 'Taxes',
-        description: 'Withholding, estimated liability and tax rules',
-        to: { name: ROUTES_NAMES.taxReports },
-        icon: CalculatorIcon,
       },
       {
         name: 'trends-comparison',

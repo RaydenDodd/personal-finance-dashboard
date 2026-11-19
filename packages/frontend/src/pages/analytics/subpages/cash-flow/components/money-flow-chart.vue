@@ -1,13 +1,6 @@
 <template>
-  <HierarchicalMoneyFlow
-    v-if="hierarchy"
-    :root="hierarchy"
-    :display-mode="incomeDisplayMode"
-    :period-divisor="incomePeriodDivisor"
-    :incoming-sources="incomingSources"
-  />
-  <div v-else ref="containerRef" class="relative w-full" @pointercancel="tooltip.visible = false">
-    <svg ref="svgRef" class="block w-full"></svg>
+  <div ref="containerRef" class="relative w-full" @pointercancel="tooltip.visible = false">
+    <svg ref="svgRef" class="block w-full" role="img" :aria-label="chartLabel ?? 'Cash flow diagram'"></svg>
 
     <div
       v-show="tooltip.visible"
@@ -34,8 +27,6 @@
 </template>
 
 <script setup lang="ts">
-import HierarchicalMoneyFlow from '@/pages/income-management/hierarchical-money-flow.vue';
-import type { IncomeFlowNode } from '@bt/shared/finance-income';
 import { currentTheme } from '@/common/utils/color-theme';
 import { ChartTooltip, ChartTooltipHeader, ChartTooltipRow } from '@/components/common/charts/chart-tooltip';
 import { useFormatCurrency } from '@/composable';
@@ -53,6 +44,7 @@ import {
   CASH_NODE_ID,
   DEFICIT_NODE_ID,
   type MoneyFlow,
+  type MoneyFlowBranch,
   type MoneyFlowNode,
   formatShare,
   nodeColor,
@@ -62,10 +54,9 @@ import { spreadTops } from '../utils/spread-tops';
 
 const props = defineProps<{
   flow: MoneyFlow;
-  hierarchy?: IncomeFlowNode;
-  incomeDisplayMode?: 'percent' | 'amount' | 'both';
-  incomePeriodDivisor?: number;
-  incomingSources?: { name: string; amount: number }[];
+  branches?: MoneyFlowBranch[];
+  totalLabel?: string;
+  chartLabel?: string;
 }>();
 
 const { t } = useI18n();
@@ -214,6 +205,10 @@ const renderChart = () => {
   const { flow } = props;
   // Everything the hub receives (income plus deficit) equals everything it sends out.
   const hub = flow.expenses + flow.taxes + flow.savings;
+  if (hub <= 0) {
+    d3.select(svgRef.value).selectAll('*').remove();
+    return;
+  }
   const grouped = flow.expenseGroups.length > 0;
   const columns = grouped ? GROUPED_COLUMNS : COLUMNS;
 
@@ -305,14 +300,7 @@ const renderChart = () => {
   const shareOfIncome = t('analytics.cashFlow.composition.shareOfIncome');
   const shareOfExpenses = t('analytics.cashFlow.composition.shareOfExpenses');
 
-  interface Outflow {
-    id: 'taxes' | 'expenses' | 'savings';
-    name: string;
-    value: number;
-    color: string;
-    items: MoneyFlowNode[];
-    shareLabel: string;
-  }
+  type Outflow = MoneyFlowBranch;
   // One mid node per outflow kind; its terminal nodes share the right column in the same order.
   const allOutflows: Outflow[] = [
     {
@@ -341,7 +329,7 @@ const renderChart = () => {
       shareLabel: t('analytics.cashFlow.composition.shareOfSavings'),
     },
   ];
-  const outflows = allOutflows.filter((n) => n.value > 0);
+  const outflows = (props.branches ?? allOutflows).filter((n) => n.value > 0);
   const isTerminal = ({ outflow }: { outflow: Outflow }) => outflow.items.length === 0;
   const rightNodes = outflows.flatMap((o) => o.items);
 
@@ -376,11 +364,13 @@ const renderChart = () => {
         : []),
     ],
   });
-  const hubLabel = t(
-    flow.sources.some((n) => n.id === DEFICIT_NODE_ID)
-      ? 'analytics.cashFlow.composition.incomePlusDeficit'
-      : 'analytics.cashFlow.composition.totalIncome',
-  );
+  const hubLabel =
+    props.totalLabel ??
+    t(
+      flow.sources.some((n) => n.id === DEFICIT_NODE_ID)
+        ? 'analytics.cashFlow.composition.incomePlusDeficit'
+        : 'analytics.cashFlow.composition.totalIncome',
+    );
   const hubTooltip = {
     title: hubLabel,
     rows: [amountRow({ value: hub, color: colors.appIncome })],
@@ -823,6 +813,10 @@ useResizeObserver(containerRef, ([entry]) => {
   observedWidth = entry.contentRect.width;
   scheduleRender();
 });
-watch([() => props.flow, locale, currentTheme, baseCurrency], scheduleRender, { deep: true, flush: 'post' });
+watch(
+  [() => props.flow, () => props.branches, () => props.totalLabel, locale, currentTheme, baseCurrency],
+  scheduleRender,
+  { deep: true, flush: 'post' },
+);
 onBeforeUnmount(() => cancelAnimationFrame(renderFrame));
 </script>

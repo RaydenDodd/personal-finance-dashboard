@@ -4,45 +4,28 @@ import { Card } from '@/components/lib/ui/card';
 import { Callout } from '@/components/lib/ui/callout';
 import { Button } from '@/components/lib/ui/button';
 import FinanceChart, { type ChartRow, type ChartSeries } from '@/pages/personal-finance/finance-chart.vue';
-import MoneyFlowChart from '@/pages/analytics/subpages/cash-flow/components/money-flow-chart.vue';
-import type { MoneyFlow } from '@/pages/analytics/subpages/cash-flow/utils/build-money-flow';
 import { projectWealth, type IncomePlanResult, type WealthProjectionInput } from '@bt/shared/finance-income';
 import type { IncomeDashboard } from '@bt/shared/types/income-management';
 import { computed, onMounted, ref, watch } from 'vue';
 
 import PeriodButtons from './period-buttons.vue';
+import { useRoute } from 'vue-router';
 import { ChevronLeftIcon, ChevronRightIcon } from '@lucide/vue';
-const props = defineProps<{ mode: 'income' | 'taxes' }>();
+const route = useRoute();
 const data = ref<IncomeDashboard | null>(null),
   error = ref(''),
   busy = ref(false),
   year = ref(new Date().getFullYear());
 const selected = ref(''),
-  evidence = ref<'actual' | 'estimated' | 'projected'>('actual'),
   period = ref<'biweekly' | 'monthly' | 'yearly'>('monthly');
-const displayMode = ref<'percent' | 'amount' | 'both'>('percent'),
-  activeTab = ref<'history' | 'allocation' | 'projections'>('history');
+const activeTab = ref<'history' | 'taxes' | 'projections'>(route.query.view === 'taxes' ? 'taxes' : 'history');
 const historyPeriod = period;
-const divisor = computed(() => (period.value === 'biweekly' ? 26 : period.value === 'monthly' ? 12 : 1));
 const plan = computed(() => data.value?.calculations.find((item) => item.plan.id === selected.value) ?? null);
 const result = computed<IncomePlanResult | null>(() => plan.value?.result ?? null);
 const field = 'border-input bg-background h-10 min-w-0 max-w-full rounded-md border px-3 text-sm';
 const money = (n: number | null | undefined) =>
   n == null ? 'Unavailable' : new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' }).format(n);
 const percent = (n: number | null | undefined) => (n == null ? 'Unavailable' : n.toFixed(2) + '%');
-const dummy: MoneyFlow = {
-  income: 0,
-  expenses: 0,
-  net: 0,
-  taxes: 0,
-  savings: 0,
-  deficit: 0,
-  sources: [],
-  expenseNodes: [],
-  expenseGroups: [],
-  taxNodes: [],
-  savingsNodes: [],
-};
 const incomeSeries: ChartSeries[] = [
   { id: 'gross', name: 'Gross income', color: '#7b65c1' },
   { id: 'net', name: 'Net recorded income', color: '#6cb98e' },
@@ -57,88 +40,39 @@ const taxSeries: ChartSeries[] = [
   { id: 'socialSecurity', name: 'Social Security', color: '#7b65c1' },
   { id: 'medicare', name: 'Medicare', color: '#5b83ed' },
 ];
-const chartRows = computed<ChartRow[]>(() => {
-  if (!data.value) return [];
-  if (evidence.value === 'actual')
-    return data.value.periods.map(
+const chartRows = computed<ChartRow[]>(
+  () =>
+    data.value?.periods.map(
       (p): ChartRow => ({
         label: p.date,
         values:
-          props.mode === 'income'
+          activeTab.value === 'taxes'
             ? {
-                gross: p.gross,
-                net: p.actualNet,
-                bonus: p.bonus,
-                comp: p.gross === null || p.employerContributions === null ? null : p.gross + p.employerContributions,
-                spendable: null,
-              }
-            : {
                 federal: p.federal,
                 state: p.state,
                 local: p.local,
                 socialSecurity: p.socialSecurity,
                 medicare: p.medicare,
+              }
+            : {
+                gross: p.gross,
+                net: p.actualNet,
+                bonus: p.bonus,
+                comp: p.gross === null || p.employerContributions === null ? null : p.gross + p.employerContributions,
+                spendable: null,
               },
       }),
-    );
-  const versions = data.value.calculations.filter(
-    (p) =>
-      p.plan.id === selected.value &&
-      p.plan.evidence === evidence.value &&
-      p.result.available &&
-      p.result.taxYear === year.value,
-  );
-  const rows: ChartRow[] = [];
-  const count = period.value === 'yearly' ? 1 : period.value === 'biweekly' ? 26 : 12;
-  for (let month = 0; month < count; month++) {
-    const date =
-      period.value === 'biweekly'
-        ? new Date(Date.UTC(year.value, 0, 1 + month * 14)).toISOString().slice(0, 10)
-        : `${year.value}-${String(period.value === 'yearly' ? 1 : month + 1).padStart(2, '0')}-01`;
-    const candidates = versions
-      .filter(
-        (p) =>
-          (!p.plan.effectiveFrom || p.plan.effectiveFrom <= date) &&
-          (!p.plan.effectiveTo || p.plan.effectiveTo >= date),
-      )
-      .sort((a, b) => (a.plan.effectiveFrom ?? '').localeCompare(b.plan.effectiveFrom ?? ''));
-    const chosen = candidates.at(-1);
-    if (!chosen) continue;
-    const a = chosen.result.annual;
-    rows.push({
-      label: date,
-      values:
-        props.mode === 'income'
-          ? {
-              gross: a.gross / divisor.value,
-              net: a.net === null ? null : a.net / divisor.value,
-              bonus: a.bonus / divisor.value,
-              comp: a.totalComp / divisor.value,
-              spendable: a.spendable === null ? null : a.spendable / divisor.value,
-            }
-          : {
-              federal: a.federalTax === null ? null : a.federalTax / divisor.value,
-              state: a.stateTax === null ? null : a.stateTax / divisor.value,
-              local: a.localTax === null ? null : a.localTax / divisor.value,
-              socialSecurity: a.socialSecurity === null ? null : a.socialSecurity / divisor.value,
-              medicare: a.medicare === null ? null : a.medicare / divisor.value,
-            },
-    });
-  }
-  return rows;
-});
-const incoming = computed(() =>
-  result.value
-    ? [
-        { name: 'Salary', amount: result.value.annual.salary },
-        { name: 'Bonuses', amount: result.value.annual.bonus },
-        {
-          name: 'Employer contributions',
-          amount: result.value.annual.employerMatch + result.value.annual.employerOtherContribution,
-        },
-      ]
-    : [],
+    ) ?? [],
 );
+const visibleSeries = computed(() =>
+  (activeTab.value === 'taxes' ? taxSeries : incomeSeries).filter((s) =>
+    chartRows.value.some((r) => r.values[s.id] != null),
+  ),
+);
+const received = computed(() => data.value?.periods.reduce((sum, p) => sum + (p.actualNet ?? 0), 0) ?? 0);
+const hasGross = computed(() => data.value?.periods.some((p) => p.gross != null));
+const hasBonus = computed(() => data.value?.periods.some((p) => p.bonus != null));
+const hasEmployer = computed(() => data.value?.periods.some((p) => p.employerContributions != null));
 const projection = ref<WealthProjectionInput>({
   years: 10,
   startingBalance: 0,
@@ -285,10 +219,9 @@ onMounted(load);
   <div class="mx-auto w-full max-w-7xl space-y-6 p-4 md:p-6">
     <div class="flex flex-wrap items-end justify-between gap-3">
       <div>
-        <h1 class="text-2xl font-semibold">{{ mode === 'income' ? 'Income reports' : 'Tax reports' }}</h1>
-        <p class="text-muted-foreground mt-1 text-sm">Recorded history and planning scenarios remain separate.</p>
+        <h1 class="text-2xl font-semibold">Income reports</h1>
       </div>
-      <div class="flex items-center gap-2" aria-label="Report year">
+      <div v-if="activeTab !== 'projections'" class="flex items-center gap-2" aria-label="Report year">
         <Button variant="ghost" aria-label="Previous year" :disabled="busy || year <= 1900" @click="shiftYear(-1)"
           ><ChevronLeftIcon class="size-4" /></Button
         ><span class="min-w-16 text-center font-semibold" data-testid="report-year">{{ year }}</span
@@ -299,145 +232,66 @@ onMounted(load);
     </div>
     <Callout v-if="error" variant="destructive">{{ error }}</Callout>
     <div class="flex flex-wrap gap-2">
-      <Button :variant="activeTab === 'history' ? 'default' : 'outline'" @click="activeTab = 'history'">History</Button
-      ><Button :variant="activeTab === 'allocation' ? 'default' : 'outline'" @click="activeTab = 'allocation'"
-        >Allocation</Button
-      ><Button
-        v-if="mode === 'income'"
-        :variant="activeTab === 'projections' ? 'default' : 'outline'"
-        @click="activeTab = 'projections'"
+      <Button :variant="activeTab === 'history' ? 'default' : 'outline'" @click="activeTab = 'history'"
+        >Received income</Button
+      >
+      <Button :variant="activeTab === 'taxes' ? 'default' : 'outline'" @click="activeTab = 'taxes'">Taxes</Button>
+      <Button :variant="activeTab === 'projections' ? 'default' : 'outline'" @click="activeTab = 'projections'"
         >Financial projections</Button
       >
     </div>
     <template v-if="data">
-      <template v-if="activeTab === 'history'">
+      <template v-if="activeTab !== 'projections'">
         <div class="flex flex-wrap items-center justify-between gap-3">
-          <div class="flex flex-wrap gap-1">
-            <Button
-              v-for="[key, label] in [
-                ['actual', 'Received'],
-                ['estimated', 'Salary estimates'],
-                ['projected', 'Projections'],
-              ] as const"
-              :key="key"
-              size="sm"
-              :variant="evidence === key ? 'default' : 'ghost'"
-              @click="evidence = key"
-              >{{ label }}</Button
-            >
-          </div>
-          <PeriodButtons v-model="period" />
-        </div>
-        <div v-if="evidence !== 'actual'" class="flex flex-wrap gap-2">
-          <Button
-            v-for="item in data.calculations.filter((c) => c.plan.evidence === evidence)"
-            :key="item.plan.id"
-            size="sm"
-            :variant="selected === item.plan.id ? 'default' : 'outline'"
-            @click="selected = item.plan.id"
-            >{{ item.plan.name.startsWith('Take Home Pay') ? 'Current income' : item.plan.name }}</Button
+          <PeriodButtons v-model="period" /><Button as-child variant="ghost" size="sm"
+            ><router-link to="/finances/income">Manage income</router-link></Button
           >
         </div>
-        <p class="text-muted-foreground text-xs">
-          {{
-            evidence === 'actual'
-              ? 'Recorded deposits and paychecks only. Gross pay and tax details require a paystub.'
-              : 'Annualized estimates from saved income, not posted paychecks.'
-          }}
-        </p>
-        <Card class="p-5"
-          ><h2 class="mb-4 font-semibold">{{ mode === 'income' ? 'Income over time' : 'Taxes over time' }}</h2>
-          <FinanceChart :rows="chartRows" :series="mode === 'income' ? incomeSeries : taxSeries" mode="overlay"
-        /></Card>
-        <Card v-if="evidence === 'actual' && mode === 'income'" class="overflow-hidden"
+        <Card class="p-5" v-if="activeTab === 'history'"
+          ><p class="text-muted-foreground text-sm">Received in {{ year }}</p>
+          <p class="mt-2 text-3xl font-semibold">{{ money(received) }}</p></Card
+        >
+        <Card class="p-5">
+          <h2 class="mb-4 font-semibold">
+            {{ activeTab === 'taxes' ? 'Recorded taxes' : 'Received income over time' }}
+          </h2>
+          <FinanceChart v-if="visibleSeries.length" :rows="chartRows" :series="visibleSeries" mode="overlay" />
+          <p v-else class="text-muted-foreground py-8 text-center text-sm">
+            {{
+              activeTab === 'taxes'
+                ? 'No payroll tax details recorded for this year. Add a paystub to track withholding.'
+                : 'No recorded income for this year.'
+            }}
+          </p>
+        </Card>
+        <Card v-if="activeTab === 'history' && data.periods.length" class="overflow-hidden"
           ><div class="overflow-x-auto">
-            <table class="w-full min-w-160 text-sm">
+            <table class="w-full text-sm">
               <thead class="bg-muted">
                 <tr>
-                  <th class="p-3 text-left">Period start</th>
-                  <th class="p-3 text-right">Recorded net</th>
-                  <th class="p-3 text-right">Gross</th>
-                  <th class="p-3 text-right">Bonus</th>
-                  <th class="p-3 text-right">Employer contributions</th>
+                  <th class="p-3 text-left">Period</th>
+                  <th class="p-3 text-right">Received</th>
+                  <th v-if="hasGross" class="p-3 text-right">Gross</th>
+                  <th v-if="hasBonus" class="p-3 text-right">Bonus</th>
+                  <th v-if="hasEmployer" class="p-3 text-right">Employer contributions</th>
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="point in data.periods" :key="point.date" class="border-border border-t">
+                <tr v-for="point in data.periods" :key="point.date" class="border-border/50 border-t">
                   <td class="p-3">{{ point.date }}</td>
-                  <td class="p-3 text-right">{{ money(point.actualNet) }}</td>
-                  <td class="p-3 text-right">{{ money(point.gross) }}</td>
-                  <td class="p-3 text-right">{{ money(point.bonus) }}</td>
-                  <td class="p-3 text-right">{{ money(point.employerContributions) }}</td>
+                  <td class="p-3 text-right tabular-nums">{{ money(point.actualNet) }}</td>
+                  <td v-if="hasGross" class="p-3 text-right tabular-nums">{{ money(point.gross) }}</td>
+                  <td v-if="hasBonus" class="p-3 text-right tabular-nums">{{ money(point.bonus) }}</td>
+                  <td v-if="hasEmployer" class="p-3 text-right tabular-nums">
+                    {{ money(point.employerContributions) }}
+                  </td>
                 </tr>
               </tbody>
             </table>
           </div></Card
         >
       </template>
-      <template v-if="activeTab === 'allocation'">
-        <div class="flex flex-wrap items-center justify-between gap-3">
-          <PeriodButtons v-model="period" /><Button as-child variant="outline"
-            ><router-link to="/finances/income">Edit income</router-link></Button
-          >
-        </div>
-        <div v-if="data.calculations.length > 1" class="flex flex-wrap gap-2">
-          <Button
-            v-for="item in data.calculations"
-            :key="item.plan.id"
-            size="sm"
-            :variant="selected === item.plan.id ? 'default' : 'outline'"
-            @click="selected = item.plan.id"
-            >{{ item.plan.name.startsWith('Take Home Pay') ? 'Current income' : item.plan.name }}</Button
-          >
-        </div>
-        <Card v-if="result?.available && result.flow" class="space-y-5 p-5"
-          ><div class="flex flex-wrap items-center justify-between gap-3">
-            <h2 class="font-semibold">Income allocation</h2>
-            <div class="flex gap-1">
-              <Button
-                v-for="[key, label] in [
-                  ['percent', 'Percentages'],
-                  ['amount', 'Amounts'],
-                  ['both', 'Both'],
-                ] as const"
-                :key="key"
-                size="sm"
-                :variant="displayMode === key ? 'default' : 'ghost'"
-                @click="displayMode = key"
-                >{{ label }}</Button
-              >
-            </div>
-          </div>
-          <MoneyFlowChart
-            :flow="dummy"
-            :hierarchy="result.flow"
-            :income-display-mode="displayMode"
-            :income-period-divisor="divisor"
-            :incoming-sources="incoming"
-        /></Card>
-        <Card v-else class="text-muted-foreground p-6 text-sm"
-          >Add salary and tax settings in Income to view this allocation.</Card
-        >
-        <Card v-if="mode === 'taxes' && result?.available" class="space-y-4 p-5"
-          ><h2 class="font-semibold">Withholding and estimated liability</h2>
-          <dl class="divide-border/50 divide-y text-sm">
-            <div
-              v-for="[label, value] in [
-                ['Actual withholding', result.withholding.actualIncomeTax],
-                ['Estimated annual income tax', result.withholding.estimatedIncomeTax],
-                ['Projected refund', result.withholding.projectedRefund],
-                ['Projected amount owed', result.withholding.projectedOwed],
-              ] as const"
-              :key="label"
-              class="flex justify-between gap-3 py-3"
-            >
-              <dt>{{ label }}</dt>
-              <dd>{{ money(value) }}</dd>
-            </div>
-          </dl></Card
-        >
-      </template>
-      <template v-if="activeTab === 'projections' && mode === 'income'">
+      <template v-if="activeTab === 'projections'">
         <Card class="space-y-4 p-5"
           ><h2 class="font-semibold">Financial projection assumptions</h2>
           <div class="flex flex-wrap gap-3">

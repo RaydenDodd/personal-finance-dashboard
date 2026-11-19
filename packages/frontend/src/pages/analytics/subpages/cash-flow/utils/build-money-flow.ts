@@ -28,6 +28,16 @@ export interface MoneyFlowGroup extends MoneyFlowNode {
   leaves: MoneyFlowNode[];
 }
 
+/** Optional presentation branches for other balanced allocations using the same renderer. */
+export interface MoneyFlowBranch {
+  id: string;
+  name: string;
+  value: number;
+  color: string;
+  items: MoneyFlowNode[];
+  shareLabel: string;
+}
+
 /** Nodes below this share of the total are folded into "other" even when they fit within topN. */
 const MIN_SHARE = 0.01;
 /** Subcategories shown per root category before the rest folds into that root's "other". */

@@ -149,7 +149,7 @@ const routes: RouteRecordRaw[] = [
           {
             path: '/reports/taxes',
             name: ROUTES_NAMES.taxReports,
-            component: () => import('@/pages/income-management/tax-report.vue'),
+            redirect: { name: ROUTES_NAMES.incomeReports, query: { view: 'taxes' } },
           },
           {
             path: 'trends-comparison',
