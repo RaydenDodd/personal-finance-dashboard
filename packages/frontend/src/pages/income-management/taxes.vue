@@ -28,7 +28,57 @@ const loading = ref(true),
   error = ref(''),
   notice = ref('');
 const taxData = ref<Awaited<ReturnType<typeof getIncomeTaxData>> | null>(null);
-const result = computed(() => calculateIncomePlan(input.value));
+const calculation = computed(() => {
+  try {
+    const numericKeys = [
+      'taxYear',
+      'age',
+      'spouseAge',
+      'priorYearFicaWages',
+      'dependents',
+      'childTaxCreditEligibleChildren',
+      'otherDependentCreditEligibleCount',
+      'spouseWagesIncluded',
+      'annualSalary',
+      'annualBonus',
+      'otherOrdinaryIncome',
+      'hsaAnnual',
+      'employerBaseContributionPercent',
+      'employerOtherContributionPercent',
+      'federalItemizedDeduction',
+      'stateItemizedDeduction',
+      'federalAdjustments',
+      'stateAdjustments',
+      'federalCredits',
+      'stateCredits',
+      'stateTaxableIncomeOverride',
+      'localAnnualTaxOverride',
+      'actualFederalWithholding',
+      'actualStateWithholding',
+      'actualLocalWithholding',
+      'actualSocialSecurityWithholding',
+      'actualMedicareWithholding',
+      'iraModifiedAgiOverride',
+    ] as const;
+    const values = [
+      ...numericKeys.map((key) => input.value[key]),
+      ...(['traditional401k', 'roth401k', 'traditionalIra', 'rothIra', 'investments', 'savings'] as const).map(
+        (key) => input.value[key].value,
+      ),
+      ...input.value.deductions.map((item) => item.annualAmount),
+      ...input.value.employerMatchTiers.flatMap((item) => [item.employeePercent, item.matchPercent]),
+      ...(input.value.savingsGoals ?? []).map((item) => item.percentOfSavings),
+    ];
+    if (
+      values.some((value) => value !== undefined && (typeof value !== 'number' || !Number.isFinite(value) || value < 0))
+    )
+      throw new Error('Enter valid nonnegative numbers in the planning fields. Required fields cannot be blank.');
+    return { result: calculateIncomePlan(input.value), error: '' };
+  } catch (cause) {
+    return { result: null, error: cause instanceof Error ? cause.message : 'Check the planning inputs.' };
+  }
+});
+const result = computed(() => calculation.value.result);
 const field = 'border-input bg-background h-10 w-full rounded-md border px-3 text-sm';
 const clone = <T,>(value: T): T => JSON.parse(JSON.stringify(value));
 const money = (amount: number | null | undefined) =>
@@ -36,7 +86,7 @@ const money = (amount: number | null | undefined) =>
     ? 'Unavailable'
     : new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' }).format(amount);
 const percent = (value: number | null | undefined) => (value == null ? 'Unavailable' : value.toFixed(2) + '%');
-const medicare = computed(() => result.value.annual.medicare);
+const medicare = computed(() => result.value?.annual.medicare);
 function choose() {
   const plan = document.value.plans.find((p) => p.id === selected.value);
   if (!plan) {
@@ -73,6 +123,7 @@ async function load() {
   }
 }
 async function save(asNew = false) {
+  if (!result.value) return;
   busy.value = true;
   error.value = '';
   notice.value = '';
@@ -138,6 +189,9 @@ onMounted(load);
         </div>
         <Button variant="outline" :disabled="busy" @click="refresh">Refresh Tax Data</Button>
       </div>
+      <Callout v-if="calculation.error" variant="destructive" role="alert"
+        >{{ calculation.error }} Calculated outputs are hidden until these inputs are corrected.</Callout
+      >
       <Callout v-if="error" variant="destructive">{{ error }}</Callout
       ><Callout v-if="notice">{{ notice }}</Callout>
       <p v-if="loading" class="text-muted-foreground">Loading income planning…</p>
@@ -258,7 +312,7 @@ onMounted(load);
               ><input v-model="input.employerMatchEligibleBonus" type="checkbox" /> Bonus is eligible for employer
               matching</label
             >
-            <dl class="bg-muted/40 grid grid-cols-2 gap-2 rounded-md p-3 text-sm">
+            <dl v-if="result" class="bg-muted/40 grid grid-cols-2 gap-2 rounded-md p-3 text-sm">
               <dt>Company 401k Match $</dt>
               <dd class="text-right font-medium">{{ money(result.annual.employerMatch) }}</dd>
               <dt>Total Comp</dt>
@@ -316,7 +370,7 @@ onMounted(load);
               ><input v-model="input.coveredByWorkplacePlan" type="checkbox" /> Covered by a workplace retirement
               plan</label
             >
-            <dl class="bg-muted/40 grid grid-cols-2 gap-2 rounded-md p-3 text-sm">
+            <dl v-if="result" class="bg-muted/40 grid grid-cols-2 gap-2 rounded-md p-3 text-sm">
               <dt>Effective Tax Rate %</dt>
               <dd class="text-right">{{ percent(result.rates.totalEffective) }}</dd>
               <dt>Total Federal Tax $</dt>
@@ -342,34 +396,34 @@ onMounted(load);
             <AmountInput
               v-model="input.traditional401k"
               label="Trad 401k Contribution"
-              :gross="result.annual.gross"
-              :net="result.annual.net"
-              :take-home="result.annual.takeHome"
-              :dollars="result.annual.traditional401k"
+              :gross="result?.annual.gross"
+              :net="result?.annual.net"
+              :take-home="result?.annual.takeHome"
+              :dollars="result?.annual.traditional401k"
             />
             <AmountInput
               v-model="input.roth401k"
               label="Roth 401k Contribution"
-              :gross="result.annual.gross"
-              :net="result.annual.net"
-              :take-home="result.annual.takeHome"
-              :dollars="result.annual.roth401k"
+              :gross="result?.annual.gross"
+              :net="result?.annual.net"
+              :take-home="result?.annual.takeHome"
+              :dollars="result?.annual.roth401k"
             />
             <AmountInput
               v-model="input.traditionalIra"
               label="Trad IRA Contribution"
-              :gross="result.annual.gross"
-              :net="result.annual.net"
-              :take-home="result.annual.takeHome"
-              :dollars="result.annual.traditionalIra"
+              :gross="result?.annual.gross"
+              :net="result?.annual.net"
+              :take-home="result?.annual.takeHome"
+              :dollars="result?.annual.traditionalIra"
             />
             <AmountInput
               v-model="input.rothIra"
               label="Roth IRA Contribution"
-              :gross="result.annual.gross"
-              :net="result.annual.net"
-              :take-home="result.annual.takeHome"
-              :dollars="result.annual.rothIra"
+              :gross="result?.annual.gross"
+              :net="result?.annual.net"
+              :take-home="result?.annual.takeHome"
+              :dollars="result?.annual.rothIra"
             />
             <p class="text-muted-foreground text-xs">
               Traditional IRA deductibility is evaluated separately from payroll deductions. IRA contributions reduce
@@ -381,18 +435,18 @@ onMounted(load);
             <AmountInput
               v-model="input.investments"
               label="Investments"
-              :gross="result.annual.gross"
-              :net="result.annual.net"
-              :take-home="result.annual.takeHome"
-              :dollars="result.annual.investments"
+              :gross="result?.annual.gross"
+              :net="result?.annual.net"
+              :take-home="result?.annual.takeHome"
+              :dollars="result?.annual.investments"
             />
             <AmountInput
               v-model="input.savings"
               label="Savings"
-              :gross="result.annual.gross"
-              :net="result.annual.net"
-              :take-home="result.annual.takeHome"
-              :dollars="result.annual.savings"
+              :gross="result?.annual.gross"
+              :net="result?.annual.net"
+              :take-home="result?.annual.takeHome"
+              :dollars="result?.annual.savings"
             />
             <div
               v-for="(goal, index) in input.savingsGoals"
@@ -409,7 +463,7 @@ onMounted(load);
               /><Button variant="ghost" @click="input.savingsGoals?.splice(index, 1)">Remove</Button>
             </div>
             <Button variant="outline" @click="addSavingsGoal">Add savings goal</Button>
-            <dl class="bg-muted/40 grid grid-cols-2 gap-2 rounded-md p-3 text-sm">
+            <dl v-if="result" class="bg-muted/40 grid grid-cols-2 gap-2 rounded-md p-3 text-sm">
               <dt>Take Home / Net / Post-Deductions</dt>
               <dd class="text-right">{{ money(result.annual.takeHome) }}</dd>
               <dt>Disposable Income / Spendable</dt>
@@ -474,7 +528,17 @@ onMounted(load);
                 :key="key"
                 class="space-y-1 text-xs"
                 >{{ key.replace(/([A-Z])/g, ' $1')
-                }}<input v-model.number="input[key]" type="number" min="0" :class="field"
+                }}<input
+                  :value="input[key]"
+                  type="number"
+                  min="0"
+                  :class="field"
+                  @input="
+                    input[key] =
+                      ($event.target as HTMLInputElement).value === ''
+                        ? undefined
+                        : Number(($event.target as HTMLInputElement).value)
+                  "
               /></label>
             </div>
             <p class="text-muted-foreground mt-3 text-xs">
@@ -483,7 +547,7 @@ onMounted(load);
             </p>
           </details></Card
         >
-        <Card class="overflow-hidden"
+        <Card v-if="result" class="overflow-hidden"
           ><div class="p-5">
             <h2 class="font-semibold">Income Breakdown</h2>
             <p class="text-muted-foreground mt-1 text-xs">{{ result.averages.note }}</p>
@@ -519,14 +583,14 @@ onMounted(load);
             </table>
           </div></Card
         >
-        <Callout v-if="result.warnings.length"
+        <Callout v-if="result?.warnings.length"
           ><ul class="list-disc space-y-1 pl-4">
             <li v-for="warning in result.warnings" :key="warning">{{ warning }}</li>
           </ul></Callout
         >
         <div class="flex flex-wrap gap-3">
-          <Button :disabled="busy || !name.trim()" @click="save(false)">Save inputs</Button
-          ><Button variant="outline" :disabled="busy || !name.trim()" @click="save(true)"
+          <Button :disabled="busy || !name.trim() || !result" @click="save(false)">Save inputs</Button
+          ><Button variant="outline" :disabled="busy || !name.trim() || !result" @click="save(true)"
             >Save as new dated scenario</Button
           >
         </div>
@@ -534,7 +598,7 @@ onMounted(load);
           <summary class="text-muted-foreground cursor-pointer">Tax-rule sources and last checks</summary>
           <p class="my-3 text-xs">{{ taxData.policy }}</p>
           <p v-if="taxData.latestCheck" class="text-xs">Last source check: {{ taxData.latestCheck.createdAt }}</p>
-          <ul class="mt-2 space-y-1">
+          <ul v-if="result" class="mt-2 space-y-1">
             <li v-for="source in result.sources" :key="source.url">
               <a :href="source.url" target="_blank" rel="noopener noreferrer" class="text-primary underline">{{
                 source.title
