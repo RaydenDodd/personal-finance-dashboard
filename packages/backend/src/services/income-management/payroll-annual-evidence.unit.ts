@@ -61,6 +61,22 @@ function fixture() {
   return { document, evidence };
 }
 describe('reviewed historical annual evidence', () => {
+  it('does not compare a following year against a zero-period or incomplete YTD baseline', () => {
+    const { document } = fixture();
+    document.statements.push(
+      normalizeAdpStatement(
+        { statementId: 'next-year', payDate: '2024-01-05', grossPayAmount: amount(100), netPayAmount: amount(70) },
+        employment,
+      ),
+    );
+    const data = buildPayrollDashboard(document, [], {
+      from: '2023-01-01',
+      through: '2024-12-31',
+      aggregation: 'yearly',
+    });
+    expect(data.received[0]!.gross).toBe(1000);
+    expect(data.received[1]).toMatchObject({ gross: 100, previousGross: null, change: null, changePercent: null });
+  });
   it('counts repeated YTD only once without modifying or inventing dated paychecks', () => {
     const { document } = fixture(),
       before = structuredClone(document.statements);

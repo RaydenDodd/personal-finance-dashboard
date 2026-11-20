@@ -79,7 +79,14 @@ export function applyAnnualEvidence({
     bucket.previousGross = bucket.change = bucket.changePercent = null;
     bucket.incomplete = true;
   }
-  return { additional, included, received: received.toSorted((a, b) => a.date.localeCompare(b.date)), issues };
+  const ordered = received.toSorted((a, b) => a.date.localeCompare(b.date));
+  for (let i = 1; i < ordered.length; i++) {
+    // A reviewed YTD checkpoint is not a verified full-year comparison baseline.
+    if (ordered[i - 1]!.basis === 'annual-ytd' || ordered[i]!.basis === 'annual-ytd') {
+      ordered[i]!.previousGross = ordered[i]!.change = ordered[i]!.changePercent = null;
+    }
+  }
+  return { additional, included, received: ordered, issues };
 }
 
 export function validateAnnualEvidence(
