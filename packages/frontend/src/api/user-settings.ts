@@ -16,6 +16,8 @@ import type {
 
 export interface DashboardWidgetConfig {
   widgetId: string;
+  /** Unique instance identity; older layouts continue using widgetId. */
+  instanceId?: string;
   colSpan: number;
   rowSpan?: number;
   config?: Record<string, unknown>;
@@ -77,7 +79,7 @@ interface InvestmentTransactionsTableSettings {
 }
 
 export interface UiSettings {
-  pageLayouts?: Partial<Record<'income' | 'personalFinance', { widgets: DashboardWidgetConfig[] }>>;
+  pageLayouts?: Partial<Record<'income' | 'actualIncome' | 'personalFinance', { widgets: DashboardWidgetConfig[] }>>;
   transactionsTable?: TransactionsTableSettings;
   transactionsList?: TransactionsListSettings;
   transactionForm?: TransactionFormSettings;

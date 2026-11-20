@@ -26,13 +26,24 @@ const routes: RouteRecordRaw[] = [
       {
         path: '/finances/income',
         name: ROUTES_NAMES.incomeManagement,
+        redirect: { name: ROUTES_NAMES.actualIncome },
+      },
+      {
+        path: '/finances/income/actual',
+        name: ROUTES_NAMES.actualIncome,
+        component: () => import('@/pages/income-management/actual.vue'),
+        meta: { navSection: 'income', i18nChunks: ['pages/dashboard'] },
+      },
+      {
+        path: '/finances/income/projected',
+        name: ROUTES_NAMES.projectedIncome,
         component: () => import('@/pages/income-management/overview.vue'),
-        meta: { i18nChunks: ['pages/dashboard'] },
+        meta: { navSection: 'income', i18nChunks: ['pages/dashboard'] },
       },
       {
         path: '/finances/taxes',
         name: ROUTES_NAMES.taxPlanning,
-        redirect: { name: ROUTES_NAMES.incomeManagement },
+        redirect: { name: ROUTES_NAMES.projectedIncome },
       },
       {
         path: '/personal-finance',
@@ -140,8 +151,7 @@ const routes: RouteRecordRaw[] = [
       {
         path: '/finances/income/history',
         name: 'income-history',
-        component: () => import('@/pages/income-management/income-report.vue'),
-        meta: { i18nChunks: ['pages/dashboard'] },
+        redirect: { name: ROUTES_NAMES.actualIncome },
       },
       {
         path: '/analytics',

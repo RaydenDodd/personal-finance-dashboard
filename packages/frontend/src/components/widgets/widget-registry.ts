@@ -24,6 +24,8 @@ export interface WidgetLayoutDefinition {
   configOptions?: WidgetConfigOption[];
   /** Page blocks supply their content through slots rather than the main widget registry. */
   literalLabels?: boolean;
+  /** Allow independent instances without changing legacy single-widget layouts. */
+  allowMultiple?: boolean;
 }
 
 export interface WidgetDefinition extends WidgetLayoutDefinition {
@@ -280,6 +282,77 @@ export const WIDGET_REGISTRY: Record<string, WidgetDefinition> = {
     ],
   },
 };
+
+// Optional payroll widgets use the same components as Actual/Projected Income.
+// Adding registry entries does not modify an existing or default dashboard layout.
+for (const [id, name, description] of [
+  ['payroll-summary', 'Actual Income and Compensation', 'Actual payroll earnings, withholding and retirement.'],
+  ['payroll-salary-history', 'Salary history', 'Recorded regular compensation rates and salary events.'],
+  ['payroll-received-income', 'Received income', 'Actual payroll allocation bars and gross earnings line.'],
+  ['payroll-growth', 'Salary growth', 'Actual base salary progression.'],
+  ['payroll-bonuses', 'Bonuses and additional compensation', 'Actual bonuses, awards and other earnings.'],
+  ['payroll-retirement', 'Actual retirement contributions', 'Employee and employer payroll contributions.'],
+  ['payroll-taxes', 'Actual payroll taxes', 'Actual withholding, separate from projected tax liability.'],
+  ['projected-income-summary', 'Projected income summary', 'Your saved planning assumptions and allocations.'],
+  ['projected-income-allocation', 'Projected income allocation', 'Existing allocation doughnut and flow diagram.'],
+]) {
+  const projected = id!.startsWith('projected-');
+  WIDGET_REGISTRY[id!] = {
+    id: id!,
+    name: name!,
+    description: description!,
+    literalLabels: true,
+    allowMultiple: true,
+    defaultColSpan: id === 'payroll-salary-history' || id === 'payroll-received-income' ? 2 : 1,
+    defaultRowSpan: 1,
+    allowedSizes: [
+      { colSpan: 1, rowSpan: 1, label: '1×1' },
+      { colSpan: 2, rowSpan: 1, label: '2×1' },
+      { colSpan: 3, rowSpan: 2, label: '3×2' },
+    ],
+    needsPeriod: false,
+    component: () => import('@/components/widgets/payroll-widget.vue'),
+    configOptions: projected
+      ? [
+          {
+            key: 'period',
+            label: 'Planning period',
+            defaultValue: 'yearly',
+            choices: [
+              { value: 'biweekly', label: 'Biweekly' },
+              { value: 'monthly', label: 'Monthly' },
+              { value: 'yearly', label: 'Yearly' },
+            ],
+          },
+          ...(id === 'projected-income-allocation'
+            ? [
+                {
+                  key: 'view',
+                  label: 'Allocation view',
+                  defaultValue: 'donut',
+                  choices: [
+                    { value: 'donut', label: 'Doughnut' },
+                    { value: 'flow', label: 'Flow diagram' },
+                  ],
+                },
+              ]
+            : []),
+        ]
+      : id === 'payroll-salary-history' || id === 'payroll-received-income'
+        ? []
+        : [
+            {
+              key: 'year',
+              label: 'Actual payroll year',
+              defaultValue: 'current',
+              choices: [
+                { value: 'current', label: 'This year' },
+                { value: 'previous', label: 'Previous year' },
+              ],
+            },
+          ],
+  };
+}
 
 export const DEFAULT_DASHBOARD_LAYOUT = [
   { widgetId: 'balance-trend', colSpan: 2 },

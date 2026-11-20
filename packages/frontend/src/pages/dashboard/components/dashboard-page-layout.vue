@@ -6,7 +6,7 @@ import DashboardGrid from './dashboard-grid.vue';
 import DashboardEditToolbar from './dashboard-edit-toolbar.vue';
 
 defineProps<{
-  page: 'income' | 'personalFinance';
+  page: 'income' | 'actualIncome' | 'personalFinance';
   registry: Record<string, WidgetLayoutDefinition>;
   defaultLayout: DashboardWidgetConfig[];
   columns?: 3 | 4;

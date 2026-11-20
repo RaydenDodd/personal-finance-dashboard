@@ -3,6 +3,7 @@ import { useUserSettings } from '@/composable/data-queries/user-settings';
 import { ROUTES_NAMES } from '@/routes/constants';
 import {
   CalculatorIcon,
+  BanknoteIcon,
   CreditCardIcon,
   FlagIcon,
   GroupIcon,
@@ -31,6 +32,10 @@ type ToggleableNavChild = SidebarNavChild & { settingKey: keyof SidebarNavConfig
 
 /** Sub-links of the collapsible nav groups, rendered by both the full nav and the rail flyouts. */
 export const SIDEBAR_NAV_CHILDREN = {
+  income: [
+    { routeName: ROUTES_NAMES.actualIncome, labelKey: 'navigation.actualIncome', icon: BanknoteIcon },
+    { routeName: ROUTES_NAMES.projectedIncome, labelKey: 'navigation.projectedIncome', icon: TrendingUpIcon },
+  ],
   accounts: [
     {
       routeName: ROUTES_NAMES.accounts,

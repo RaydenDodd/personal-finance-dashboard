@@ -1,4 +1,4 @@
-<script lang="ts" setup>
+﻿<script lang="ts" setup>
 import type { DashboardWidgetConfig } from '@/api/user-settings';
 import { Button } from '@/components/lib/ui/button';
 import { DesktopOnlyTooltip } from '@/components/lib/ui/tooltip';
@@ -36,6 +36,7 @@ provide('dashboard-widget-config', toRef(props, 'widgetConfig'));
 
 const { t } = useI18n();
 const def = computed(() => props.definition ?? WIDGET_REGISTRY[props.widgetConfig.widgetId]);
+const instanceKey = computed(() => props.widgetConfig.instanceId ?? props.widgetConfig.widgetId);
 const title = computed(() => (def.value?.literalLabels ? def.value.name : t(def.value?.name ?? '')));
 
 const asyncComponent = computed(() => {
@@ -110,8 +111,8 @@ const isConfigChoiceActive = ({ option, value }: { option: WidgetConfigOption; v
           type="button"
           class="drag-handle cursor-grab touch-none p-1 active:cursor-grabbing"
           :aria-label="`Drag ${title} to reorder`"
-          @keydown.up.prevent="canMoveUp && emit('move', widgetConfig.widgetId, -1)"
-          @keydown.down.prevent="canMoveDown && emit('move', widgetConfig.widgetId, 1)"
+          @keydown.up.prevent="canMoveUp && emit('move', instanceKey, -1)"
+          @keydown.down.prevent="canMoveDown && emit('move', instanceKey, 1)"
         >
           <GripVerticalIcon class="text-muted-foreground size-6" />
         </button>
@@ -123,14 +124,14 @@ const isConfigChoiceActive = ({ option, value }: { option: WidgetConfigOption; v
               size="icon-sm"
               :disabled="!canMoveUp"
               :aria-label="`Move ${title} up`"
-              @click="emit('move', widgetConfig.widgetId, -1)"
+              @click="emit('move', instanceKey, -1)"
               ><ArrowUpIcon class="size-3.5" /></Button
             ><Button
               variant="ghost"
               size="icon-sm"
               :disabled="!canMoveDown"
               :aria-label="`Move ${title} down`"
-              @click="emit('move', widgetConfig.widgetId, 1)"
+              @click="emit('move', instanceKey, 1)"
               ><ArrowDownIcon class="size-3.5"
             /></Button>
           </div>
@@ -144,7 +145,7 @@ const isConfigChoiceActive = ({ option, value }: { option: WidgetConfigOption; v
                 isSizeActive(size) ? 'bg-primary text-primary-foreground' : 'hover:bg-muted text-muted-foreground',
               ]"
               :aria-pressed="isSizeActive(size)"
-              @click="emit('resize', widgetConfig.widgetId, size.colSpan, size.rowSpan)"
+              @click="emit('resize', instanceKey, size.colSpan, size.rowSpan)"
             >
               {{ size.label }}
             </button>
@@ -155,7 +156,7 @@ const isConfigChoiceActive = ({ option, value }: { option: WidgetConfigOption; v
             v-for="option in def.configOptions ?? []"
             :key="option.key"
             role="group"
-            :aria-label="$t(option.label)"
+            :aria-label="def.literalLabels ? option.label : $t(option.label)"
             class="flex items-center gap-0.5 rounded-md border p-0.5"
           >
             <button
@@ -168,9 +169,9 @@ const isConfigChoiceActive = ({ option, value }: { option: WidgetConfigOption; v
                   : 'hover:bg-muted text-muted-foreground',
               ]"
               :aria-pressed="isConfigChoiceActive({ option, value: choice.value })"
-              @click="emit('config-change', widgetConfig.widgetId, option.key, choice.value)"
+              @click="emit('config-change', instanceKey, option.key, choice.value)"
             >
-              {{ $t(choice.label) }}
+              {{ def.literalLabels ? choice.label : $t(choice.label) }}
             </button>
           </div>
         </div>
@@ -181,7 +182,7 @@ const isConfigChoiceActive = ({ option, value }: { option: WidgetConfigOption; v
             size="icon-sm"
             :disabled="!canRemove"
             :aria-label="$t('dashboard.editMode.removeWidget')"
-            @click="emit('remove', widgetConfig.widgetId)"
+            @click="emit('remove', instanceKey)"
           >
             <XIcon class="size-3.5" />
           </Button>

@@ -1,7 +1,7 @@
 import { createSharedComposable, useLocalStorage } from '@vueuse/core';
 import { computed } from 'vue';
 
-type NavSection = 'accounts' | 'transactions' | 'planned';
+type NavSection = 'accounts' | 'transactions' | 'planned' | 'income';
 
 export const useSidebarNavCollapse = createSharedComposable(() => {
   const openSection = useLocalStorage<NavSection | null>('sidebar:nav-open-section', null);
@@ -20,6 +20,7 @@ export const useSidebarNavCollapse = createSharedComposable(() => {
 
   return {
     isAccountsOpen: sectionOpen('accounts'),
+    isIncomeOpen: sectionOpen('income'),
     isTransactionsOpen: sectionOpen('transactions'),
     isPlannedOpen: sectionOpen('planned'),
     hasAnyOpen: computed(() => openSection.value !== null),

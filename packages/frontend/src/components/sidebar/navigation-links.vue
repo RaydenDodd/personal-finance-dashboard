@@ -25,9 +25,17 @@ const navItemActive = 'bg-primary/10 text-foreground';
 const navIconBase = 'size-4 shrink-0';
 const navIconActive = 'text-primary-text';
 
-const { isAccountsOpen, isTransactionsOpen, isPlannedOpen } = useSidebarNavCollapse();
-const { isAccountsRoute, isTransactionsRoute, isPlannedRoute, isChildActive } = useSidebarNavRoutes();
+const { isIncomeOpen, isAccountsOpen, isTransactionsOpen, isPlannedOpen } = useSidebarNavCollapse();
+const { isIncomeRoute, isAccountsRoute, isTransactionsRoute, isPlannedRoute, isChildActive } = useSidebarNavRoutes();
 const accountsNavChildren = useAccountsNavChildren();
+
+watch(
+  isIncomeRoute,
+  (value) => {
+    if (value) isIncomeOpen.value = true;
+  },
+  { immediate: true },
+);
 
 watch(
   isAccountsRoute,
@@ -80,17 +88,38 @@ watch(
     </ui-button>
   </router-link>
 
-  <router-link v-if="!bottomNav" v-slot="{ isActive }" :to="{ name: ROUTES_NAMES.incomeManagement }">
-    <ui-button
-      variant="ghost"
-      as="span"
-      :class="[navItemBase, 'justify-start', isActive && navItemActive]"
-      size="default"
+  <Collapsible v-if="!bottomNav" v-model:open="isIncomeOpen">
+    <div class="flex w-full items-center">
+      <router-link :to="{ name: ROUTES_NAMES.actualIncome }" class="min-w-0 flex-1"
+        ><ui-button variant="ghost" as="span" :class="[navItemBase, 'justify-start', isIncomeRoute && navItemActive]"
+          ><BanknoteIcon :class="[navIconBase, isIncomeRoute && navIconActive]" /><span>Income</span></ui-button
+        ></router-link
+      >
+      <CollapsibleTrigger as-child
+        ><ui-button variant="ghost" size="icon" aria-label="Expand Income navigation"
+          ><ChevronRightIcon :class="['size-4 transition-transform', { 'rotate-90': isIncomeOpen }]" /></ui-button
+      ></CollapsibleTrigger>
+    </div>
+    <CollapsibleContent
+      ><div class="border-border/40 mt-1 ml-2 grid gap-0.5 border-l pl-2">
+        <router-link
+          v-for="child in SIDEBAR_NAV_CHILDREN.income"
+          :key="child.routeName"
+          v-slot="{ isActive }"
+          :to="{ name: child.routeName }"
+          ><ui-button
+            variant="ghost"
+            as="span"
+            size="sm"
+            :class="[navItemBase, 'justify-start', isActive && navItemActive]"
+            ><component :is="child.icon" :class="[navIconBase, isActive && navIconActive]" /><span>{{
+              $t(child.labelKey)
+            }}</span></ui-button
+          ></router-link
+        >
+      </div></CollapsibleContent
     >
-      <BanknoteIcon :class="[navIconBase, isActive && navIconActive]" />
-      <span>Income</span>
-    </ui-button>
-  </router-link>
+  </Collapsible>
 
   <template v-if="bottomNav">
     <router-link v-slot="{ isActive }" :to="{ name: ROUTES_NAMES.accounts }">

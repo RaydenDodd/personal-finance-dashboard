@@ -12,7 +12,7 @@ import DashboardWidgetSlot from './dashboard-widget-slot.vue';
 
 const props = defineProps<{
   currentPeriod?: Period;
-  page?: 'income' | 'personalFinance';
+  page?: 'income' | 'actualIncome' | 'personalFinance';
   registry?: Record<string, WidgetLayoutDefinition>;
   defaultLayout?: DashboardWidgetConfig[];
   naturalHeight?: boolean;
@@ -82,7 +82,7 @@ const gridClasses = computed(() => [
     >
       <DashboardWidgetSlot
         v-for="(widget, index) in draftWidgets"
-        :key="widget.widgetId"
+        :key="widget.instanceId ?? widget.widgetId"
         :widget-config="widget"
         :is-edit-mode="true"
         :can-remove="draftWidgets.length > 1"
@@ -105,7 +105,7 @@ const gridClasses = computed(() => [
     <div v-else :class="gridClasses">
       <DashboardWidgetSlot
         v-for="widget in activeWidgets"
-        :key="widget.widgetId"
+        :key="widget.instanceId ?? widget.widgetId"
         :widget-config="widget"
         :is-edit-mode="false"
         :can-remove="false"

@@ -103,3 +103,46 @@ describe('useDashboardLayout.saveWidgetConfigDirect', () => {
     });
   });
 });
+
+describe('independent payroll widget instances', () => {
+  beforeEach(() => {
+    patchAsync.mockReset();
+    localStorage.clear();
+    settings.value = { dashboard: { widgets: [] } };
+  });
+  it('keeps independently configured copies and edits only the selected instance', async () => {
+    const registry = { payroll: { ...pageBlock('payroll', 'Actual payroll', ''), allowMultiple: true } };
+    const editor = useDashboardLayout({
+      registry,
+      defaultLayout: [
+        { widgetId: 'payroll', instanceId: 'first', colSpan: 1 },
+        { widgetId: 'payroll', instanceId: 'second', colSpan: 2 },
+      ],
+    });
+    expect(editor.activeWidgets.value).toHaveLength(2);
+    await editor.saveWidgetConfigDirect({ widgetId: 'second', config: { year: '2025' } });
+    const saved = patchAsync.mock.calls[0]![0].dashboard.widgets;
+    expect(saved[0].config).toBeUndefined();
+    expect(saved[1].config.year).toBe('2025');
+    editor.enterEditMode();
+    editor.moveWidget({ widgetId: 'second', direction: -1 });
+    editor.resizeWidget({ widgetId: 'second', colSpan: 3, rowSpan: 2 });
+    editor.removeWidget({ widgetId: 'first' });
+    expect(editor.draftWidgets.value).toEqual([{ widgetId: 'payroll', instanceId: 'second', colSpan: 3, rowSpan: 2 }]);
+  });
+  it('allows repeated additions only for widgets explicitly supporting them', () => {
+    const registry = {
+      payroll: { ...pageBlock('payroll', 'Actual payroll', ''), allowMultiple: true },
+      once: pageBlock('once', 'Existing', ''),
+    };
+    const editor = useDashboardLayout({ registry, defaultLayout: [{ widgetId: 'once', colSpan: 1 }] });
+    editor.enterEditMode();
+    editor.addWidget({ widgetId: 'once' });
+    editor.addWidget({ widgetId: 'payroll' });
+    editor.addWidget({ widgetId: 'payroll' });
+    expect(editor.draftWidgets.value).toHaveLength(3);
+    const copies = editor.draftWidgets.value.filter((w) => w.widgetId === 'payroll');
+    expect(copies[0]?.instanceId).toBeTruthy();
+    expect(copies[0]?.instanceId).not.toBe(copies[1]?.instanceId);
+  });
+});

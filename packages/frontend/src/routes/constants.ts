@@ -8,6 +8,8 @@ export const ROUTES_NAMES = Object.freeze({
   home: `${ROUTER_LAYOUTS.dashboard}.home`,
   personalFinance: `${ROUTER_LAYOUTS.dashboard}.personal-finance`,
   incomeManagement: `${ROUTER_LAYOUTS.dashboard}.income-management`,
+  actualIncome: `${ROUTER_LAYOUTS.dashboard}.actual-income`,
+  projectedIncome: `${ROUTER_LAYOUTS.dashboard}.projected-income`,
   taxPlanning: `${ROUTER_LAYOUTS.dashboard}.tax-planning`,
   incomeReports: `${ROUTER_LAYOUTS.dashboard}.income-reports`,
   taxReports: `${ROUTER_LAYOUTS.dashboard}.tax-reports`,

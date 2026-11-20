@@ -11,19 +11,19 @@ This checklist records the November 19, 2026 Income request. Payroll source docu
 - [x] Reconcile paycheck allocations, independent yearly totals and latest YTD checkpoints. Never sum YTD fields as payments.
 - [x] Verify representative source PDFs, rate annualization, bonuses/noncash offsets and employee/employer retirement mappings.
 - [x] Validate repeated imports, changed statements, missing fields, adjustments and concurrent imports before live import.
-- [ ] Import the verified source after a database backup; retain manual payroll and all unrelated financial records.
-- [ ] Separate Actual Income and Projected Income routes/sidebar/mobile links. Existing Income links remain valid. Default parent opens Actual.
-- [ ] Keep projected allocation doughnut, flow, breakdown and settings; independent period preference and no retroactive effect on actual payroll.
-- [ ] Actual summary: current annualized base salary separate from selected actual gross/net/tax/retirement/benefit/bonus totals and total compensation.
-- [ ] One payroll management dropdown: sync status/import/paychecks/employments/salary history/settings/history, native dialogs and save-to-close.
-- [ ] Upgrade salary history using native chart primitives: step rate, employer/position context, observed versus verified effective dates, event markers, continuous mouse/touch tooltip, independent preset/custom range and interval navigation.
-- [ ] Received Income: stacked rectangular bars plus gross line on same axes, paycheck/month/quarter/year aggregation, dollar/percent, employer/date/category controls, incomplete-period labels, signed adjustments and reconciled totals.
-- [ ] Employment/position and manual earlier salary management; sustained pay-rate changes, growth statistics, no invented promotion/effective date.
-- [ ] Reconcile existing bank deposits and manual paychecks without creating duplicate native transactions; support split deposits and preserve unrelated income.
+- [x] Import the verified source after a database backup; retain manual payroll and all unrelated financial records.
+- [x] Separate Actual Income and Projected Income routes/sidebar/mobile links. Existing Income links remain valid. Default parent opens Actual.
+- [x] Keep projected allocation doughnut, flow, breakdown and settings; independent period preference and no retroactive effect on actual payroll.
+- [x] Actual summary: current annualized base salary separate from selected actual gross/net/tax/retirement/benefit/bonus totals and total compensation.
+- [x] One payroll management dropdown: sync status/import/paychecks/employments/salary history/settings/history, native dialogs and save-to-close.
+- [x] Upgrade salary history using native chart primitives: step rate, employer/position context, observed versus verified effective dates, event markers, continuous mouse/touch tooltip, independent preset/custom range and interval navigation.
+- [x] Received Income: stacked rectangular bars plus total-compensation line on the same axes, always including employer retirement (gross retained in the tooltip, per the later UI request), paycheck/month/quarter/year aggregation, dollar/percent, employer/date/category controls, incomplete-period labels, signed adjustments and reconciled totals.
+- [x] Employment/position and manual earlier salary management; sustained pay-rate changes, growth statistics, no invented promotion/effective date.
+- [x] Reconcile existing bank deposits and manual paychecks without creating duplicate native transactions; support split deposits and preserve unrelated income.
 - [ ] Integrate verified employee/employer retirement contributions with principal evidence without duplicating existing dated contributions/checkpoints.
-- [ ] Reuse the same actual calculations in summary/charts/reports/optional main dashboard widgets; preserve original Trends charts and add-ons.
-- [ ] Optional dashboard widgets: actual summary, salary history, received income, salary growth, bonuses, retirement, tax, projected summary and projected allocation; add/remove/reorder/resize/configure with independent settings, no automatic additions.
-- [ ] User-initiated payroll update reminder (default 30 days, configurable, snooze/dismiss, once per app session); no background ADP sync.
+- [x] Reuse the same actual calculations in summary/charts/reports/optional main dashboard widgets; preserve original Trends charts and add-ons.
+- [x] Optional dashboard widgets: actual summary, salary history, received income, salary growth, bonuses, retirement, tax, projected summary and projected allocation; add/remove/reorder/resize/configure with independent settings, no automatic additions.
+- [x] User-initiated payroll update reminder (default 30 days, configurable, snooze/dismiss, once per app session); no background ADP sync.
 - [x] Investigate official ADP API/browser authentication feasibility and applicable terms before enabling any session integration.
 - [ ] Final targeted and regression validation: owner isolation, source immutability, duplicate handling, actual/projection independence, chart/date/mobile interactions, widgets, bank and principal reconciliation, backups, deployed health and Git sync.
 
@@ -55,3 +55,7 @@ No paid services, public infrastructure, SimpleFIN schedule changes or unrelated
 ## Source mappings and validation evidence
 
 Exact source mappings, hashes, totals, statement anomalies and PDF comparisons are documented in ignored `private/payroll-source-audit*` outputs. Synthetic tests may use invented data only; real payroll payloads must not enter fixtures, source files, logs or commits.
+
+## Live reconciliation checkpoint
+
+All supplied statements were imported after a database backup. Independent 2024–2026 source totals and source hashes match; repeated imports insert zero and existing bank, portfolio, valuation and original Income-document fingerprints are unchanged. A live principal preview found five existing coverage items needing review, including one owner-confirmed amount that differs from payroll. No principal reconciliation was applied; the original principal records remain preserved. Exact amounts and source comparisons are in ignored private reports. Browser-to-app synchronization remains assisted export pending an owner-operated live authentication/export/import test; see the separate workflow document.

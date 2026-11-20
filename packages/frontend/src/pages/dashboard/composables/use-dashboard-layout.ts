@@ -11,12 +11,13 @@ import { cloneDeep } from 'lodash-es';
 import { computed, ref, watch, toValue, type MaybeRefOrGetter } from 'vue';
 
 interface LayoutOptions {
-  page?: 'income' | 'personalFinance';
+  page?: 'income' | 'actualIncome' | 'personalFinance';
   registry?: MaybeRefOrGetter<Record<string, WidgetLayoutDefinition>>;
   defaultLayout?: MaybeRefOrGetter<DashboardWidgetConfig[]>;
 }
 
 export function useDashboardLayout(options: LayoutOptions = {}) {
+  const identity = (widget: DashboardWidgetConfig) => widget.instanceId ?? widget.widgetId;
   const { data: settings, patchAsync } = useUserSettings();
   const registry = computed(() => toValue(options.registry) ?? WIDGET_REGISTRY);
   const defaults = computed(() => toValue(options.defaultLayout) ?? DEFAULT_DASHBOARD_LAYOUT);
@@ -49,7 +50,7 @@ export function useDashboardLayout(options: LayoutOptions = {}) {
       // Settings loaded — use API data or default
       const layout = saved && saved.length > 0 ? saved : defaults.value;
       const known = layout.filter(
-        (w, index) => w.widgetId in registry.value && layout.findIndex((x) => x.widgetId === w.widgetId) === index,
+        (w, index) => w.widgetId in registry.value && layout.findIndex((x) => identity(x) === identity(w)) === index,
       );
       return includeRevealed(known.length ? known : defaults.value);
     }
@@ -69,7 +70,7 @@ export function useDashboardLayout(options: LayoutOptions = {}) {
 
   const availableWidgets = computed(() => {
     const currentIds = new Set(draftWidgets.value.map((w) => w.widgetId));
-    return Object.values(registry.value).filter((def) => !currentIds.has(def.id));
+    return Object.values(registry.value).filter((def) => def.allowMultiple || !currentIds.has(def.id));
   });
 
   const enterEditMode = () => {
@@ -107,17 +108,22 @@ export function useDashboardLayout(options: LayoutOptions = {}) {
   };
 
   const removeWidget = ({ widgetId }: { widgetId: string }) => {
-    draftWidgets.value = draftWidgets.value.filter((w) => w.widgetId !== widgetId);
+    draftWidgets.value = draftWidgets.value.filter((w) => identity(w) !== widgetId);
   };
 
   const addWidget = ({ widgetId }: { widgetId: string }) => {
     const def = registry.value[widgetId];
-    if (!def || draftWidgets.value.some((w) => w.widgetId === widgetId)) return;
-    draftWidgets.value.push({ widgetId, colSpan: def.defaultColSpan, rowSpan: def.defaultRowSpan });
+    if (!def || (!def.allowMultiple && draftWidgets.value.some((w) => w.widgetId === widgetId))) return;
+    draftWidgets.value.push({
+      widgetId,
+      ...(def.allowMultiple ? { instanceId: crypto.randomUUID() } : {}),
+      colSpan: def.defaultColSpan,
+      rowSpan: def.defaultRowSpan,
+    });
   };
 
   const moveWidget = ({ widgetId, direction }: { widgetId: string; direction: -1 | 1 }) => {
-    const index = draftWidgets.value.findIndex((w) => w.widgetId === widgetId);
+    const index = draftWidgets.value.findIndex((w) => identity(w) === widgetId);
     const target = index + direction;
     if (index < 0 || target < 0 || target >= draftWidgets.value.length) return;
     const [widget] = draftWidgets.value.splice(index, 1);
@@ -125,7 +131,7 @@ export function useDashboardLayout(options: LayoutOptions = {}) {
   };
 
   const resizeWidget = ({ widgetId, colSpan, rowSpan }: { widgetId: string; colSpan: number; rowSpan: number }) => {
-    const widget = draftWidgets.value.find((w) => w.widgetId === widgetId);
+    const widget = draftWidgets.value.find((w) => identity(w) === widgetId);
     if (widget) {
       widget.colSpan = colSpan;
       widget.rowSpan = rowSpan;
@@ -133,7 +139,7 @@ export function useDashboardLayout(options: LayoutOptions = {}) {
   };
 
   const updateWidgetConfig = ({ widgetId, key, value }: { widgetId: string; key: string; value: unknown }) => {
-    const widget = draftWidgets.value.find((w) => w.widgetId === widgetId);
+    const widget = draftWidgets.value.find((w) => identity(w) === widgetId);
     if (widget) {
       widget.config = { ...widget.config, [key]: value };
     }
@@ -149,7 +155,7 @@ export function useDashboardLayout(options: LayoutOptions = {}) {
     if (!settings.value) return;
 
     const widgets = cloneDeep(activeWidgets.value);
-    const widget = widgets.find((w) => w.widgetId === widgetId);
+    const widget = widgets.find((w) => identity(w) === widgetId);
     if (widget) {
       widget.config = { ...widget.config, ...config };
       await persistWidgets(widgets);

@@ -75,7 +75,9 @@ const detailsOpen = ref(false);
   <section class="space-y-4" :data-testid="metric + '-plan-pace'">
     <header class="flex flex-wrap items-center justify-between gap-3">
       <h2 class="text-lg font-semibold">{{ metric === 'income' ? 'Income pace' : 'Savings pace' }}</h2>
-      <router-link to="/finances/income" class="text-primary text-sm hover:underline">Edit Income plan</router-link>
+      <router-link to="/finances/income/projected" class="text-primary text-sm hover:underline"
+        >Edit Income plan</router-link
+      >
     </header>
     <p v-if="isLoading" class="text-muted-foreground py-16 text-center">Loading planned and actual progress...</p>
     <div v-else-if="isError" class="py-10 text-center">

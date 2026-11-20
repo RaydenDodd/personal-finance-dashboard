@@ -13,6 +13,7 @@
       <import-batch-delete-overlay />
       <notification-toaster />
       <update-available-banner />
+      <payroll-update-reminder />
     </div>
     <connection-status-overlay />
   </main>
@@ -24,6 +25,7 @@ import ConnectionStatusOverlay from '@/components/common/connection-status-overl
 import ImportBatchDeleteOverlay from '@/components/common/import-batch-delete-overlay.vue';
 import RestoreInProgressOverlay from '@/components/common/restore-in-progress-overlay.vue';
 import UpdateAvailableBanner from '@/components/common/update-available-banner.vue';
+import PayrollUpdateReminder from '@/components/common/payroll-update-reminder.vue';
 import NotificationToaster from '@/components/notification-center/notification-toaster.vue';
 import { useExchangeRates } from '@/composable/data-queries/currencies';
 import { useUserSettings } from '@/composable/data-queries/user-settings';

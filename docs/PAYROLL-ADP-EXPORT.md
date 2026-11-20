@@ -33,3 +33,20 @@ https://my.adp.com/myadp_prefix/payroll/v1/workers/{workerId}/pay-statements/{st
 ```
 
 No worker IDs or authenticated request headers belong in source control, logs, screenshots or bug reports.
+
+## Connection status and the remaining live test
+
+The current status is **Assisted export**, not a direct ADP connection. **Sync ADP payroll** opens the instructions; it does not launch a local program from the webpage. The local helper must be started on your computer using the command above. A browser webpage cannot start that local command without an installed bridge, and no bridge was installed.
+
+| Step                               | Current implementation                                                               |
+| ---------------------------------- | ------------------------------------------------------------------------------------ |
+| Open Sync ADP payroll              | Opens the update instructions and official ADP link                                  |
+| Launch the isolated export browser | Run the local helper command                                                         |
+| Sign in and complete ADP MFA       | You do this directly in the official ADP window                                      |
+| Fetch payroll statements           | The helper performs sequential same-origin reads after you type `EXPORT`             |
+| Import into MoneyMatter            | Select the export file, verify the employment, preview, and confirm in Actual Income |
+| Close the ADP session              | The isolated browser closes on export completion, failure or cancellation            |
+
+Mocked endpoint and browser-cleanup tests have passed. The helper command and installed Edge executable have also been checked. A fresh interactive ADP sign-in and an export from that temporary session still require an owner-operated live test. No existing browser cookies were copied, and no successful live ADP sync is claimed.
+
+For that test, run the helper with a new private filename, sign in/MFA in its window, open Pay statements, and type `EXPORT` in the terminal. Then use MoneyMatter's import preview. An unchanged export should show duplicates without new financial records. If ADP denies access, returns a login page or rate-limits requests, stop; use the existing file-import fallback. Imported statements remain private and the recorded successful-import date is separate from provider-sync status.

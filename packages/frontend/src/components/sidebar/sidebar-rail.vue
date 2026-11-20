@@ -42,7 +42,7 @@ import UserMenu from './user-menu.vue';
 const { t } = useI18n();
 const route = useRoute();
 const { isCollapsed } = useSidebarCollapsed();
-const { isAccountsRoute, isTransactionsRoute, isPlannedRoute, isChildActive } = useSidebarNavRoutes();
+const { isIncomeRoute, isAccountsRoute, isTransactionsRoute, isPlannedRoute, isChildActive } = useSidebarNavRoutes();
 const accountsNavChildren = useAccountsNavChildren();
 
 const {
@@ -94,7 +94,13 @@ interface RailNavItem {
 const navItems = computed<RailNavItem[]>(() => [
   { routeName: ROUTES_NAMES.home, icon: LayoutDashboardIcon, label: t('navigation.dashboard') },
   { routeName: ROUTES_NAMES.personalFinance, icon: WalletIcon, label: t('navigation.personalNetWorth') },
-  { routeName: ROUTES_NAMES.incomeManagement, icon: BanknoteIcon, label: 'Income' },
+  {
+    routeName: ROUTES_NAMES.actualIncome,
+    icon: BanknoteIcon,
+    label: 'Income',
+    active: isIncomeRoute.value,
+    children: SIDEBAR_NAV_CHILDREN.income,
+  },
   {
     routeName: ROUTES_NAMES.accounts,
     icon: LayersIcon,
