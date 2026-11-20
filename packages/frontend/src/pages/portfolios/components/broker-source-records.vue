@@ -107,7 +107,7 @@ const dollars = (v: string | null) =>
           <thead>
             <tr class="border-border border-b text-left">
               <th class="py-2">Tax year</th>
-              <th class="py-2 text-right">Dividends</th>
+              <th class="py-2 text-right">Ordinary dividends</th>
               <th class="py-2 text-right">Sale proceeds</th>
               <th class="py-2 text-right">Reported realized gain</th>
             </tr>

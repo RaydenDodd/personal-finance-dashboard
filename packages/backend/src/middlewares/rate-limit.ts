@@ -111,6 +111,13 @@ export const priceSyncRateLimit = createRateLimit({
   },
 });
 
+/** Public portfolio refreshes do not consume the independent securities-price sync budget. */
+export const publicPortfolioRefreshRateLimit = createRateLimit({
+  windowSeconds: 60,
+  maxAttempts: 1,
+  keyGenerator: (req: Request) => `public-portfolio-sync:user:${(req.user as Users).id}`,
+});
+
 /**
  * Rate limit for bulk price uploads (1 minute window, 5 attempts per user)
  * Prevents accidental DoS from repeated large uploads

@@ -44,7 +44,11 @@ import { adminOnly } from '@middlewares/admin-only';
 import { authenticateSession } from '@middlewares/better-auth';
 import { blockDemoUsers } from '@middlewares/block-demo-users';
 import { checkBaseCurrencyLock } from '@middlewares/check-base-currency-lock';
-import { priceSyncRateLimit, securitiesPricesBulkUploadRateLimit } from '@middlewares/rate-limit';
+import {
+  priceSyncRateLimit,
+  publicPortfolioRefreshRateLimit,
+  securitiesPricesBulkUploadRateLimit,
+} from '@middlewares/rate-limit';
 import { Router } from 'express';
 
 const router = Router({});
@@ -55,7 +59,13 @@ const router = Router({});
 router.use(authenticateSession);
 router.get('/providers/public', getPublicStatus);
 router.put('/providers/public', blockDemoUsers, connectPublic);
-router.post('/providers/public/refresh', blockDemoUsers, checkBaseCurrencyLock, priceSyncRateLimit, refreshPublic);
+router.post(
+  '/providers/public/refresh',
+  blockDemoUsers,
+  checkBaseCurrencyLock,
+  publicPortfolioRefreshRateLimit,
+  refreshPublic,
+);
 
 // Portfolio routes
 router.get('/portfolios', listPortfoliosController);
