@@ -52,7 +52,7 @@ export interface FinanceCashFlow {
   description: string;
   opening: boolean;
   createdAt: string;
-  source?: 'manual' | 'google-sheets' | 'bank-transfer' | 'csv';
+  source?: 'manual' | 'google-sheets' | 'bank-transfer' | 'csv' | 'payroll';
   sourceId?: string | null;
   sourceKey?: string | null;
   transactionId?: string | null;

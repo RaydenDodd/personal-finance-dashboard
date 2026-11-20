@@ -10,8 +10,11 @@ import { incomeDate, incomeDocumentSchema, incomePlanSchema, paycheckSchema } fr
 import { getTaxData, refreshTaxSources } from '@services/income-management/tax-data';
 import { Router } from 'express';
 import { z } from 'zod';
+
+import payrollRouter from './payroll.route';
 const router = Router();
 router.use(authenticateSession);
+router.use('/payroll', payrollRouter);
 const dateNow = () => new Date().toISOString().slice(0, 10);
 router.get(
   '/',

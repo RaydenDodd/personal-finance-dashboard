@@ -198,7 +198,8 @@ export function principalFor(accountId: string, flows: FinanceCashFlow[], valuat
       relevant
         .filter(
           (f) =>
-            f.type === 'contribution' &&
+            (f.type === 'contribution' ||
+              (f.type === 'adjustment' && f.source === 'payroll' && f.evidence?.verifiedComponents === true)) &&
             f.accountId === accountId &&
             (f.contributionKind === kind || f.evidence?.verifiedComponents === true) &&
             f.verified !== false,

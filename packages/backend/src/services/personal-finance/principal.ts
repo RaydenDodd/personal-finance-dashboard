@@ -39,6 +39,21 @@ const fingerprint = (record: PrincipalImportRecord) =>
   createHash('sha256')
     .update(JSON.stringify(principalRecordFingerprintInput(record)))
     .digest('hex');
+const stableJson = (value: unknown): string => {
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`;
+  if (value && typeof value === 'object')
+    return `{${Object.entries(value)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .filter(([, v]) => v !== undefined)
+      .map(([k, v]) => `${JSON.stringify(k)}:${stableJson(v)}`)
+      .join(',')}}`;
+  return JSON.stringify(value) ?? 'null';
+};
+/** Preview guards include active amounts and provenance, not only record counts. */
+export const principalStateHash = (flows: FinanceCashFlow[]) =>
+  createHash('sha256')
+    .update(stableJson([...flows].sort((a, b) => a.id.localeCompare(b.id))))
+    .digest('hex');
 const flowRow = (row: PrincipalStoredFlow): FinanceCashFlow => ({
   ...row,
   date: String(row.date),
@@ -242,13 +257,77 @@ async function writeRecord(
   return id;
 }
 
+/** Attach verified payroll splits to a matched movement without adding its amount again. */
+async function mergePayrollComponents(
+  userId: number,
+  existing: FinanceCashFlow,
+  record: PrincipalImportRecord,
+  transaction: Transaction,
+) {
+  if (record.source !== 'payroll' || record.evidence?.verifiedComponents !== true) return;
+  const employee = Number(record.evidence.employeeAmount),
+    employer = Number(record.evidence.employerAmount);
+  if (
+    !Number.isFinite(employee) ||
+    !Number.isFinite(employer) ||
+    cents(employee) + cents(employer) !== cents(record.amount) ||
+    cents(existing.amount) !== cents(record.amount) ||
+    !['contribution', 'adjustment'].includes(existing.type)
+  )
+    fail('Payroll employee and employer components must reconcile to the matched principal movement');
+  if (
+    existing.evidence?.verifiedComponents === true &&
+    (cents(Number(existing.evidence.employeeAmount ?? 0)) !== cents(employee) ||
+      cents(Number(existing.evidence.employerAmount ?? 0)) !== cents(employer))
+  )
+    fail('Previously verified principal components differ from payroll. Review the source evidence first.');
+  const evidence = {
+    ...existing.evidence,
+    verifiedComponents: true,
+    employeeAmount: employee,
+    employerAmount: employer,
+    employerMatchAmount: record.evidence.employerMatchAmount,
+    employerOtherAmount: record.evidence.employerOtherAmount,
+    payrollStatementIds: record.evidence.payrollStatementIds,
+    payrollSourceHashes: record.evidence.payrollSourceHashes,
+    payrollEmploymentId: record.evidence.payrollEmploymentId,
+    payrollSourceId: record.sourceId,
+    payrollSourceKey: record.sourceKey,
+  };
+  if (stableJson(evidence) === stableJson(existing.evidence)) return;
+  await execute(
+    'UPDATE "PersonalFinanceCashFlows" SET evidence=CAST(:evidence AS jsonb) WHERE id=:id AND "userId"=:userId',
+    { id: existing.id, userId, evidence: JSON.stringify(evidence) },
+    transaction,
+  );
+  await audit(
+    userId,
+    'principal.payroll-components-linked',
+    existing.id,
+    { before: existing.evidence, after: evidence, amountUnchanged: true },
+    transaction,
+  );
+}
+
 /** Verified source cells and bank movements share the existing cash-flow ledger.
  * Revisions append; source and transaction references prevent feedback duplicates. */
 export async function importPrincipalRecords(
   userId: number,
   records: PrincipalImportRecord[],
+  options: {
+    expectedStateHash?: string;
+    reviews?: { reviewKey: string; reason: string; details: Record<string, unknown> }[];
+    coverageExtension?: { cashFlowId: string; from: string; through: string; proof: Record<string, unknown> };
+  } = {},
 ): Promise<PrincipalImportResult> {
   return lockUser(userId, async (transaction) => {
+    if (
+      options.expectedStateHash &&
+      principalStateHash(await getCashFlows(userId, transaction)) !== options.expectedStateHash
+    )
+      fail('Principal data changed after the preview. Reload and reconcile again.');
+    for (const item of options.reviews ?? [])
+      await review(userId, item.reviewKey, item.reason, item.details, transaction);
     const accounts = await getFinanceAccounts(userId, transaction);
     const result: PrincipalImportResult = { inserted: 0, duplicate: 0, corrected: 0, linked: 0, conflicts: [] };
     const seen = new Set<string>();
@@ -352,6 +431,7 @@ export async function importPrincipalRecords(
           const matched = sameReferencedPrincipalMovement(record, flowRow(previous));
           if (matched) {
             await references(userId, previous.id, record, transaction);
+            await mergePayrollComponents(userId, flowRow(previous), record, transaction);
             result.linked++;
             continue;
           }
@@ -397,6 +477,7 @@ export async function importPrincipalRecords(
           continue;
         }
         await references(userId, existing.id, record, transaction);
+        await mergePayrollComponents(userId, existing, record, transaction);
         result.linked++;
         continue;
       }
@@ -417,6 +498,7 @@ export async function importPrincipalRecords(
       }
       if (matched.match) {
         await references(userId, matched.match.id, record, transaction);
+        await mergePayrollComponents(userId, matched.match, record, transaction);
         result.linked++;
         continue;
       }
@@ -429,6 +511,42 @@ export async function importPrincipalRecords(
       await execute(
         'UPDATE "PersonalFinancePrincipalReviews" SET "resolvedAt"=NOW() WHERE "userId"=:userId AND "reviewKey"=:reviewKey',
         { userId, reviewKey: `source:${identity}` },
+        transaction,
+      );
+    }
+    if (options.coverageExtension) {
+      const extension = options.coverageExtension;
+      if (
+        result.conflicts.length ||
+        !isRecordedDate(extension.from) ||
+        !isRecordedDate(extension.through) ||
+        extension.through <= extension.from
+      )
+        fail('Payroll coverage cannot advance while contribution conflicts remain');
+      const previous = (
+        await read<PrincipalStoredFlow>(
+          'SELECT * FROM "PersonalFinanceCashFlows" WHERE "userId"=:userId AND id=:id AND "supersededAt" IS NULL FOR UPDATE',
+          { userId, id: extension.cashFlowId },
+          transaction,
+        )
+      )[0];
+      if (!previous?.opening || previous.evidence?.principalValidThrough !== extension.from)
+        fail('The principal coverage changed after the payroll preview');
+      const evidence = {
+        ...previous.evidence,
+        principalValidThrough: extension.through,
+        payrollCoverage: { from: extension.from, through: extension.through, proof: extension.proof },
+      };
+      await execute(
+        'UPDATE "PersonalFinanceCashFlows" SET evidence=CAST(:evidence AS jsonb) WHERE "userId"=:userId AND id=:id',
+        { userId, id: previous.id, evidence: JSON.stringify(evidence) },
+        transaction,
+      );
+      await audit(
+        userId,
+        'principal.payroll-coverage-verified',
+        previous.id,
+        { before: previous.evidence, after: evidence, amountUnchanged: true },
         transaction,
       );
     }

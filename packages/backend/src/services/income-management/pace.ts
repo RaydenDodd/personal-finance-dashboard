@@ -5,12 +5,13 @@ import { getFinanceAccounts } from '@services/personal-finance';
 import { Op } from 'sequelize';
 
 import { getIncomeDocument, getBankIncome } from './index';
-import { reconcileIncome } from './ledger';
 import { buildFundingEvents, buildPlanPace } from './pace-derivations';
+import { getPayrollDocument } from './payroll';
+import { reconcileIncomeWithPayroll } from './payroll-income';
 
 export async function getPlanPace(userId: number, from: string, through: string) {
   const now = new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
-  const [document, bankIncome, accounts, reporting, txs] = await Promise.all([
+  const [document, bankIncome, accounts, reporting, txs, payroll] = await Promise.all([
     getIncomeDocument(userId),
     getBankIncome(userId),
     Accounts.findAll({ where: { userId }, attributes: ['id', 'name', 'accountCategory', 'excludeFromStats'] }),
@@ -29,6 +30,7 @@ export async function getPlanPace(userId: number, from: string, through: string)
       },
       order: [['time', 'ASC']],
     }),
+    getPayrollDocument(userId),
   ]);
   const posted = txs.filter(
     (t) =>
@@ -54,11 +56,12 @@ export async function getPlanPace(userId: number, from: string, through: string)
         nature: t.transferNature,
       })),
   );
-  const daily = reconcileIncome(document, bankIncome, from, through, 'daily').periods;
+  const daily = reconcileIncomeWithPayroll(document, bankIncome, payroll, from, through, 'daily').periods;
   const coverage =
     [
       ...posted.map((t) => new Date(t.time).toLocaleDateString('en-CA', { timeZone: 'America/New_York' })),
       ...document.paychecks.filter((p) => p.evidence === 'actual').map((p) => p.date),
+      ...payroll.statements.map((p) => p.payDate),
     ].sort()[0] ?? null;
   return buildPlanPace(
     document,

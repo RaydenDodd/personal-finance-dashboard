@@ -1,4 +1,4 @@
-# Actual and projected income implementation
+﻿# Actual and projected income implementation
 
 This checklist records the November 19, 2026 Income request. Payroll source documents and exact reconciliation outputs belong in ignored `private/`, never source control. The complete original request is preserved there as `payroll-requirements.txt`.
 
@@ -6,11 +6,11 @@ This checklist records the November 19, 2026 Income request. Payroll source docu
 
 - [x] Inspect the existing Income ledger, plan engine, allocation doughnut/Sankey, dashboard layout system and native chart interactions.
 - [x] Preserve existing projected salary, contribution percentages, employer match, tax assumptions, allocations and manual overrides.
-- [ ] Add owner-scoped, versioned payroll source, employment, statement and salary-event storage through an additive migration.
-- [ ] Normalize all supplied detailed JSON statements; preserve source identity, signed amounts, adjustments, source evidence and previous revisions.
-- [ ] Reconcile paycheck allocations, independent yearly totals and latest YTD checkpoints. Never sum YTD fields as payments.
-- [ ] Verify representative source PDFs, rate annualization, bonuses/noncash offsets and employee/employer retirement mappings.
-- [ ] Validate repeated imports, changed statements, missing fields, adjustments and concurrent imports before live import.
+- [x] Add owner-scoped, versioned payroll source, employment, statement and salary-event storage through an additive migration.
+- [x] Normalize all supplied detailed JSON statements; preserve source identity, signed amounts, adjustments, source evidence and previous revisions.
+- [x] Reconcile paycheck allocations, independent yearly totals and latest YTD checkpoints. Never sum YTD fields as payments.
+- [x] Verify representative source PDFs, rate annualization, bonuses/noncash offsets and employee/employer retirement mappings.
+- [x] Validate repeated imports, changed statements, missing fields, adjustments and concurrent imports before live import.
 - [ ] Import the verified source after a database backup; retain manual payroll and all unrelated financial records.
 - [ ] Separate Actual Income and Projected Income routes/sidebar/mobile links. Existing Income links remain valid. Default parent opens Actual.
 - [ ] Keep projected allocation doughnut, flow, breakdown and settings; independent period preference and no retroactive effect on actual payroll.

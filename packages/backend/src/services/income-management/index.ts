@@ -11,7 +11,9 @@ import { DEFAULT_CATEGORIES } from '@services/personal-finance/types';
 import { randomUUID } from 'node:crypto';
 import { QueryTypes, type Transaction } from 'sequelize';
 
-import { emptyIncomeDocument, reconcileIncome, validatePaycheckLinks, partitionIncomeImport } from './ledger';
+import { emptyIncomeDocument, validatePaycheckLinks, partitionIncomeImport } from './ledger';
+import { getPayrollDocument } from './payroll';
+import { reconcileIncomeWithPayroll } from './payroll-income';
 
 const query = async <T>(
   sql: string,
@@ -58,11 +60,15 @@ export async function getIncomeDashboard(
   through: string,
   granularity: 'biweekly' | 'monthly' | 'yearly' = 'monthly',
 ): Promise<IncomeDashboard> {
-  const [document, bankIncome] = await Promise.all([getIncomeDocument(userId), getBankIncome(userId)]);
+  const [document, bankIncome, payroll] = await Promise.all([
+    getIncomeDocument(userId),
+    getBankIncome(userId),
+    getPayrollDocument(userId),
+  ]);
   return {
     document,
     bankIncome,
-    ...reconcileIncome(document, bankIncome, from, through, granularity),
+    ...reconcileIncomeWithPayroll(document, bankIncome, payroll, from, through, granularity),
     calculations: document.plans.map((plan) => ({ plan, result: calculateIncomePlan(plan.input) })),
   };
 }

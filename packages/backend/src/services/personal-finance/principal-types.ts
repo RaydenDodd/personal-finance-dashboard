@@ -1,6 +1,6 @@
 import type { CashFlowType, FinanceCashFlow } from './types';
 
-export type PrincipalSource = 'manual' | 'google-sheets' | 'bank-transfer' | 'csv';
+export type PrincipalSource = 'manual' | 'google-sheets' | 'bank-transfer' | 'csv' | 'payroll';
 export type ContributionKind = 'employee' | 'employer' | 'unspecified';
 export interface PrincipalImportRecord {
   accountId: string;
