@@ -46,7 +46,7 @@ const categories = computed(() =>
     :class="bounded ? 'h-full p-4' : 'p-5 sm:p-7'"
     data-testid="actual-payroll-summary"
   >
-    <ModuleBody v-if="summary" class="space-y-3">
+    <component :is="bounded ? ModuleBody : 'div'" v-if="summary" class="space-y-3">
       <div class="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p class="text-muted-foreground text-xs font-medium">Current annualized base salary</p>
@@ -128,7 +128,7 @@ const categories = computed(() =>
       <p v-if="!summary.count" class="text-muted-foreground text-sm">
         No payroll statements in this period. Import payroll files from Manage payroll.
       </p>
-    </ModuleBody>
+    </component>
     <p v-else-if="query.isError.value" class="text-destructive-text text-sm">Payroll could not be loaded. Try again.</p>
     <div v-else class="bg-muted h-40 animate-pulse rounded-md" />
   </Card>

@@ -43,24 +43,24 @@ function apply() {
 </script>
 <template>
   <div
-    class="@container flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1.5"
+    class="@container flex w-full min-w-0 flex-wrap items-center gap-x-2 gap-y-1.5"
     data-testid="payroll-date-range"
     data-chart-controls
   >
-    <div class="bg-muted/60 grid w-full max-w-full grid-cols-8 items-center gap-0.5 rounded-lg p-0.5 @2xl:w-fit">
+    <div class="bg-muted/60 grid w-full max-w-full grid-cols-8 items-center gap-0.5 rounded-lg p-0.5 @2xl:w-auto">
       <Button
         v-for="preset in presets"
         :key="preset.id"
         size="sm"
         :variant="model.preset === preset.id ? 'secondary' : 'ghost'"
-        class="min-w-0 px-0.5 text-[11px] @2xl:px-2"
+        class="min-w-0 px-0.5 text-[11px] @2xl:min-w-8 @2xl:px-2"
         :class="compact ? 'h-6' : 'h-7'"
         :aria-pressed="model.preset === preset.id"
         @click="choose(preset.id)"
         >{{ preset.name }}</Button
       >
     </div>
-    <div class="flex min-w-0 items-center gap-0.5">
+    <div class="flex shrink-0 items-center gap-0.5">
       <Button
         size="icon"
         variant="ghost"
@@ -71,7 +71,7 @@ function apply() {
         ><ChevronLeftIcon class="size-4"
       /></Button>
       <p
-        class="text-muted-foreground flex min-w-0 flex-wrap items-center justify-center gap-x-1 text-[10px] tabular-nums sm:text-[11px]"
+        class="text-muted-foreground flex items-center justify-center gap-x-1 text-[10px] whitespace-nowrap tabular-nums sm:text-[11px]"
       >
         <time class="whitespace-nowrap" :datetime="model.from">{{ model.from }}</time
         ><span>&ndash;</span><time class="whitespace-nowrap" :datetime="model.through">{{ model.through }}</time>
