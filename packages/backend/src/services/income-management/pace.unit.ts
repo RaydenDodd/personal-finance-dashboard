@@ -18,6 +18,23 @@ const tx = (
   date = '2026-11-10',
 ): FundingTransaction => ({ id, accountId, type, note, amount, date, nature: 'transfer_out_wallet', transferId: null });
 describe('planned vs actual funding boundary', () => {
+  it('honors an excluded brokerage even when only its outgoing cash leg exists', () => {
+    const excluded = accounts.map((a) => (a.id === 'broker' ? { ...a, excluded: true } : a));
+    expect(buildFundingEvents(excluded, [], [tx('out', 'cash', 'expense', 'ROBINHOOD')])).toEqual([]);
+  });
+  it('does not turn a move from an excluded investment to savings into new savings', () => {
+    const excluded = accounts.map((a) => (a.id === 'broker' ? { ...a, excluded: true } : a));
+    expect(
+      buildFundingEvents(
+        excluded,
+        [],
+        [
+          tx('out', 'broker', 'expense', 'Withdrawal to Emergency XXXXX2222'),
+          tx('in', 'fund', 'income', 'Deposit from Brokerage XXXXX4444'),
+        ],
+      ),
+    ).toEqual([]);
+  });
   it('counts both unlinked legs of checking-to-fund funding once on receipt date', () => {
     const events = buildFundingEvents(
       accounts,

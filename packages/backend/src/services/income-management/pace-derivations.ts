@@ -67,9 +67,9 @@ export function buildFundingEvents(
       ?.replace(/\.com$/, '');
     if (!merchant) return null;
     const candidates = accounts.filter(
-      (a) => eligible.has(a.id) && a.name.toLowerCase().includes(merchant) && !/crypto/i.test(a.name),
+      (a) => boundary.has(a.id) && a.name.toLowerCase().includes(merchant) && !/crypto/i.test(a.name),
     );
-    return candidates.length === 1 ? candidates[0]!.id : 'provider:' + merchant;
+    return candidates.length === 1 ? candidates[0]!.id : candidates.length ? null : 'provider:' + merchant;
   };
   const events: FundingEvent[] = [];
   const used = new Set<string>();
