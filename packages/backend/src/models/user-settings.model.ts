@@ -134,6 +134,7 @@ const ZodSpikeConfigSchema = z.object({
 const ZodDashboardWidgetSchema = z
   .object({
     widgetId: z.string(),
+    instanceId: z.string().uuid().optional(),
     colSpan: z.number().int().min(1).max(3).default(1),
     rowSpan: z.number().int().min(1).max(2).default(1),
     config: z.record(z.string(), z.unknown()).optional(),
@@ -222,6 +223,7 @@ const ZodTransactionFormSettingsSchema = z.object({
 // their own top-level keys; this namespace is only for presentation state.
 const ZodPageLayoutsSchema = z.object({
   income: z.object({ widgets: z.array(ZodDashboardWidgetSchema).max(100).optional() }).optional(),
+  actualIncome: z.object({ widgets: z.array(ZodDashboardWidgetSchema).max(100).optional() }).optional(),
   personalFinance: z.object({ widgets: z.array(ZodDashboardWidgetSchema).max(100).optional() }).optional(),
 });
 const ZodUiSettingsSchema = z.object({

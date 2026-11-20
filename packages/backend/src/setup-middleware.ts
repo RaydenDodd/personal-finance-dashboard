@@ -164,6 +164,11 @@ export function setupMiddleware(app: Express) {
         OFX_FULL_PATHS.execute,
       ],
       '10mb': [
+        // Detailed payroll JSON/PDF imports exceed Express's default 100KB body limit.
+        `${API_PREFIX}/personal-finance/income/payroll/import`,
+        `${API_PREFIX}/personal-finance/income/payroll/parse-pdf`,
+        `${API_PREFIX}/personal-finance/income/payroll/manual`,
+        `${API_PREFIX}/personal-finance/income/payroll/management`,
         `${API_PREFIX}/personal-finance/import/preview`,
         `${API_PREFIX}/personal-finance/import/commit`,
         `${API_PREFIX}/personal-finance/bank-history/import`,
