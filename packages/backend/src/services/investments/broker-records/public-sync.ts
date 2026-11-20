@@ -7,13 +7,16 @@ import {
 import { Money } from '@common/types/money';
 import BrokerPortfolioData from '@models/investments/broker-portfolio-data.model';
 import Holdings from '@models/investments/holdings.model';
+import PortfolioTransfers from '@models/investments/portfolio-transfers.model';
 import Portfolios from '@models/investments/portfolios.model';
 import PublicPortfolioConnection from '@models/investments/public-connection.model';
 import Securities from '@models/investments/securities.model';
 import { encryptCredentials, decryptCredentials } from '@services/bank-data-providers/utils/credential-encryption';
 import { withLock } from '@services/common/lock';
+import { withTransaction } from '@services/common/with-transaction';
 import { isBaseCurrencyChangeLocked } from '@services/currencies/base-currency-lock';
-import { directCashTransaction } from '@services/investments/portfolios/transfers';
+import { brokerImportMarker, lockBrokerImportRow } from '@services/investments/broker-import-provenance';
+import { deletePortfolioTransfer, directCashTransaction } from '@services/investments/portfolios/transfers';
 import { upsertSecuritiesFromSearch } from '@services/investments/securities-manage';
 import { rememberSearchResults } from '@services/investments/securities/verified-search-cache';
 import { createInvestmentTransaction } from '@services/investments/transactions/create.service';
@@ -24,6 +27,7 @@ import { z } from 'zod';
 
 import { resolveBrokerCryptoIdentity } from './crypto-identity';
 import { PublicReadClient } from './public-client';
+import { publicSecurityTypeLookup } from './public-event-type';
 import type { BrokerSnapshot } from './schema';
 import { saveBrokerData } from './service';
 
@@ -119,6 +123,10 @@ export const syncPublic = (userId: number) =>
               lastPrice: p.lastPrice?.lastPrice,
             });
           }
+          const eventType = publicSecurityTypeLookup([
+            ...current.positions.map((p) => ({ symbol: p.instrument.symbol, type: p.instrument.type })),
+            ...events.map((e) => ({ symbol: e.symbol, type: e.securityType })),
+          ]);
           for (const e of events.toSorted((a, b) => a.timestamp.localeCompare(b.timestamp))) {
             const sourceRowId = createHash('sha256').update(`public:${account.accountId}:${e.id}`).digest('hex');
             const amount = new Big(e.netAmount ?? '0');
@@ -128,8 +136,9 @@ export const syncPublic = (userId: number) =>
               ['BUY', 'SELL'].includes(e.side ?? '') &&
               e.quantity &&
               new Big(e.quantity).abs().gt(0);
-            if ((isTrade || e.subType === 'DIVIDEND') && e.symbol && e.securityType && !amount.eq(0)) {
-              const security = await securityFor(e.symbol, e.securityType);
+            const securityType = eventType(e.symbol, e.securityType);
+            if ((isTrade || (e.subType === 'DIVIDEND' && amount.gt(0))) && e.symbol && securityType && !amount.eq(0)) {
+              const security = await securityFor(e.symbol, securityType);
               await Holdings.findOrCreate({
                 where: { portfolioId, securityId: security.id },
                 defaults: {
@@ -153,22 +162,66 @@ export const syncPublic = (userId: number) =>
                   : amount.abs().plus(brokerFees);
               if (gross.lt(0)) throw new Error('Public fee exceeds the evidenced settlement.');
               // Exact settlement cash is authoritative. A net per-unit amount is derived, not a market quote.
-              await createInvestmentTransaction({
-                userId,
-                portfolioId,
-                securityId: security.id,
-                date: e.timestamp,
-                category,
-                quantity: quantity.toString(),
-                price: gross
-                  .div(quantity)
-                  .toFixed(10, category === INVESTMENT_TRANSACTION_CATEGORY.sell ? Big.roundUp : Big.roundDown),
-                fees: brokerFees.toString(),
-                settlementCurrencyCode: 'USD',
-                settlementAmount: amount.abs().toFixed(10),
-                sourceRowId,
-                name: `Public ${e.description}; unit amount derived from verified settlement and broker fee ${brokerFees.toString()}.`,
-              });
+              await withTransaction(async () => {
+                await lockBrokerImportRow({ userId, portfolioId, sourceRowId });
+                if (category === INVESTMENT_TRANSACTION_CATEGORY.dividend) {
+                  const legacy = await PortfolioTransfers.findOne({
+                    where: {
+                      userId,
+                      toPortfolioId: portfolioId,
+                      description: { [Op.like]: `${brokerImportMarker(sourceRowId)}%` },
+                    },
+                  });
+                  if (legacy) {
+                    if (
+                      legacy.transactionId ||
+                      legacy.fromAccountId ||
+                      legacy.toAccountId ||
+                      !legacy.amount.toBig().eq(amount) ||
+                      legacy.currencyCode !== 'USD'
+                    )
+                      throw new Error('Legacy dividend evidence needs review.');
+                    await saveBrokerData({
+                      userId,
+                      portfolioId,
+                      data: {
+                        broker: 'public',
+                        accountKey: account.accountId,
+                        snapshots: [],
+                        documents: [],
+                        taxReports: [],
+                        historyComplete: false,
+                        review: [],
+                        sourceEvents: [
+                          {
+                            sourceRowId: `promoted-dividend:${legacy.id}`,
+                            status: 'cash-only-record-replaced-by-native-dividend',
+                            original: legacy.toJSON(),
+                            amount: legacy.amount.toDecimalString(10),
+                          },
+                        ],
+                      },
+                    });
+                    await deletePortfolioTransfer({ userId, transferId: legacy.id });
+                  }
+                }
+                await createInvestmentTransaction({
+                  userId,
+                  portfolioId,
+                  securityId: security.id,
+                  date: e.timestamp,
+                  category,
+                  quantity: quantity.toString(),
+                  price: gross
+                    .div(quantity)
+                    .toFixed(10, category === INVESTMENT_TRANSACTION_CATEGORY.sell ? Big.roundUp : Big.roundDown),
+                  fees: brokerFees.toString(),
+                  settlementCurrencyCode: 'USD',
+                  settlementAmount: amount.abs().toFixed(10),
+                  sourceRowId,
+                  name: `Public ${e.description}; unit amount derived from verified settlement and broker fee ${brokerFees.toString()}.`,
+                });
+              })();
             } else if (e.type === 'MONEY_MOVEMENT' && !amount.eq(0)) {
               await directCashTransaction({
                 userId,
