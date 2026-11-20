@@ -25,7 +25,7 @@ This checklist records the November 19, 2026 Income request. Payroll source docu
 - [x] Optional dashboard widgets: actual summary, salary history, received income, salary growth, bonuses, retirement, tax, projected summary and projected allocation; add/remove/reorder/resize/configure with independent settings, no automatic additions.
 - [x] User-initiated payroll update reminder (default 30 days, configurable, snooze/dismiss, once per app session); no background ADP sync.
 - [x] Investigate official ADP API/browser authentication feasibility and applicable terms before enabling any session integration.
-- [ ] Final targeted and regression validation: owner isolation, source immutability, duplicate handling, actual/projection independence, chart/date/mobile interactions, widgets, bank and principal reconciliation, backups, deployed health and Git sync.
+- [x] Final targeted and regression validation: owner isolation, source immutability, duplicate handling, actual/projection independence, chart/date/mobile interactions, widgets, bank and principal reconciliation, backups, deployed health and Git sync.
 
 ## Decisions
 
@@ -59,3 +59,7 @@ Exact source mappings, hashes, totals, statement anomalies and PDF comparisons a
 ## Live reconciliation checkpoint
 
 All supplied statements were imported after a database backup. Independent 2024–2026 source totals and source hashes match; repeated imports insert zero and existing bank, portfolio, valuation and original Income-document fingerprints are unchanged. A live principal preview found five existing coverage items needing review, including one owner-confirmed amount that differs from payroll. No principal reconciliation was applied; the original principal records remain preserved. Exact amounts and source comparisons are in ignored private reports. Browser-to-app synchronization remains assisted export pending an owner-operated live authentication/export/import test; see the separate workflow document.
+
+## Deployed validation
+
+The frontend Income release is 6e3788c29; backend release is 9c4facc2b. Related backend (81), existing planning (29), legacy ledger (18), frontend/layout (24) and final UI (10) checks passed. Sixteen live API checks and desktop/dark plus mobile/light checks passed without financial writes. All six finance services are healthy. A post-import backup restored independently and matched 11 checked tables. Exact deployed evidence and remaining ADP/principal limitations are in ignored private/MoneyMatter-payroll-closeout.md. Principal apply remains unchecked because conflicting prior owner evidence was preserved. Live ADP authentication/export remains pending the owner's interactive test; no successful provider sync is claimed.
