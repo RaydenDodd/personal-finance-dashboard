@@ -36,6 +36,17 @@ const totals = (transactions: HoldingTotalsLeg[]) => {
   };
 };
 
+describe('Authoritative broker position anchors', () => {
+  it('starts later trades from observed shares and adjusted basis, without a synthetic purchase', () => {
+    const result = computeHoldingTotals({
+      initial: { quantity: new Big(10), costBasis: new Big(70), refCostBasis: new Big(70) },
+      transactions: [sell(2, 20), buy(1, 12)],
+    });
+    expect(result.quantity.toString()).toBe('9');
+    expect(result.costBasis.toString()).toBe('68');
+  });
+});
+
 describe('computeHoldingTotals', () => {
   describe('replay order sensitivity (the wash-sale bug)', () => {
     // The three legs of a full wash sale: an old cheap lot, the sell that

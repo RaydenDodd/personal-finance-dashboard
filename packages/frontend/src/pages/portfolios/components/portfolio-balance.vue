@@ -42,7 +42,11 @@
             <h2 class="text-3xl font-semibold tracking-tight">
               {{ formatCurrency(Number(summary.totalPortfolioValue), summary.currencyCode) }}
             </h2>
-            <div :class="getGainColorClass({ gainValue: getTotalGainValue() })" class="flex items-center gap-1.5">
+            <div
+              v-if="summary.costBasisKnown !== false && summary.realizedGainKnown !== false"
+              :class="getGainColorClass({ gainValue: getTotalGainValue() })"
+              class="flex items-center gap-1.5"
+            >
               <component :is="getTotalGainValue() >= 0 ? TrendingUpIcon : TrendingDownIcon" class="size-4" />
               <span class="text-sm font-medium">
                 {{ getTotalGainValue() >= 0 ? '+' : '' }}{{ formatCurrency(getTotalGainValue(), summary.currencyCode) }}
@@ -66,7 +70,13 @@
             </template>
             <template #code>{{ summary.baseCurrencyCode }}</template>
           </i18n-t>
-          <p class="text-muted-foreground mt-0.5 text-sm">{{ $t('portfolioDetail.balance.totalValue') }}</p>
+          <p class="text-muted-foreground mt-0.5 text-sm">
+            {{
+              summary.cashKnown === false
+                ? 'Holdings value · cash unavailable'
+                : $t('portfolioDetail.balance.totalValue')
+            }}
+          </p>
         </div>
 
         <!-- Metrics Grid -->
@@ -79,7 +89,11 @@
               {{ $t('portfolioDetail.balance.metrics.costBasis') }}
             </p>
             <p class="text-base font-semibold">
-              {{ formatCurrency(Number(summary.totalCostBasis), summary.currencyCode) }}
+              {{
+                summary.costBasisKnown === false
+                  ? 'Unavailable'
+                  : formatCurrency(Number(summary.totalCostBasis), summary.currencyCode)
+              }}
             </p>
           </div>
 
@@ -88,7 +102,8 @@
             <p class="text-muted-foreground text-xs font-medium tracking-wide uppercase">
               {{ $t('portfolioDetail.balance.metrics.unrealized') }}
             </p>
-            <div :class="getGainColorClass({ gainValue: Number(summary.unrealizedGainValue) })">
+            <p v-if="summary.costBasisKnown === false" class="text-muted-foreground text-sm">Unavailable</p>
+            <div v-else :class="getGainColorClass({ gainValue: Number(summary.unrealizedGainValue) })">
               <p class="text-base font-semibold">
                 {{ Number(summary.unrealizedGainValue) >= 0 ? '+' : ''
                 }}{{ formatCurrency(Number(summary.unrealizedGainValue), summary.currencyCode) }}
@@ -105,7 +120,10 @@
             <p class="text-muted-foreground text-xs font-medium tracking-wide uppercase">
               {{ $t('portfolioDetail.balance.metrics.realized') }}
             </p>
-            <div :class="getGainColorClass({ gainValue: Number(summary.realizedGainValue) })">
+            <p v-if="summary.realizedGainKnown === false" class="text-muted-foreground text-sm">
+              See broker tax summaries
+            </p>
+            <div v-else :class="getGainColorClass({ gainValue: Number(summary.realizedGainValue) })">
               <p class="text-base font-semibold">
                 {{ Number(summary.realizedGainValue) >= 0 ? '+' : ''
                 }}{{ formatCurrency(Number(summary.realizedGainValue), summary.currencyCode) }}
@@ -122,7 +140,13 @@
             <p class="text-muted-foreground text-xs font-medium tracking-wide whitespace-nowrap uppercase">
               {{ $t('portfolioDetail.balance.metrics.totalReturn') }}
             </p>
-            <div :class="getGainColorClass({ gainValue: getTotalGainValue() })">
+            <p
+              v-if="summary.realizedGainKnown === false || summary.costBasisKnown === false"
+              class="text-muted-foreground text-sm"
+            >
+              Incomplete history
+            </p>
+            <div v-else :class="getGainColorClass({ gainValue: getTotalGainValue() })">
               <p class="text-base font-semibold">
                 {{ getTotalGainValue() >= 0 ? '+' : '' }}{{ formatCurrency(getTotalGainValue(), summary.currencyCode) }}
               </p>

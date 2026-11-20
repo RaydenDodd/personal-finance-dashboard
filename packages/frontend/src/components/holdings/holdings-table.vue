@@ -458,15 +458,21 @@ const theadLabelStyles = 'block max-w-32 truncate';
                     </DesktopOnlyTooltip>
                   </td>
                   <td :class="[cellStyles, 'text-muted-foreground px-3 text-right tabular-nums']">
-                    {{ formatCurrency(getAverageCost(row.holding), row.holding.currencyCode) }}
+                    {{
+                      row.holding.costBasisKnown === false
+                        ? '—'
+                        : formatCurrency(getAverageCost(row.holding), row.holding.currencyCode)
+                    }}
                   </td>
                   <td :class="[cellStyles, 'px-3 text-right tabular-nums']">
                     {{
-                      formatMoneyCell({
-                        holding: row.holding,
-                        native: getTotalCost(row.holding),
-                        display: row.holding.displayCostBasis,
-                      })
+                      row.holding.costBasisKnown === false
+                        ? '—'
+                        : formatMoneyCell({
+                            holding: row.holding,
+                            native: getTotalCost(row.holding),
+                            display: row.holding.displayCostBasis,
+                          })
                     }}
                   </td>
                   <td :class="[cellStyles, 'px-3 text-right font-medium tabular-nums']">
@@ -479,7 +485,9 @@ const theadLabelStyles = 'block max-w-32 truncate';
                     }}
                   </td>
                   <td :class="[cellStyles, 'px-3 text-right']">
+                    <span v-if="row.holding.costBasisKnown === false" class="text-muted-foreground">Unavailable</span>
                     <div
+                      v-else
                       :class="getGainColorClass({ gainValue: getUnrealizedGain(row.holding).value })"
                       class="tabular-nums"
                     >
@@ -496,7 +504,11 @@ const theadLabelStyles = 'block max-w-32 truncate';
                     </div>
                   </td>
                   <td :class="[cellStyles, 'px-3 text-right']">
+                    <span v-if="row.holding.realizedGainKnown === false" class="text-muted-foreground"
+                      >Unavailable</span
+                    >
                     <div
+                      v-else
                       :class="getGainColorClass({ gainValue: getRealizedGain(row.holding).value })"
                       class="tabular-nums"
                     >

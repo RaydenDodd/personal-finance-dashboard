@@ -28,11 +28,13 @@ import GoalAccountsModel from './goal-accounts.model';
 import GoalsModel from './goals.model';
 import ImportBatchAccountEffectsModel from './import-batch-account-effects.model';
 import ImportBatchesModel from './import-batches.model';
+import BrokerPortfolioDataModel from './investments/broker-portfolio-data.model';
 import HoldingsModel from './investments/holdings.model';
 import InvestmentTransactionModel from './investments/investment-transaction.model';
 import PortfolioBalancesModel from './investments/portfolio-balances.model';
 import PortfolioTransfersModel from './investments/portfolio-transfers.model';
 import PortfoliosModel from './investments/portfolios.model';
+import PublicPortfolioConnectionModel from './investments/public-connection.model';
 import SecuritiesModel from './investments/securities.model';
 import SecurityCurrencyCacheModel from './investments/security-currency-cache.model';
 import SecurityPricingModel from './investments/security-pricing.model';
@@ -135,6 +137,8 @@ const models = [
   SignupLedgerModel,
   TransactionTemplateTagsModel,
   HoldingsModel,
+  BrokerPortfolioDataModel,
+  PublicPortfolioConnectionModel,
   InvestmentTransactionModel,
   SecuritiesModel,
   SecurityCurrencyCacheModel,

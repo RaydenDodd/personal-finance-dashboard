@@ -2,12 +2,14 @@ import { Money } from '@common/types/money';
 import { findOrThrowNotFound } from '@common/utils/find-or-throw-not-found';
 import { t } from '@i18n/index';
 import { logger } from '@js/utils';
+import BrokerPortfolioData from '@models/investments/broker-portfolio-data.model';
 import PortfolioBalances from '@models/investments/portfolio-balances.model';
 import Portfolios from '@models/investments/portfolios.model';
 import * as UsersCurrencies from '@models/users-currencies.model';
 import { calculateRefAmountFromParams } from '@services/calculate-ref-amount.service';
 import { withTransaction } from '@services/common/with-transaction';
 import { addUserCurrencies } from '@services/currencies/add-user-currency';
+import { latestSnapshot } from '@services/investments/broker-records/schema';
 import { getHoldingValues } from '@services/investments/holdings/get-holding-values.service';
 import * as userExchangeRateService from '@services/user-exchange-rate';
 
@@ -18,6 +20,10 @@ interface GetPortfolioSummaryParams {
 }
 
 interface PortfolioSummaryResult {
+  costBasisKnown?: boolean;
+  realizedGainKnown?: boolean;
+  cashKnown?: boolean;
+  observationDate?: string;
   portfolioId: string;
   portfolioName: string;
   totalCurrentValue: string;
@@ -120,13 +126,32 @@ const getPortfolioSummaryImpl = async ({
     totalCashInBase = totalCashInBase.add(balance.refTotalCash);
     availableCashInBase = availableCashInBase.add(balance.refAvailableCash);
   }
+  const broker = await BrokerPortfolioData.findByPk(portfolioId);
+  const snapshot = latestSnapshot(broker?.data, date);
+  if (snapshot?.cash !== null && snapshot?.cash !== undefined && baseCurrencyCode === 'USD') {
+    totalCashInBase = Money.fromDecimal(snapshot.cash);
+    availableCashInBase = totalCashInBase;
+  } else if (broker && !snapshot?.cash) {
+    // Missing cash evidence is unavailable, never the present ledger copied into an old statement.
+    totalCashInBase = Money.zero();
+    availableCashInBase = Money.zero();
+  }
 
   // Get all holdings with their gain/loss calculations
   const holdings = await getHoldingValues({ portfolioId, date, userId });
+  const evidence = broker
+    ? {
+        costBasisKnown: holdings.every((h) => h.costBasisKnown !== false),
+        realizedGainKnown: broker.data.historyComplete,
+        cashKnown: snapshot?.cash !== null && snapshot?.cash !== undefined,
+        observationDate: snapshot?.asOf,
+      }
+    : {};
 
   if (holdings.length === 0) {
     // Return zero values for holdings but include cash
     return {
+      ...evidence,
       portfolioId,
       portfolioName: portfolio.name,
       totalCurrentValue: '0.00',
@@ -199,6 +224,7 @@ const getPortfolioSummaryImpl = async ({
   const realizedGainPercent = costBasisNum !== 0 ? (totalRealizedGainInBase.toNumber() / costBasisNum) * 100 : 0;
 
   return {
+    ...evidence,
     portfolioId,
     portfolioName: portfolio.name,
     totalCurrentValue: toDisplay(totalCurrentValueInBase),

@@ -2,10 +2,13 @@ import { ASSET_CLASS } from '@bt/shared/types/investments';
 import { Money } from '@common/types/money';
 import { findOrThrowNotFound } from '@common/utils/find-or-throw-not-found';
 import { t } from '@i18n/index';
+import BrokerPortfolioData from '@models/investments/broker-portfolio-data.model';
 import Holdings from '@models/investments/holdings.model';
 import InvestmentTransaction from '@models/investments/investment-transaction.model';
 import Securities from '@models/investments/securities.model';
 import { withTransaction } from '@services/common/with-transaction';
+import { latestSnapshot } from '@services/investments/broker-records/schema';
+import { Big } from 'big.js';
 
 import { computeHoldingTotals } from './holding-totals';
 
@@ -37,17 +40,31 @@ const recalculateHoldingImpl = async (holdingId: { portfolioId: string; security
     ],
   });
 
+  const source = await BrokerPortfolioData.findByPk(holding.portfolioId);
+  const snapshot = latestSnapshot(source?.data);
+  const position = snapshot?.positions.find((p) => p.securityId === holding.securityId);
+  const anchored = snapshot && (snapshot.complete || position);
+  const initial = anchored
+    ? {
+        quantity: new Big(position?.quantity ?? '0'),
+        costBasis: new Big(position?.costBasis ?? '0'),
+        refCostBasis: new Big(position?.costBasis ?? '0'),
+      }
+    : undefined;
   const {
     quantity: totalQuantity,
     costBasis: totalCostBasis,
     refCostBasis: totalRefCostBasis,
   } = computeHoldingTotals({
-    transactions: transactions.map((tx) => ({
-      category: tx.category,
-      quantity: tx.quantity.toBig(),
-      amount: tx.amount.toBig(),
-      refAmount: tx.refAmount.toBig(),
-    })),
+    initial,
+    transactions: transactions
+      .filter((tx) => !anchored || tx.date > new Date(snapshot.asOf))
+      .map((tx) => ({
+        category: tx.category,
+        quantity: tx.quantity.toBig(),
+        amount: tx.amount.toBig(),
+        refAmount: tx.refAmount.toBig(),
+      })),
   });
 
   // Crypto holdings may legitimately go negative (staking/fee drift) until the

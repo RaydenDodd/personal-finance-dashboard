@@ -114,7 +114,12 @@ const createInvestmentTransactionImpl = async (params: CreateTxParams) => {
   // negative — a follow-up "adjust to zero" flow will reconcile the leftover.
   // Stocks have exact share counts, so we keep the strict check.
   const isCrypto = holding.security?.assetClass === ASSET_CLASS.crypto;
-  if (category === INVESTMENT_TRANSACTION_CATEGORY.sell && !isCrypto) {
+  // An imported historical disposal may predate the available acquisitions or a
+  // corporate action. Record the evidenced disposal without inventing a buy.
+  // This exception is confined to idempotent imports into non-additive mirrors;
+  // ordinary/manual sales and enabled portfolios retain the share guard.
+  const incompleteMirrorImport = !!params.sourceRowId && holding.portfolio?.isEnabled === false;
+  if (category === INVESTMENT_TRANSACTION_CATEGORY.sell && !isCrypto && !incompleteMirrorImport) {
     const currentQty = new Big(holding.quantity.toDecimalString(10));
     if (new Big(quantity).gt(currentQty)) {
       throw new ValidationError({

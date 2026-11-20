@@ -68,6 +68,7 @@
           {{ portfolio.description }}
         </p>
         <PortfolioBalance :portfolio-id="portfolioId" />
+        <BrokerSourceRecords :portfolio-id="portfolioId" />
         <HoldingsSummary :portfolio-id="portfolioId" />
         <PortfolioCashBalances :portfolio-id="portfolioId" :portfolio="portfolio" />
       </div>
@@ -113,6 +114,7 @@ import { useRoute, useRouter } from 'vue-router';
 import HoldingsSummary from './components/holdings-summary.vue';
 import PortfolioBalance from './components/portfolio-balance.vue';
 import PortfolioCashBalances from './components/portfolio-cash-balances.vue';
+import BrokerSourceRecords from './components/broker-source-records.vue';
 
 const route = useRoute();
 const router = useRouter();

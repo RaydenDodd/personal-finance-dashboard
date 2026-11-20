@@ -4,6 +4,7 @@ import {
   executeImportController as importExecuteController,
   extractController as importExtractController,
 } from '@controllers/investment-transactions-parser';
+import { getBrokerRecords, importBrokerRecords } from '@controllers/investments/broker-records';
 import {
   createHoldingController,
   deleteHoldingController,
@@ -30,6 +31,7 @@ import updatePortfolioController from '@controllers/investments/portfolios/updat
 import updatePortfolioBalanceController from '@controllers/investments/portfolios/update-portfolio-balance';
 import getPricesController from '@controllers/investments/prices/get-prices.controller';
 import securitiesSyncController from '@controllers/investments/prices/securities-sync.controller';
+import { connectPublic, getPublicStatus, refreshPublic } from '@controllers/investments/public-provider';
 import bulkUploadPricesController from '@controllers/investments/securities/bulk-upload-prices.controller';
 import getAllSecurities from '@controllers/investments/securities/get-all.controller';
 import getPriceUploadInfoController from '@controllers/investments/securities/get-price-upload-info.controller';
@@ -51,6 +53,9 @@ const router = Router({});
 // portfolios and deleting existing ones are blocked per-route below; admin-only
 // endpoints enforce their own access checks.
 router.use(authenticateSession);
+router.get('/providers/public', getPublicStatus);
+router.put('/providers/public', blockDemoUsers, connectPublic);
+router.post('/providers/public/refresh', blockDemoUsers, checkBaseCurrencyLock, priceSyncRateLimit, refreshPublic);
 
 // Portfolio routes
 router.get('/portfolios', listPortfoliosController);
@@ -66,6 +71,8 @@ router.get('/portfolios/:id', getPortfolioController);
 router.get('/portfolios/:id/balance', getPortfolioBalanceController);
 
 router.get('/portfolios/:id/summary', getPortfolioSummaryController);
+router.get('/portfolios/:id/broker-records', getBrokerRecords);
+router.post('/portfolios/:id/broker-records', blockDemoUsers, checkBaseCurrencyLock, importBrokerRecords);
 
 // Test-only cash seeding: writes `PortfolioBalances` directly, bypassing the
 // InvestmentTransaction/PortfolioTransfers audit trail. Production cash moves

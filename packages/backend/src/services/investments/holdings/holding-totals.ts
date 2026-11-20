@@ -45,10 +45,16 @@ interface HoldingTotals {
  * - DIVIDEND and FEE legs intentionally affect neither quantity nor basis here;
  *   they are accounted for elsewhere.
  */
-export const computeHoldingTotals = ({ transactions }: { transactions: HoldingTotalsLeg[] }): HoldingTotals => {
-  let totalQuantity = new Big(0);
-  let totalCostBasis = new Big(0);
-  let totalRefCostBasis = new Big(0);
+export const computeHoldingTotals = ({
+  transactions,
+  initial,
+}: {
+  transactions: HoldingTotalsLeg[];
+  initial?: HoldingTotals;
+}): HoldingTotals => {
+  let totalQuantity = initial?.quantity ?? new Big(0);
+  let totalCostBasis = initial?.costBasis ?? new Big(0);
+  let totalRefCostBasis = initial?.refCostBasis ?? new Big(0);
 
   for (const { category, quantity, amount, refAmount } of transactions) {
     switch (category) {

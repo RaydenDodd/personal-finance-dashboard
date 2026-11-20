@@ -1,6 +1,7 @@
 import { INVESTMENT_TRANSACTION_CATEGORY } from '@bt/shared/types/investments';
 import { INVESTMENT_DECIMAL_SCALE, Money } from '@common/types/money';
 import { logger } from '@js/utils';
+import BrokerPortfolioData from '@models/investments/broker-portfolio-data.model';
 import Holdings from '@models/investments/holdings.model';
 import InvestmentTransaction from '@models/investments/investment-transaction.model';
 import Portfolios from '@models/investments/portfolios.model';
@@ -9,9 +10,13 @@ import SecurityPricing from '@models/investments/security-pricing.model';
 import * as UsersCurrencies from '@models/users-currencies.model';
 import { calculateRefAmountFromParams } from '@services/calculate-ref-amount.service';
 import { withDeduplication } from '@services/common/with-deduplication';
+import { latestSnapshot } from '@services/investments/broker-records/schema';
 import { calculateAllGains } from '@services/investments/gains/gains-calculator.utils';
 import * as userExchangeRateService from '@services/user-exchange-rate';
+import { Big } from 'big.js';
 import { Op, WhereOptions, fn, col } from 'sequelize';
+
+import { computeHoldingTotals } from './holding-totals';
 
 interface GetHoldingValuesParams {
   portfolioId: string;
@@ -62,6 +67,9 @@ interface HoldingValue {
   displayRealizedGainValue?: string;
   // Internal: holding→base rate already resolved here; not part of the holdings API response
   baseRate?: number;
+  costBasisKnown?: boolean;
+  realizedGainKnown?: boolean;
+  valuationSource?: string;
 }
 
 /**
@@ -86,6 +94,8 @@ const getHoldingValuesImpl = async ({ portfolioId, date, userId }: GetHoldingVal
   }
 
   const securityIds = holdings.map((h) => h.securityId);
+  const broker = await BrokerPortfolioData.findByPk(portfolioId);
+  const snapshot = latestSnapshot(broker?.data, date);
 
   // Get all investment transactions for these securities in this portfolio.
   // `raw: true` + narrow attributes on purpose: this is the portfolio's full,
@@ -97,6 +107,7 @@ const getHoldingValuesImpl = async ({ portfolioId, date, userId }: GetHoldingVal
     where: {
       portfolioId,
       securityId: { [Op.in]: securityIds },
+      ...(date && { date: { [Op.lte]: date } }),
     },
     // Chronological order for FIFO calculations. `date` is a TIMESTAMPTZ so
     // same-day trades order by their actual time; `createdAt` is the tiebreaker
@@ -238,6 +249,33 @@ const getHoldingValuesImpl = async ({ portfolioId, date, userId }: GetHoldingVal
 
   for (const holding of holdings) {
     const price = pricesBySecurityId[holding.securityId];
+    const position = snapshot?.positions.find((p) => p.securityId === holding.securityId);
+    const anchored = snapshot && (position || snapshot.complete);
+    const allLegs = transactionsBySecurityId[holding.securityId] || [];
+    const basisKnown = !anchored || !position || position.costBasis !== null;
+    if (anchored || (broker && date)) {
+      const initial = anchored
+        ? {
+            quantity: new Big(position?.quantity ?? '0'),
+            costBasis: new Big(position?.costBasis ?? '0'),
+            refCostBasis: new Big(position?.costBasis ?? '0'),
+          }
+        : undefined;
+      const totals = computeHoldingTotals({
+        initial,
+        transactions: allLegs
+          .filter((tx) => !anchored || tx.date > new Date(snapshot.asOf))
+          .map((tx) => ({
+            category: tx.category,
+            quantity: new Big(tx.quantity),
+            amount: new Big(tx.price).times(tx.quantity).plus(tx.fees),
+            refAmount: new Big(tx.price).times(tx.quantity).plus(tx.fees),
+          })),
+      });
+      holding.quantity = Money.fromDecimal(totals.quantity.toString());
+      holding.costBasis = Money.fromDecimal(totals.costBasis.toString());
+      holding.refCostBasis = Money.fromDecimal(totals.refCostBasis.toString());
+    }
     const quantity = holding.quantity.toBig();
 
     let marketValue = '0';
@@ -262,6 +300,18 @@ const getHoldingValuesImpl = async ({ portfolioId, date, userId }: GetHoldingVal
         }
       }
     }
+    // Broker quotes stay scoped to this account: never overwrite shared market pricing.
+    if (position && new Big(position.quantity).gt(0) && (!priceDate || new Date(snapshot!.asOf) >= priceDate)) {
+      latestPrice = new Big(position.marketValue).div(position.quantity).toFixed(10);
+      priceDate = new Date(snapshot!.asOf);
+      marketValue = quantity.times(latestPrice).toFixed(10);
+      baseRate = await getBaseRate(holding.currencyCode);
+      if (baseRate !== null)
+        refMarketValue = calculateRefAmountFromParams({
+          amount: Money.fromDecimal(marketValue),
+          rate: baseRate,
+        }).toDecimalString(INVESTMENT_DECIMAL_SCALE);
+    }
 
     // Calculate gains/losses
     const securityTransactions = transactionsBySecurityId[holding.securityId] || [];
@@ -284,6 +334,9 @@ const getHoldingValuesImpl = async ({ portfolioId, date, userId }: GetHoldingVal
       currencyCode: holding.currencyCode,
       excluded: holding.excluded,
       security: holding.security,
+      costBasisKnown: basisKnown,
+      realizedGainKnown: !broker || broker.data.historyComplete,
+      valuationSource: position ? snapshot?.source : undefined,
       latestPrice,
       priceDate,
       marketValue,

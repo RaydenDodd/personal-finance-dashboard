@@ -15,6 +15,7 @@ import { goalsReachedCheckCron } from './crons/goals-reached-check';
 import { personalFinanceMonthlyJob } from './crons/personal-finance-monthly';
 import { personalFinancePrincipalJob } from './crons/personal-finance-principal';
 import { personalFinanceSheetsCron } from './crons/personal-finance-sheets';
+import { publicPortfolioSyncCron } from './crons/public-portfolio-sync';
 import { purgeDeletedPortfoliosCron } from './crons/purge-deleted-portfolios';
 import { securitiesDailySyncCron } from './crons/securities-daily-sync';
 import { shareInvitationsExpireCron } from './crons/share-invitations-expire';
@@ -32,6 +33,7 @@ const allEnvCrons = [demoCleanupCron, demoTemplateRefreshCron];
 
 const prodOnlyCrons = [
   securitiesDailySyncCron,
+  publicPortfolioSyncCron,
   cryptoPricesSyncCron,
   tagRemindersCron,
   stuckPendingCheckCron,

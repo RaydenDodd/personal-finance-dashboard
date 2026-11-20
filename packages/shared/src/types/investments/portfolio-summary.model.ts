@@ -1,4 +1,8 @@
 export interface PortfolioSummaryModel {
+  costBasisKnown?: boolean;
+  realizedGainKnown?: boolean;
+  cashKnown?: boolean;
+  observationDate?: string;
   portfolioId: string;
   portfolioName: string;
   /** Denominated in `currencyCode`. */

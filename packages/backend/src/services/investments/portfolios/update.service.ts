@@ -3,6 +3,7 @@ import { PORTFOLIO_TYPE } from '@bt/shared/types/investments';
 import { findOrThrowNotFound } from '@common/utils/find-or-throw-not-found';
 import { t } from '@i18n/index';
 import { ValidationError } from '@js/errors';
+import BrokerPortfolioData from '@models/investments/broker-portfolio-data.model';
 import Portfolios from '@models/investments/portfolios.model';
 import * as UsersCurrencies from '@models/users-currencies.model';
 import { applyManualLogoPatch } from '@services/brand-logos';
@@ -40,6 +41,11 @@ const updatePortfolioImpl = async ({
   });
 
   // Duplicate names are allowed — see the matching note in create.service.ts.
+  if (isEnabled === true && (await BrokerPortfolioData.findByPk(portfolioId))) {
+    throw new ValidationError({
+      message: 'Broker mirror portfolios are excluded from net worth to avoid counting connected balances twice.',
+    });
+  }
 
   // Display currency must be connected to the user, otherwise the summary
   // endpoint could not resolve an exchange rate for it.

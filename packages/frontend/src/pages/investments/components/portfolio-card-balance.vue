@@ -14,7 +14,7 @@
     </p>
 
     <!-- Unrealized Gain/Loss -->
-    <div v-if="summary" class="flex items-center gap-1.5" :class="gainColorClass">
+    <div v-if="summary && summary.costBasisKnown !== false" class="flex items-center gap-1.5" :class="gainColorClass">
       <component :is="gainIcon" class="size-3.5" />
       <span class="text-sm font-medium">
         {{ unrealizedGainFormatted }}
@@ -24,7 +24,8 @@
 
     <!-- Cost Basis -->
     <p v-if="summary" class="text-muted-foreground text-xs">
-      {{ $t('investments.card.costBasis') }}: {{ formattedCostBasis }}
+      {{ $t('investments.card.costBasis') }}:
+      {{ summary.costBasisKnown === false ? 'Unavailable' : formattedCostBasis }}
     </p>
   </div>
 
