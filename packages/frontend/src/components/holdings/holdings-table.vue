@@ -104,6 +104,16 @@ const toggleSort = (key: HoldingSortKey) => {
   }
 };
 
+const formatUnitPrice = (amount: number, holding: HoldingModel) =>
+  holding.security?.assetClass === ASSET_CLASS.crypto && amount !== 0 && Math.abs(amount) < 0.01
+    ? new Intl.NumberFormat(undefined, {
+        style: 'currency',
+        currency: holding.currencyCode,
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 10,
+      }).format(amount)
+    : formatCurrency(amount, holding.currencyCode);
+
 // Collapsible "Closed positions" section, collapsed by default.
 const closedExpanded = ref(false);
 
@@ -445,7 +455,7 @@ const theadLabelStyles = 'block max-w-32 truncate';
                     />
                   </td>
                   <td :class="[cellStyles, 'px-3 text-right tabular-nums']">
-                    {{ formatCurrency(getPrice(row.holding), row.holding.currencyCode) }}
+                    {{ formatUnitPrice(getPrice(row.holding), row.holding) }}
                     <DesktopOnlyTooltip
                       v-if="isPriceStale({ holding: row.holding })"
                       content-class-name="max-w-60"
@@ -461,7 +471,7 @@ const theadLabelStyles = 'block max-w-32 truncate';
                     {{
                       row.holding.costBasisKnown === false
                         ? '—'
-                        : formatCurrency(getAverageCost(row.holding), row.holding.currencyCode)
+                        : formatUnitPrice(getAverageCost(row.holding), row.holding)
                     }}
                   </td>
                   <td :class="[cellStyles, 'px-3 text-right tabular-nums']">

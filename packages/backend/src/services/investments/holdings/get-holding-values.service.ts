@@ -304,9 +304,9 @@ const getHoldingValuesImpl = async ({ portfolioId, date, userId }: GetHoldingVal
     }
     // Broker quotes stay scoped to this account: never overwrite shared market pricing.
     if (position && new Big(position.quantity).gt(0) && (!priceDate || new Date(snapshot!.asOf) >= priceDate)) {
-      latestPrice = new Big(position.marketValue).div(position.quantity).toFixed(10);
+      latestPrice = position.lastPrice ?? new Big(position.marketValue).div(position.quantity).toFixed(10);
       priceDate = new Date(snapshot!.asOf);
-      marketValue = quantity.times(latestPrice).toFixed(10);
+      marketValue = quantity.eq(position.quantity) ? position.marketValue : quantity.times(latestPrice).toFixed(10);
       baseRate = await getBaseRate(holding.currencyCode);
       if (baseRate !== null)
         refMarketValue = calculateRefAmountFromParams({

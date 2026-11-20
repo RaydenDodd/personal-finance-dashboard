@@ -116,6 +116,7 @@ export const syncPublic = (userId: number) =>
               quantity: p.quantity,
               costBasis: p.costBasis?.totalCost ?? null,
               marketValue: p.currentValue,
+              lastPrice: p.lastPrice?.lastPrice,
             });
           }
           for (const e of events.toSorted((a, b) => a.timestamp.localeCompare(b.timestamp))) {

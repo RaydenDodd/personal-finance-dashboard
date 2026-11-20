@@ -5,6 +5,7 @@ export const publicPosition = z.object({
   instrument: z.object({ symbol: z.string(), name: z.string().nullable(), type: z.string() }),
   quantity: decimal,
   currentValue: decimal,
+  lastPrice: z.object({ lastPrice: decimal }).nullish(),
   costBasis: z.object({ totalCost: decimal.nullable() }).nullable(),
 });
 export const publicEvent = z.object({

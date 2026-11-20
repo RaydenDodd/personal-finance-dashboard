@@ -56,10 +56,11 @@ const refresh = async () => {
   }
 };
 const latest = computed(() => [...(data.value?.snapshots ?? [])].sort((a, b) => b.asOf.localeCompare(a.asOf))[0]);
+const observationDate = (date: string) => new Date(date).toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
 const taxReports = computed(() => [...(data.value?.taxReports ?? [])].sort((a, b) => b.year - a.year));
 const rows = computed(() =>
-  [...new Map((data.value?.snapshots ?? []).map((s) => [s.asOf.slice(0, 10), s])).values()].map((s) => ({
-    label: s.asOf.slice(0, 10),
+  [...new Map((data.value?.snapshots ?? []).map((s) => [observationDate(s.asOf), s])).values()].map((s) => ({
+    label: observationDate(s.asOf),
     values: {
       value:
         s.totalValue === null ? s.positions.reduce((sum, p) => sum + Number(p.marketValue), 0) : Number(s.totalValue),
@@ -90,8 +91,8 @@ const dollars = (v: string | null) =>
         <p v-if="status?.error" class="text-destructive-text mt-1">{{ status.error }}</p>
       </div>
       <p v-if="latest" class="text-muted-foreground text-sm">
-        Latest observation: {{ latest.asOf.slice(0, 10) }} · {{ latest.source }}<br />Cash: {{ dollars(latest.cash) }} ·
-        {{ latest.lots.length }} reported tax lots
+        Latest observation: {{ observationDate(latest.asOf) }} · {{ latest.source }}<br />Cash:
+        {{ dollars(latest.cash) }} · {{ latest.lots.length }} reported tax lots
       </p>
       <div v-if="rows.length > 1">
         <h3 class="mb-3 font-medium">Recorded portfolio value</h3>

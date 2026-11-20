@@ -23,6 +23,7 @@ export const brokerSnapshotSchema = z
           quantity: positive,
           costBasis: positive.nullable(),
           marketValue: positive,
+          lastPrice: positive.optional(),
         }),
       )
       .max(500)
