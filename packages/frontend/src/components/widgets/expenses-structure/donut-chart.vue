@@ -57,6 +57,8 @@ const props = withDefaults(
     showPercentages?: boolean;
     selectionMode?: 'navigate' | 'highlight';
     heightClass?: string;
+    /** Optional controlled highlight used by an external allocation legend. */
+    highlightCategoryId?: string | null;
   }>(),
   { selectionMode: 'navigate', showPercentages: false, heightClass: 'h-55', chartLabel: 'Expense structure' },
 );
@@ -71,6 +73,15 @@ const isTouch = useMediaQuery('(pointer: coarse)');
 const chartContainerRef = ref<HTMLDivElement | null>(null);
 const svgRef = ref<SVGSVGElement | null>(null);
 const selectedCategoryId = ref<string | null>(null);
+watch(
+  () => props.highlightCategoryId,
+  (id) => {
+    if (id !== undefined) {
+      selectedCategoryId.value = id;
+      renderChart();
+    }
+  },
+);
 
 const centerLabel = reactive({
   name: '',

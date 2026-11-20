@@ -29,6 +29,7 @@ import GoalsModel from './goals.model';
 import ImportBatchAccountEffectsModel from './import-batch-account-effects.model';
 import ImportBatchesModel from './import-batches.model';
 import BrokerPortfolioDataModel from './investments/broker-portfolio-data.model';
+import InvestmentFundSnapshotsModel from './investments/fund-holdings-snapshot.model';
 import HoldingsModel from './investments/holdings.model';
 import InvestmentTransactionModel from './investments/investment-transaction.model';
 import PortfolioBalancesModel from './investments/portfolio-balances.model';
@@ -138,6 +139,7 @@ const models = [
   TransactionTemplateTagsModel,
   HoldingsModel,
   BrokerPortfolioDataModel,
+  InvestmentFundSnapshotsModel,
   PublicPortfolioConnectionModel,
   InvestmentTransactionModel,
   SecuritiesModel,

@@ -11,6 +11,7 @@ import {
   LayoutDashboardIcon,
   WalletIcon,
   BanknoteIcon,
+  TrendingUpIcon,
 } from '@lucide/vue';
 import { watch } from 'vue';
 
@@ -25,9 +26,17 @@ const navItemActive = 'bg-primary/10 text-foreground';
 const navIconBase = 'size-4 shrink-0';
 const navIconActive = 'text-primary-text';
 
-const { isIncomeOpen, isAccountsOpen, isTransactionsOpen, isPlannedOpen } = useSidebarNavCollapse();
-const { isIncomeRoute, isAccountsRoute, isTransactionsRoute, isPlannedRoute, isChildActive } = useSidebarNavRoutes();
+const { isIncomeOpen, isInvestmentsOpen, isAccountsOpen, isTransactionsOpen, isPlannedOpen } = useSidebarNavCollapse();
+const { isIncomeRoute, isInvestmentsRoute, isAccountsRoute, isTransactionsRoute, isPlannedRoute, isChildActive } =
+  useSidebarNavRoutes();
 const accountsNavChildren = useAccountsNavChildren();
+watch(
+  isInvestmentsRoute,
+  (value) => {
+    if (value) isInvestmentsOpen.value = true;
+  },
+  { immediate: true },
+);
 
 watch(
   isIncomeRoute,
@@ -117,6 +126,42 @@ watch(
             :class="[navItemBase, 'justify-start', isActive && navItemActive]"
             ><component :is="child.icon" :class="[navIconBase, isActive && navIconActive]" /><span>{{
               $t(child.labelKey)
+            }}</span></ui-button
+          ></router-link
+        >
+      </div></CollapsibleContent
+    >
+  </Collapsible>
+
+  <Collapsible v-if="!bottomNav" v-model:open="isInvestmentsOpen">
+    <CollapsibleTrigger class="w-full" data-testid="investments-navigation-parent" aria-label="Investments navigation">
+      <ui-button
+        variant="ghost"
+        as="div"
+        :class="['w-full justify-start gap-2 px-3', isInvestmentsRoute && 'bg-primary/10']"
+        size="default"
+      >
+        <TrendingUpIcon :class="[navIconBase, isInvestmentsRoute && navIconActive]" />
+        <span>Investments</span>
+        <ChevronRightIcon
+          :class="['ml-auto size-4 shrink-0 transition-transform duration-200', { 'rotate-90': isInvestmentsOpen }]"
+        />
+      </ui-button>
+    </CollapsibleTrigger>
+    <CollapsibleContent
+      ><div class="border-border/40 mt-1 ml-2 grid gap-0.5 border-l pl-2">
+        <router-link
+          v-for="child in SIDEBAR_NAV_CHILDREN.investmentAnalytics"
+          :key="child.routeName"
+          v-slot="{ isActive }"
+          :to="{ name: child.routeName }"
+          ><ui-button
+            variant="ghost"
+            as="span"
+            size="sm"
+            :class="[navItemBase, 'justify-start', isActive && navItemActive]"
+            ><component :is="child.icon" :class="[navIconBase, isActive && navIconActive]" /><span>{{
+              child.label
             }}</span></ui-button
           ></router-link
         >

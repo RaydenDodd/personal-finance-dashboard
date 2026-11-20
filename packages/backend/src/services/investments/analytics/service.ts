@@ -1,0 +1,700 @@
+import type {
+  InvestmentAnalytics,
+  InvestmentHolding,
+  InvestmentPortfolio,
+  InvestmentMetric,
+  InvestmentBenchmark,
+} from '@bt/shared/types/investment-analytics';
+import { Money } from '@common/types/money';
+import { ValidationError } from '@js/errors';
+import BrokerPortfolioData from '@models/investments/broker-portfolio-data.model';
+import InvestmentTransaction from '@models/investments/investment-transaction.model';
+import PortfolioBalances from '@models/investments/portfolio-balances.model';
+import PortfolioTransfers from '@models/investments/portfolio-transfers.model';
+import Portfolios from '@models/investments/portfolios.model';
+import Securities from '@models/investments/securities.model';
+import SecurityPricing from '@models/investments/security-pricing.model';
+import * as UsersCurrencies from '@models/users-currencies.model';
+import { withDeduplication } from '@services/common/with-deduplication';
+import { latestSnapshot } from '@services/investments/broker-records/schema';
+import { getHoldingValues } from '@services/investments/holdings/get-holding-values.service';
+import { getPortfolioSummary } from '@services/investments/portfolios/get-portfolio-summary.service';
+import type { TransactionRow } from '@services/stats/get-combined-balance-history/types';
+import Big from 'big.js';
+import { Op } from 'sequelize';
+
+import { getFundSnapshots, latestFundSnapshots } from './fund-snapshots';
+import { buildHistory } from './history';
+import {
+  allocation,
+  externalFlow,
+  fundOverlap,
+  lookThrough,
+  metric,
+  percent,
+  resolveFundIdentities,
+  sum,
+} from './math';
+import { consolidatedReturns, normalizeComparableSeries, recordedPriceReturns } from './performance';
+
+const decimal = (m: Money | string | number): string => (Money.isMoney(m) ? m.toDecimalString(18) : String(m));
+const dateString = (d: Date | string | null | undefined) => (d ? new Date(d).toISOString() : null);
+const isFundName = (name: string) => /\b(etf|mutual fund|index fund|ishares|vanguard|invesco|spdr)\b/i.test(name);
+
+export const assertOwnedSelection = (requested: string[] | undefined, owned: string[]): string[] => {
+  if (!requested?.length) return owned;
+  const valid = new Set(owned);
+  if (requested.some((id) => !valid.has(id)))
+    throw new ValidationError({ message: 'One or more selected portfolios are unavailable.' });
+  return [...new Set(requested)];
+};
+
+async function getAnalyticsImpl({
+  userId,
+  portfolioIds,
+  benchmarkSymbols = ['SPY', 'QQQ', 'VTI', 'VT'],
+}: {
+  userId: number;
+  portfolioIds?: string[];
+  benchmarkSymbols?: string[];
+}): Promise<InvestmentAnalytics> {
+  const allPortfolios = await Portfolios.findAll({ where: { userId }, order: [['name', 'ASC']] });
+  const ids = assertOwnedSelection(
+    portfolioIds,
+    allPortfolios.map((p) => p.id),
+  );
+  const selected = new Set(ids);
+  const scope = allPortfolios.filter((p) => selected.has(p.id));
+  const userCurrency = await UsersCurrencies.getCurrency({ userId, isDefaultCurrency: true });
+  const currencyCode = userCurrency?.currency.code ?? 'USD';
+  const today = new Date().toISOString().slice(0, 10);
+  const [brokers, balances, transactions, transfers, storedSnapshots] = await Promise.all([
+    BrokerPortfolioData.findAll({ where: { portfolioId: { [Op.in]: ids } } }),
+    PortfolioBalances.findAll({ where: { portfolioId: { [Op.in]: ids } } }),
+    InvestmentTransaction.findAll({
+      where: { portfolioId: { [Op.in]: ids }, date: { [Op.lte]: `${today}T23:59:59.999Z` } },
+      include: [{ model: Securities, as: 'security' }],
+      order: [
+        ['date', 'ASC'],
+        ['createdAt', 'ASC'],
+      ],
+    }),
+    PortfolioTransfers.findAll({
+      where: {
+        userId,
+        date: { [Op.lte]: today },
+        [Op.or]: [{ fromPortfolioId: { [Op.in]: ids } }, { toPortfolioId: { [Op.in]: ids } }],
+      },
+      order: [['date', 'ASC']],
+    }),
+    getFundSnapshots(userId),
+  ]);
+  let fundSnapshots = latestFundSnapshots(storedSnapshots, today);
+  const brokerById = new Map(brokers.map((b) => [b.portfolioId, b]));
+  const portfolioById = new Map<string, Portfolios>(scope.map((p) => [p.id, p]));
+  const allHoldingValues: Awaited<ReturnType<typeof getHoldingValues>> = [];
+  const summaries = new Map<string, Awaited<ReturnType<typeof getPortfolioSummary>>>();
+  // Existing position/cost-basis/gain engine remains the only source of per-account values.
+  for (const portfolio of scope) {
+    summaries.set(portfolio.id, await getPortfolioSummary({ portfolioId: portfolio.id, userId }));
+    allHoldingValues.push(...(await getHoldingValues({ portfolioId: portfolio.id, userId })));
+  }
+  const securityIds = [
+    ...new Set([...allHoldingValues.map((h) => h.securityId), ...transactions.map((t) => t.securityId)]),
+  ];
+  const securities = securityIds.length ? await Securities.findAll({ where: { id: { [Op.in]: securityIds } } }) : [];
+  fundSnapshots = resolveFundIdentities(fundSnapshots, securities);
+  const benchmarksSecurities = await Securities.findAll({
+    where: { symbol: { [Op.in]: benchmarkSymbols }, currencyCode },
+  });
+  const prices = await SecurityPricing.findAll({
+    where: {
+      securityId: { [Op.in]: [...new Set([...securityIds, ...benchmarksSecurities.map((s) => s.id)])] },
+      date: { [Op.lte]: `${today}T23:59:59.999Z` },
+    },
+    order: [['date', 'ASC']],
+  });
+  const pricesBySecurity = new Map<string, SecurityPricing[]>(Map.groupBy(prices, (p) => p.securityId));
+  const health: InvestmentAnalytics['health'] = [];
+  const holdingsByIdentity = new Map<string, InvestmentHolding>();
+  for (const h of allHoldingValues) {
+    const security = h.security;
+    if (!security || new Big(h.quantity).eq(0)) continue;
+    const broker = brokerById.get(h.portfolioId);
+    const baseRate = h.currencyCode === currencyCode ? '1' : h.baseRate === undefined ? null : String(h.baseRate);
+    const marketValue =
+      h.marketValueKnown !== false && h.priceDate && baseRate !== null
+        ? new Big(h.marketValue ?? 0).times(baseRate).toString()
+        : null;
+    const basis =
+      h.costBasisKnown !== false && baseRate !== null ? new Big(h.costBasis).times(baseRate).toString() : null;
+    const realized =
+      h.realizedGainKnown !== false && baseRate !== null
+        ? new Big(h.realizedGainValue ?? 0).times(baseRate).toString()
+        : null;
+    // Same stable database security id consolidates all accounts; no ticker-only merges.
+    const id = security.id;
+    const prior = holdingsByIdentity.get(id);
+    const account = {
+      portfolioId: h.portfolioId,
+      portfolioName: portfolioById.get(h.portfolioId)?.name ?? 'Portfolio',
+      quantity: h.quantity,
+      costBasis: basis,
+      averageCost:
+        h.costBasisKnown !== false && new Big(h.quantity).gt(0)
+          ? new Big(h.costBasis).div(h.quantity).toString()
+          : null,
+      marketValue,
+      unrealizedGain: marketValue !== null && basis !== null ? new Big(marketValue).minus(basis).toString() : null,
+      source: h.valuationSource ?? security.providerName,
+      updatedAt: dateString(h.priceDate),
+    };
+    const row: InvestmentHolding = prior ?? {
+      id,
+      securityId: security.id,
+      symbol: security.symbol ?? security.providerSymbol,
+      name: security.name ?? security.symbol ?? security.providerSymbol,
+      securityType: security.assetClass,
+      assetClass: security.assetClass,
+      currencyCode: security.currencyCode,
+      exchange: security.exchangeMic ?? security.exchangeAcronym,
+      quantity: '0',
+      averageCost: null,
+      costBasis: '0',
+      price: h.latestPrice ?? null,
+      priceDate: dateString(h.priceDate),
+      marketValue: '0',
+      unrealizedGain: '0',
+      unrealizedPercent: null,
+      realizedGain: '0',
+      dividends: null,
+      dailyChange: null,
+      dailyChangePercent: null,
+      weight: null,
+      portfolioCount: 0,
+      isFund: fundSnapshots.some((f) => f.fundId === id) || isFundName(security.name ?? ''),
+      accounts: [],
+      quality: 'verified',
+    };
+    row.quantity = new Big(row.quantity).plus(h.quantity).toString();
+    row.marketValue = sum([row.marketValue, marketValue]);
+    row.costBasis = sum([row.costBasis, basis]);
+    row.realizedGain = sum([row.realizedGain, realized]);
+    row.accounts.push(account);
+    row.portfolioCount = row.accounts.length;
+    if (basis === null || marketValue === null || broker?.data.historyComplete === false) row.quality = 'partial';
+    if (dateString(h.priceDate) && (!row.priceDate || dateString(h.priceDate)! < row.priceDate))
+      row.priceDate = dateString(h.priceDate);
+    holdingsByIdentity.set(id, row);
+  }
+  const holdings = [...holdingsByIdentity.values()];
+  const portfolios: InvestmentPortfolio[] = scope.map((p) => {
+    const broker = brokerById.get(p.id);
+    const snapshot = latestSnapshot(broker?.data);
+    const summary = summaries.get(p.id)!;
+    const positions = holdings.flatMap((h) => h.accounts.filter((a) => a.portfolioId === p.id));
+    const cash =
+      summary.cashKnown === false
+        ? null
+        : summary.currencyCode === currencyCode
+          ? summary.totalCashInBaseCurrency
+          : sum(balances.filter((b) => b.portfolioId === p.id).map((b) => decimal(b.refTotalCash)));
+    const securitiesValue = sum(positions.map((a) => a.marketValue));
+    return {
+      id: p.id,
+      name: p.name,
+      broker: broker?.data.broker ?? 'Other',
+      accountType: /\broth\b/i.test(p.name)
+        ? 'Roth'
+        : /\b(traditional|rollover)\b/i.test(p.name)
+          ? 'Traditional retirement'
+          : p.portfolioType,
+      isEnabled: p.isEnabled,
+      historyComplete: broker ? broker.data.historyComplete : true,
+      currencyCode,
+      marketValue:
+        summary.marketValueKnown === false || securitiesValue === null || cash === null
+          ? null
+          : summary.totalPortfolioValueInBaseCurrency,
+      cash,
+      costBasis: sum(positions.map((a) => a.costBasis)),
+      unrealizedGain: sum(positions.map((a) => a.unrealizedGain)),
+      realizedGain:
+        summary.realizedGainKnown === false
+          ? null
+          : summary.currencyCode === currencyCode
+            ? summary.realizedGainValue
+            : sum(
+                allHoldingValues
+                  .filter((v) => v.portfolioId === p.id)
+                  .map((v) =>
+                    v.realizedGainKnown === false || (v.currencyCode !== currencyCode && v.baseRate === undefined)
+                      ? null
+                      : new Big(v.realizedGainValue ?? 0)
+                          .times(v.currencyCode === currencyCode ? 1 : v.baseRate!)
+                          .toString(),
+                  ),
+              ),
+      observationDate: snapshot?.asOf ?? null,
+      review: broker?.data.review ?? [],
+    };
+  });
+  const completeHistory = portfolios.every((p) => p.historyComplete);
+  const securitiesValue = sum(holdings.map((h) => h.marketValue));
+  const cashValue = sum(portfolios.map((p) => p.cash));
+  const marketValue = sum(portfolios.map((p) => p.marketValue));
+  const costBasis = sum(holdings.map((h) => h.costBasis));
+  const unrealizedGain =
+    securitiesValue !== null && costBasis !== null ? new Big(securitiesValue).minus(costBasis).toString() : null;
+  const realizedGain = completeHistory ? sum(portfolios.map((p) => p.realizedGain)) : null;
+  const metrics: Record<string, InvestmentMetric> = {
+    marketValue: metric(
+      marketValue,
+      marketValue === null ? 'One or more positions or cash balances are unavailable.' : undefined,
+    ),
+    securitiesValue: metric(securitiesValue),
+    cash: metric(cashValue),
+    costBasis: metric(costBasis, costBasis === null ? 'Open-position basis is incomplete.' : undefined),
+    unrealizedGain: metric(unrealizedGain),
+    unrealizedPercent: metric(percent(unrealizedGain, costBasis)),
+    realizedGain: metric(
+      realizedGain,
+      realizedGain === null ? 'Complete opening positions and sale history are required.' : undefined,
+    ),
+    combinedGain: metric(sum([unrealizedGain, realizedGain])),
+  };
+  const knownSecurities = sum(holdings.filter((h) => h.marketValue !== null).map((h) => h.marketValue))!;
+  const knownCash = sum(portfolios.filter((p) => p.cash !== null).map((p) => p.cash))!;
+  metrics.knownSecuritiesValue = {
+    value: knownSecurities,
+    status: securitiesValue === null ? 'partial' : 'verified',
+    ...(securitiesValue === null && { reason: 'Subtotal of priced positions only; unpriced positions are excluded.' }),
+  };
+  metrics.knownCash = {
+    value: knownCash,
+    status: cashValue === null ? 'partial' : 'verified',
+    ...(cashValue === null && {
+      reason: 'Subtotal of evidenced investment cash only; unknown cash balances are excluded.',
+    }),
+  };
+  metrics.knownMarketValue = {
+    value: new Big(knownSecurities).plus(knownCash).toString(),
+    status: marketValue === null ? 'partial' : 'verified',
+    ...(marketValue === null && {
+      reason:
+        'Known priced holdings plus evidenced cash. This is a partial subtotal, not the full selected investment value.',
+    }),
+  };
+  metrics.unknownPositionCount = metric(String(holdings.filter((h) => h.marketValue === null).length));
+  metrics.unknownCashCount = metric(String(portfolios.filter((p) => p.cash === null).length));
+  const flows = transfers.map((t) => ({
+    date: t.date,
+    value: externalFlow(
+      { ...t, refAmount: decimal(t.refAmount), refToAmount: t.refToAmount ? decimal(t.refToAmount) : null },
+      selected,
+    ),
+    portfolioId: t.toPortfolioId ?? t.fromPortfolioId!,
+  }));
+  const contributions = sum(flows.filter((f) => new Big(f.value).gt(0)).map((f) => f.value))!;
+  const withdrawals = sum(flows.filter((f) => new Big(f.value).lt(0)).map((f) => new Big(f.value).neg().toString()))!;
+  for (const [key, value] of Object.entries({
+    contributions,
+    withdrawals,
+    netInvested: new Big(contributions).minus(withdrawals).toString(),
+  }))
+    metrics[key] = {
+      value: completeHistory ? value : null,
+      status: completeHistory ? 'verified' : 'unavailable',
+      ...(!completeHistory && {
+        reason: 'Imported funding history is incomplete; recorded flows are shown separately.',
+      }),
+    };
+  const dividends: InvestmentAnalytics['dividends'] = transactions
+    .filter((t) => t.category === 'dividend')
+    .map((t) => ({
+      id: t.id,
+      date: new Date(t.date).toISOString().slice(0, 10),
+      portfolioId: t.portfolioId,
+      portfolioName: portfolioById.get(t.portfolioId)?.name ?? 'Portfolio',
+      securityId: t.securityId,
+      symbol: t.security?.symbol ?? '',
+      name: t.security?.name ?? '',
+      amount: decimal(t.refAmount),
+      currencyCode,
+      status: 'recorded',
+      reinvested: null,
+      type: 'dividend',
+    }));
+  metrics.dividends = {
+    value: sum(dividends.map((d) => d.amount)),
+    status: completeHistory ? 'verified' : 'partial',
+    ...(!completeHistory && { reason: 'Recorded distributions only; imported history is incomplete.' }),
+  };
+  metrics.dividendsYtd = {
+    ...metrics.dividends,
+    value: sum(dividends.filter((d) => d.date.startsWith(today.slice(0, 4))).map((d) => d.amount)),
+  };
+  metrics.dividendsMonth = {
+    ...metrics.dividends,
+    value: sum(dividends.filter((d) => d.date.startsWith(today.slice(0, 7))).map((d) => d.amount)),
+  };
+  metrics.interest = metric(null, 'Native investment records do not distinguish a verified interest category.');
+  metrics.fees = {
+    value: sum(transactions.map((t) => decimal(t.category === 'fee' ? t.refAmount : t.refFees))),
+    status: completeHistory ? 'verified' : 'partial',
+    reason: 'Recorded trade fees and standalone fee charges; source history may omit other account charges.',
+  };
+  for (const h of holdings) {
+    const nativeBasis = sum(
+      allHoldingValues
+        .filter((v) => v.securityId === h.securityId)
+        .map((v) => (v.costBasisKnown === false ? null : v.costBasis)),
+    );
+    h.averageCost =
+      nativeBasis !== null && new Big(h.quantity).gt(0) ? new Big(nativeBasis).div(h.quantity).toString() : null;
+    h.unrealizedGain =
+      h.marketValue !== null && h.costBasis !== null ? new Big(h.marketValue).minus(h.costBasis).toString() : null;
+    h.unrealizedPercent = percent(h.unrealizedGain, h.costBasis);
+    h.weight = percent(h.marketValue, marketValue);
+    h.dividends = sum(dividends.filter((d) => d.securityId === h.securityId).map((d) => d.amount));
+    const series = pricesBySecurity.get(h.securityId) ?? [];
+    h.periodReturns = recordedPriceReturns(
+      series.map((p) => ({ date: new Date(p.date).toISOString(), price: decimal(p.priceClose) })),
+    );
+    const latest = series.at(-1);
+    const previous = latest
+      ? series.findLast(
+          (p) => new Date(p.date).toISOString().slice(0, 10) < new Date(latest.date).toISOString().slice(0, 10),
+        )
+      : undefined;
+    const freshPair =
+      latest &&
+      previous &&
+      Date.now() - new Date(latest.date).getTime() <= 4 * 86400000 &&
+      new Date(latest.date).getTime() - new Date(previous.date).getTime() <= 4 * 86400000;
+    if (
+      latest &&
+      previous &&
+      freshPair &&
+      h.currencyCode === currencyCode &&
+      h.priceDate &&
+      new Date(h.priceDate).toISOString().slice(0, 10) === new Date(latest.date).toISOString().slice(0, 10)
+    ) {
+      h.dailyChange = latest.priceClose.toBig().minus(previous.priceClose.toBig()).times(h.quantity).toString();
+      h.dailyChangePercent = percent(
+        latest.priceClose.toBig().minus(previous.priceClose.toBig()).toString(),
+        decimal(previous.priceClose),
+      );
+    }
+    const stale = !h.priceDate || new Date(h.priceDate).getTime() < Date.now() - 4 * 86400000;
+    health.push({
+      id: `price:${h.id}`,
+      securityId: h.securityId,
+      label: `${h.symbol} price`,
+      status: !h.priceDate ? 'unavailable' : stale ? 'stale' : 'verified',
+      detail: `${h.accounts[0]?.source ?? 'Unknown source'} · price observation`,
+      asOf: h.priceDate,
+    });
+    if (h.costBasis === null)
+      health.push({
+        id: `basis:${h.id}`,
+        securityId: h.securityId,
+        label: `${h.symbol} cost basis`,
+        status: 'unavailable',
+        detail: 'Opening lots or broker basis evidence are incomplete.',
+      });
+  }
+  metrics.dailyChange = metric(
+    sum(holdings.map((h) => h.dailyChange)),
+    'Price change on the latest two recorded trading dates; excludes cash flows.',
+  );
+  metrics.dailyChangePercent = metric(
+    marketValue !== null && metrics.dailyChange.value !== null
+      ? percent(metrics.dailyChange.value, new Big(marketValue).minus(metrics.dailyChange.value).toString())
+      : null,
+  );
+  const history = buildHistory({
+    ids,
+    currencyCode,
+    brokers,
+    transfers,
+    balances,
+    securities,
+    prices,
+    transactions: transactions.map((t) => ({
+      portfolioId: t.portfolioId,
+      securityId: t.securityId,
+      category: t.category,
+      date: t.date,
+      quantity: decimal(t.quantity),
+      refAmount: decimal(t.refAmount),
+      currencyCode: t.currencyCode,
+      settlementAmount: decimal(t.settlementAmount),
+      settlementCurrencyCode: t.settlementCurrencyCode,
+    })) as TransactionRow[],
+  });
+  const noFlows = flows.every((f) => new Big(f.value).eq(0));
+  const exactPoints = history.filter(
+    (p) =>
+      p.marketValue !== null &&
+      portfolios.every((portfolio) =>
+        brokerById.get(portfolio.id)?.data.snapshots.some((s) => s.complete && s.asOf.slice(0, 10) === p.date),
+      ),
+  );
+  const returns = consolidatedReturns(
+    exactPoints.map((p) => ({ date: p.date, beforeFlow: p.marketValue, afterFlow: p.marketValue, externalFlow: '0' })),
+    completeHistory && noFlows,
+  );
+  for (const [key, value] of Object.entries({
+    twr: returns.twr,
+    xirr: returns.xirr,
+    annualizedReturn: returns.annualized,
+    lifetimeReturn: returns.twr,
+    volatility: returns.volatility,
+    maxDrawdown: returns.maxDrawdown,
+  }))
+    metrics[key] = metric(
+      value,
+      value === null
+        ? 'Exact historical valuations at cash-flow boundaries and complete funding history are required. Native approximated history is not substituted.'
+        : undefined,
+    );
+  metrics.ytdReturn = metric(null, 'Verified year-opening value and cash-flow boundary valuations are required.');
+  if (returns.twr !== null)
+    for (const p of exactPoints)
+      p.returnPercent = percent(
+        new Big(p.marketValue!).minus(exactPoints[0]!.marketValue!).toString(),
+        exactPoints[0]!.marketValue!,
+      );
+  const exposure = lookThrough(holdings, fundSnapshots, marketValue);
+  const knownExposure = sum(exposure.filter((e) => !e.unknown).map((e) => e.totalValue))!;
+  const lookThroughCoverage = percent(knownExposure, securitiesValue) ?? '0';
+  metrics.lookThroughCoverage = metric(lookThroughCoverage);
+  const rankedExposure = exposure.filter((e) => !e.unknown).sort((a, b) => new Big(b.totalValue).cmp(a.totalValue));
+  metrics.topFiveConcentration = metric(percent(sum(rankedExposure.slice(0, 5).map((e) => e.totalValue)), marketValue));
+  metrics.topTenConcentration = metric(percent(sum(rankedExposure.slice(0, 10).map((e) => e.totalValue)), marketValue));
+  if (exposure.some((e) => e.unknown))
+    for (const key of ['topFiveConcentration', 'topTenConcentration'])
+      if (metrics[key]!.value !== null)
+        metrics[key] = {
+          ...metrics[key]!,
+          status: 'partial',
+          reason: 'Known underlying exposure only; unavailable fund holdings may increase concentration.',
+        };
+  const allocations: InvestmentAnalytics['allocations'] = {};
+  allocations.holdings = allocation(
+    holdings.map((h) => ({ key: h.id, label: h.symbol, value: h.marketValue, id: h.id })),
+    marketValue,
+  );
+  if (cashValue !== null && new Big(cashValue).gt(0))
+    allocations.holdings.push({
+      key: 'cash',
+      label: 'Investment cash',
+      value: cashValue,
+      percent: percent(cashValue, marketValue),
+      securityIds: [],
+    });
+  allocations.underlying = allocation(
+    exposure.map((e) => ({ key: e.id, label: e.unknown ? e.name : e.symbol, value: e.totalValue, id: e.id })),
+    marketValue,
+  );
+  for (const mode of ['sector', 'industry', 'country', 'region', 'marketCap', 'style', 'assetClass'] as const)
+    allocations[mode] = allocation(
+      exposure.map((e) => {
+        const label = e[mode] ?? 'Unknown';
+        return { key: label, label, value: e.totalValue, id: e.id };
+      }),
+      marketValue,
+    );
+  allocations.usInternational = allocation(
+    exposure.map((e) => {
+      const label = !e.country ? 'Unknown' : /^(US|USA|United States)$/i.test(e.country) ? 'US' : 'International';
+      return { key: label, label, value: e.totalValue, id: e.id };
+    }),
+    marketValue,
+  );
+  allocations.development = allocation(
+    exposure.map((e) => ({ key: e.market ?? 'Unknown', label: e.market ?? 'Unknown', value: e.totalValue, id: e.id })),
+    marketValue,
+  );
+  for (const mode of ['brokerage', 'accountType'] as const)
+    allocations[mode] = allocation(
+      portfolios.map((p) => ({
+        key: mode === 'brokerage' ? p.broker : p.accountType,
+        label: mode === 'brokerage' ? p.broker : p.accountType,
+        value: p.marketValue,
+        id: p.id,
+      })),
+      marketValue,
+    );
+  for (const p of portfolios) {
+    health.push({
+      id: `history:${p.id}`,
+      portfolioId: p.id,
+      label: `${p.name} history`,
+      status: p.historyComplete ? 'verified' : 'partial',
+      detail: p.historyComplete
+        ? 'Native transaction history is available; historical replay may use documented approximations.'
+        : 'Opening positions, funding or corporate-action coverage is incomplete; returns are withheld.',
+      asOf: p.observationDate,
+    });
+    const snap = latestSnapshot(brokerById.get(p.id)?.data);
+    if (snap?.totalValue != null && p.marketValue !== null) {
+      const difference = new Big(p.marketValue).minus(snap.totalValue);
+      health.push({
+        id: `reconciliation:${p.id}`,
+        portfolioId: p.id,
+        label: `${p.name} source reconciliation`,
+        status: difference.abs().lte('0.02') ? 'verified' : 'partial',
+        detail: `Current computed value versus dated broker total: ${difference.toFixed(2)} ${currencyCode}. Newer prices may explain a difference.`,
+        asOf: snap.asOf,
+      });
+    }
+    for (let i = 0; i < p.review.length; i++)
+      health.push({
+        id: `review:${p.id}:${i}`,
+        portfolioId: p.id,
+        label: `${p.name} review`,
+        status: 'partial',
+        detail: p.review[i]!,
+      });
+  }
+  for (const h of holdings.filter((h) => h.isFund)) {
+    const snap = fundSnapshots.find((s) => s.fundId === h.id);
+    health.push({
+      id: `fund:${h.id}`,
+      securityId: h.id,
+      label: `${h.symbol} fund holdings`,
+      status: !snap
+        ? 'unavailable'
+        : new Big(snap.coverage).lt(100)
+          ? 'partial'
+          : Date.now() - new Date(snap.asOf).getTime() > 120 * 86400000
+            ? 'stale'
+            : 'verified',
+      detail: snap
+        ? `${snap.coverage}% reported · ${snap.provider} · ${snap.classificationStandard ?? 'Unspecified classification standard'}`
+        : 'No permitted composition provider is connected. Import a dated issuer CSV or JSON composition.',
+      asOf: snap?.asOf,
+    });
+    if (!snap)
+      health.push({
+        id: `fund-classification:${h.id}`,
+        securityId: h.id,
+        label: `${h.symbol} instrument classification`,
+        status: 'partial',
+        detail:
+          'Fund classification inferred from an explicit ETF, fund or fund-issuer name. Confirm using a dated source composition.',
+      });
+  }
+  const benchmarks: InvestmentBenchmark[] = benchmarkSymbols.map((symbol) => {
+    const security = benchmarksSecurities.find((s) => s.symbol === symbol);
+    const points = security
+      ? (pricesBySecurity.get(security.id) ?? []).map((p) => ({
+          date: new Date(p.date).toISOString().slice(0, 10),
+          value: decimal(p.priceClose),
+        }))
+      : [];
+    const comparable = normalizeComparableSeries([
+      { id: 'portfolio', points: exactPoints.map((p) => ({ date: p.date, value: p.marketValue! })) },
+      { id: symbol, points },
+    ]);
+    const normalized = completeHistory && noFlows ? (comparable.find((s) => s.id === symbol)?.points ?? []) : [];
+    return {
+      id: security?.id ?? symbol,
+      symbol,
+      name: security?.name ?? symbol,
+      returnType: 'price-only',
+      status: normalized.length > 1 ? 'verified' : 'unavailable',
+      points: normalized,
+      ...(normalized.length <= 1 && {
+        reason: !points.length
+          ? 'No stored price history for this benchmark. Add it through existing security management and price refresh.'
+          : 'Common verified portfolio return history is unavailable; raw account balances are never compared with index prices.',
+      }),
+    };
+  });
+  const events: InvestmentAnalytics['events'] = [
+    ...transactions
+      .filter((t) => ['buy', 'sell', 'dividend'].includes(t.category))
+      .map((t) => ({
+        id: t.id,
+        date: new Date(t.date).toISOString().slice(0, 10),
+        type: t.category,
+        label: `${t.category} · ${t.security?.symbol ?? ''}`,
+        amount: decimal(t.refAmount),
+        portfolioId: t.portfolioId,
+        securityId: t.securityId,
+        symbol: t.security?.symbol ?? '',
+      })),
+    ...flows
+      .filter((f) => !new Big(f.value).eq(0))
+      .map((f, i) => ({
+        id: `flow:${i}:${f.date}`,
+        date: f.date,
+        type: new Big(f.value).gt(0) ? 'contribution' : 'withdrawal',
+        label: new Big(f.value).gt(0) ? 'Contribution' : 'Withdrawal',
+        amount: f.value,
+        portfolioId: f.portfolioId,
+      })),
+  ];
+  const pricedValue = sum(holdings.filter((h) => h.marketValue !== null).map((h) => h.marketValue))!;
+  const knownBasisValue = sum(
+    holdings.filter((h) => h.costBasis !== null && h.marketValue !== null).map((h) => h.marketValue),
+  )!;
+  const dates = history.filter((p) => p.marketValue !== null).map((p) => p.date);
+  const syncDates = securities
+    .map((s) => dateString(s.pricingLastSyncedAt))
+    .filter((s): s is string => !!s)
+    .sort();
+  return {
+    generatedAt: new Date().toISOString(),
+    currencyCode,
+    selectedPortfolioIds: ids,
+    portfolios,
+    metrics,
+    holdings,
+    history,
+    dividends,
+    events,
+    exposure,
+    allocations,
+    fundSnapshots,
+    overlap: fundOverlap(fundSnapshots, holdings),
+    benchmarks,
+    health,
+    coverage: {
+      historyStart: dates[0] ?? null,
+      historyEnd: dates.at(-1) ?? null,
+      costBasisPercent: percent(knownBasisValue, pricedValue) ?? '0',
+      pricePercent: holdings.length
+        ? String((holdings.filter((h) => h.marketValue !== null).length / holdings.length) * 100)
+        : '0',
+      lookThroughPercent: lookThroughCoverage,
+      methodology: [
+        'Current positions, basis and gains reuse the native portfolio calculation service.',
+        'Historical values reuse native holdings/cash replay; its whole-dollar holding rounding remains unchanged. Missing price/FX fallbacks are withheld.',
+        'Incomplete broker histories use actual complete dated observations only; unsupported periods remain gaps.',
+        'Fund geography uses imported issuer country; exchange location and fund domicile are not substituted.',
+        'Unknown fund weights remain unreported exposure; fund wrappers are excluded from underlying totals.',
+        'Analytics includes detailed hidden portfolios, and never adds SimpleFIN account balances.',
+        'Reinvestment and interest attribution require explicit source evidence; unknown reinvestment is not labeled cash.',
+      ],
+    },
+    refresh: {
+      supported: true,
+      lastSuccess: syncDates.at(-1) ?? null,
+      provider: [...new Set(securities.map((s) => s.providerName))].join(', ') || 'Existing market providers',
+      schedule: `Stocks/ETFs: daily 06:00 America/New_York; cryptocurrency: every ${process.env.CRYPTO_PRICES_SYNC_INTERVAL_MINUTES ?? '15'} minutes (UTC). Fund compositions: manual dated imports.`,
+      reason:
+        'Manual refresh reuses the existing administrator price-sync endpoint; it does not synchronize broker transactions.',
+    },
+  };
+}
+
+export const getInvestmentAnalytics = withDeduplication(getAnalyticsImpl, {
+  keyGenerator: ({ userId, portfolioIds, benchmarkSymbols }) =>
+    `investment-analytics:${userId}:${portfolioIds?.toSorted().join(',') ?? 'all'}:${benchmarkSymbols?.join(',') ?? 'default'}`,
+  ttl: 1000,
+  maxCacheSize: 8,
+});

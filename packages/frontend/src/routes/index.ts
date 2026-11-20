@@ -24,6 +24,27 @@ const routes: RouteRecordRaw[] = [
     },
     children: [
       {
+        path: '/finances/investments',
+        redirect: { name: ROUTES_NAMES.investmentOverview },
+      },
+      ...(
+        [
+          ['overview', ROUTES_NAMES.investmentOverview],
+          ['performance', ROUTES_NAMES.investmentPerformance],
+          ['holdings', ROUTES_NAMES.investmentHoldings],
+          ['allocation', ROUTES_NAMES.investmentAllocation],
+          ['dividends', ROUTES_NAMES.investmentDividends],
+        ] as const
+      ).map(
+        ([page, name]): RouteRecordRaw => ({
+          path: `/finances/investments/${page}`,
+          name,
+          component: () => import('@/pages/investments/analytics-page.vue'),
+          props: { page },
+          meta: { navSection: 'investmentAnalytics' as const, i18nChunks: ['pages/dashboard'] },
+        }),
+      ),
+      {
         path: '/finances/income',
         name: ROUTES_NAMES.incomeManagement,
         redirect: { name: ROUTES_NAMES.actualIncome },

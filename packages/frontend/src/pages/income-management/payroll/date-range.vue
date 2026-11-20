@@ -11,7 +11,10 @@ import {
   type PayrollRangePreset,
 } from './date-range';
 const model = defineModel<PayrollRange>({ required: true });
-const props = withDefaults(defineProps<{ earliest?: string; compact?: boolean }>(), { earliest: '1900-01-01' });
+const props = withDefaults(defineProps<{ earliest?: string; compact?: boolean; subject?: string }>(), {
+  earliest: '1900-01-01',
+  subject: 'payroll',
+});
 const open = ref(false),
   customFrom = ref(''),
   customThrough = ref('');
@@ -44,7 +47,7 @@ function apply() {
 <template>
   <div
     class="@container flex w-full min-w-0 flex-wrap items-center gap-x-2 gap-y-1.5"
-    data-testid="payroll-date-range"
+    :data-testid="subject + '-date-range'"
     data-chart-controls
   >
     <div class="bg-muted/60 grid w-full max-w-full grid-cols-8 items-center gap-0.5 rounded-lg p-0.5 @2xl:w-auto">
@@ -66,7 +69,7 @@ function apply() {
         variant="ghost"
         class="size-7"
         :disabled="model.preset === 'all'"
-        aria-label="Previous payroll period"
+        :aria-label="'Previous ' + subject + ' period'"
         @click="model = shiftPayrollRange(model, -1)"
         ><ChevronLeftIcon class="size-4"
       /></Button>
@@ -81,13 +84,13 @@ function apply() {
         variant="ghost"
         class="size-7"
         :disabled="forwardDisabled || model.preset === 'all'"
-        aria-label="Next payroll period"
+        :aria-label="'Next ' + subject + ' period'"
         @click="model = shiftPayrollRange(model, 1)"
         ><ChevronRightIcon class="size-4"
       /></Button>
       <Popover v-model:open="open"
         ><PopoverTrigger as-child
-          ><Button size="icon" variant="ghost" class="size-7" aria-label="Custom payroll date range"
+          ><Button size="icon" variant="ghost" class="size-7" :aria-label="'Custom ' + subject + ' date range'"
             ><CalendarIcon class="size-3.5" /></Button></PopoverTrigger
         ><PopoverContent class="w-72" align="end"
           ><form class="space-y-3" @submit.prevent="apply">

@@ -4,6 +4,7 @@ import {
   executeImportController as importExecuteController,
   extractController as importExtractController,
 } from '@controllers/investment-transactions-parser';
+import { getAnalytics, importFundHoldings } from '@controllers/investments/analytics';
 import { getBrokerRecords, importBrokerRecords } from '@controllers/investments/broker-records';
 import {
   createHoldingController,
@@ -57,6 +58,8 @@ const router = Router({});
 // portfolios and deleting existing ones are blocked per-route below; admin-only
 // endpoints enforce their own access checks.
 router.use(authenticateSession);
+router.get('/analytics', getAnalytics);
+router.post('/analytics/fund-holdings', blockDemoUsers, importFundHoldings);
 router.get('/providers/public', getPublicStatus);
 router.put('/providers/public', blockDemoUsers, connectPublic);
 router.post(

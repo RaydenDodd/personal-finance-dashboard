@@ -45,13 +45,15 @@ const def = computed(() => props.definition ?? WIDGET_REGISTRY[props.widgetConfi
 const instanceKey = computed(() => props.widgetConfig.instanceId ?? props.widgetConfig.widgetId);
 const title = computed(() => (def.value?.literalLabels ? def.value.name : t(def.value?.name ?? '')));
 
+const componentCache = new Map<string, ReturnType<typeof defineAsyncComponent>>();
 const asyncComponent = computed(() => {
   const builtin = WIDGET_REGISTRY[props.widgetConfig.widgetId];
   if (props.definition || !builtin) return null;
-  return defineAsyncComponent({
-    loader: builtin.component,
-    loadingComponent: WidgetSkeleton,
-  });
+  const id = props.widgetConfig.widgetId;
+  if (!componentCache.has(id)) {
+    componentCache.set(id, defineAsyncComponent({ loader: builtin.component, loadingComponent: WidgetSkeleton }));
+  }
+  return componentCache.get(id)!;
 });
 
 const COL_SPAN_CLASSES: Record<number, string> = {

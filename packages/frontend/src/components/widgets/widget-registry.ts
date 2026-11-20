@@ -1,6 +1,8 @@
 import { ensureChunkLoaded } from '@/i18n';
 import type { Component } from 'vue';
 
+import { INVESTMENT_WIDGET_DEFINITIONS } from './investment-widgets';
+
 export interface WidgetSize {
   colSpan: number;
   rowSpan: number;
@@ -353,6 +355,10 @@ for (const [id, name, description] of [
           ],
   };
 }
+
+// Optional investment widgets share the Investments panels and analytics query.
+// Registration leaves every existing dashboard and the default layout untouched.
+Object.assign(WIDGET_REGISTRY, INVESTMENT_WIDGET_DEFINITIONS);
 
 export const DEFAULT_DASHBOARD_LAYOUT = [
   { widgetId: 'balance-trend', colSpan: 2 },

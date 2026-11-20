@@ -6,7 +6,7 @@ import type { SidebarNavChild } from './nav-items';
 declare module 'vue-router' {
   interface RouteMeta {
     /** Top-level sidebar group this route highlights. Inherited from parent routes. */
-    navSection?: 'accounts' | 'transactions' | 'planned' | 'income';
+    navSection?: 'accounts' | 'transactions' | 'planned' | 'income' | 'investmentAnalytics';
   }
 }
 
@@ -15,6 +15,7 @@ export const useSidebarNavRoutes = () => {
   const route = useRoute();
 
   const isIncomeRoute = computed(() => route.meta.navSection === 'income');
+  const isInvestmentsRoute = computed(() => route.meta.navSection === 'investmentAnalytics');
   const isAccountsRoute = computed(() => route.meta.navSection === 'accounts');
   const isTransactionsRoute = computed(() => route.meta.navSection === 'transactions');
   const isPlannedRoute = computed(() => route.meta.navSection === 'planned');
@@ -22,5 +23,5 @@ export const useSidebarNavRoutes = () => {
   const isChildActive = ({ child, isActive }: { child: SidebarNavChild; isActive: boolean }) =>
     isActive || (child.activeRouteNames?.includes(String(route.name)) ?? false);
 
-  return { isIncomeRoute, isAccountsRoute, isTransactionsRoute, isPlannedRoute, isChildActive };
+  return { isIncomeRoute, isInvestmentsRoute, isAccountsRoute, isTransactionsRoute, isPlannedRoute, isChildActive };
 };

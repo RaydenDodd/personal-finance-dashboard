@@ -42,7 +42,8 @@ import UserMenu from './user-menu.vue';
 const { t } = useI18n();
 const route = useRoute();
 const { isCollapsed } = useSidebarCollapsed();
-const { isIncomeRoute, isAccountsRoute, isTransactionsRoute, isPlannedRoute, isChildActive } = useSidebarNavRoutes();
+const { isIncomeRoute, isInvestmentsRoute, isAccountsRoute, isTransactionsRoute, isPlannedRoute, isChildActive } =
+  useSidebarNavRoutes();
 const accountsNavChildren = useAccountsNavChildren();
 
 const {
@@ -94,6 +95,13 @@ interface RailNavItem {
 const navItems = computed<RailNavItem[]>(() => [
   { routeName: ROUTES_NAMES.home, icon: LayoutDashboardIcon, label: t('navigation.dashboard') },
   { routeName: ROUTES_NAMES.personalFinance, icon: WalletIcon, label: t('navigation.personalNetWorth') },
+  {
+    routeName: ROUTES_NAMES.investmentOverview,
+    icon: TrendingUpIcon,
+    label: 'Investments',
+    active: isInvestmentsRoute.value,
+    children: SIDEBAR_NAV_CHILDREN.investmentAnalytics,
+  },
   {
     routeName: ROUTES_NAMES.actualIncome,
     icon: BanknoteIcon,
@@ -239,7 +247,7 @@ const sectionItems = computed<RailSectionItem[]>(() => {
                       :is="child.icon"
                       :class="['size-4 shrink-0', isChildActive({ child, isActive }) && 'text-primary-text']"
                     />
-                    <span>{{ $t(child.labelKey) }}</span>
+                    <span>{{ child.label ?? $t(child.labelKey) }}</span>
                   </ui-button>
                 </router-link>
               </div>

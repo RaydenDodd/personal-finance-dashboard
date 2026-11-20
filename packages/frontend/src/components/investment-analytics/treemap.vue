@@ -1,0 +1,199 @@
+<script setup lang="ts">
+import { computed, nextTick, reactive, ref, watch } from 'vue';
+import * as d3 from 'd3';
+import { useResizeObserver } from '@vueuse/core';
+import { ChartTooltip, ChartTooltipHeader, ChartTooltipRow } from '@/components/common/charts/chart-tooltip';
+import { useChartTooltipPosition } from '@/composable/charts/use-chart-tooltip-position';
+import type { InvestmentAnalytics } from '@bt/shared/types/investment-analytics';
+import { investmentTreemapRows } from './treemap-model';
+const props = defineProps<{ analytics: InvestmentAnalytics; settings: Record<string, unknown>; compact?: boolean }>();
+const containerRef = ref<HTMLElement | null>(null),
+  svgRef = ref<SVGSVGElement | null>(null),
+  tooltipRef = ref<HTMLElement | null>(null);
+const group = ref<string | null>(null),
+  selected = ref<string | null>(null);
+const money = (value: number | null, currency = props.analytics.currencyCode) =>
+  value == null ? 'Unavailable' : new Intl.NumberFormat(undefined, { style: 'currency', currency }).format(value);
+const rows = computed(() => investmentTreemapRows(props.analytics, props.settings));
+watch(
+  () => [props.settings.grouping, props.settings.holdingsMode],
+  () => {
+    group.value = null;
+    selected.value = null;
+  },
+);
+const visible = computed(() => rows.value.filter((row) => row.size > 0 && (!group.value || row.group === group.value)));
+const tooltip = reactive({ visible: false, x: 0, y: 0, row: null as (typeof rows.value)[number] | null });
+const { updateTooltipPosition, isChartScrolling } = useChartTooltipPosition({
+  containerRef,
+  tooltipRef,
+  tooltip,
+  onDismiss: () => {
+    selected.value = null;
+    d3.select(svgRef.value).selectAll('rect').attr('opacity', 1);
+  },
+});
+function render() {
+  if (!containerRef.value || !svgRef.value) return;
+  const svg = d3.select(svgRef.value);
+  svg.selectAll('*').remove();
+  const width = containerRef.value.clientWidth,
+    height = containerRef.value.clientHeight;
+  const grouped = props.settings.grouping && props.settings.grouping !== 'security' && !group.value;
+  const groups = [...d3.group(visible.value, (row) => (grouped ? row.group : 'Holdings'))];
+  type TreeNode = { name: string; children?: TreeNode[]; row?: (typeof rows.value)[number]; size?: number };
+  const root = d3
+    .hierarchy<TreeNode>({
+      name: 'Portfolio',
+      children: groups.map(([name, holdings]) => ({
+        name,
+        children: holdings.map((row) => ({ name: row.symbol, row, size: row.size })),
+      })),
+    })
+    .sum((node) => node.size ?? 0)
+    .sort((a, b) => (b.value ?? 0) - (a.value ?? 0));
+  const tree = d3
+    .treemap<TreeNode>()
+    .size([width, height])
+    .paddingInner(3)
+    .paddingOuter(2)
+    .paddingTop(grouped ? 17 : 2)(root);
+  if (grouped)
+    svg
+      .selectAll('text.group-label')
+      .data(tree.children ?? [])
+      .enter()
+      .append('text')
+      .attr('class', 'group-label')
+      .attr('x', (node) => node.x0 + 4)
+      .attr('y', (node) => node.y0 + 12)
+      .attr('font-size', 10)
+      .attr('fill', 'var(--muted-foreground)')
+      .text((node) => node.data.name);
+  const cells = svg
+    .selectAll('g.cell')
+    .data(tree.leaves())
+    .enter()
+    .append('g')
+    .attr('class', 'cell')
+    .attr('transform', (node) => `translate(${node.x0},${node.y0})`);
+  cells
+    .append('rect')
+    .attr('width', (node) => Math.max(0, node.x1 - node.x0))
+    .attr('height', (node) => Math.max(0, node.y1 - node.y0))
+    .attr('rx', 3)
+    .attr('data-security-id', (node) => node.data.row!.id)
+    .attr('fill', (node) =>
+      node.data.row!.change == null
+        ? 'var(--muted)'
+        : node.data.row!.change! >= 0
+          ? 'var(--app-income-color)'
+          : 'var(--app-expense-color)',
+    )
+    .attr('role', 'button')
+    .attr('tabindex', 0)
+    .attr('aria-label', (node) => `${node.data.row!.symbol}: ${money(node.data.row!.value)}`)
+    .on('pointermove', (event: PointerEvent, node) => {
+      if (event.pointerType !== 'touch') inspect(event, node.data.row!);
+    })
+    .on('pointerup', (event: PointerEvent, node) => {
+      if (event.pointerType === 'touch') inspect(event, node.data.row!);
+    })
+    .on('pointerleave', (event: PointerEvent) => {
+      if (event.pointerType !== 'touch') tooltip.visible = false;
+    })
+    .on('click', (_event, node) => {
+      if (grouped) group.value = node.data.row!.group;
+      else selected.value = node.data.row!.id;
+    })
+    .on('keydown', (event: KeyboardEvent, node) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        if (grouped) group.value = node.data.row!.group;
+        else selected.value = node.data.row!.id;
+      }
+    });
+  cells
+    .filter((node) => node.x1 - node.x0 > 46 && node.y1 - node.y0 > 28)
+    .append('text')
+    .attr('x', 6)
+    .attr('y', 17)
+    .attr('font-size', 11)
+    .attr('font-weight', 650)
+    .attr('fill', 'var(--foreground)')
+    .attr('stroke', 'var(--card)')
+    .attr('stroke-width', 2)
+    .attr('paint-order', 'stroke')
+    .attr('pointer-events', 'none')
+    .text((node) => node.data.row!.symbol);
+  cells
+    .filter((node) => node.x1 - node.x0 > 64 && node.y1 - node.y0 > 48)
+    .append('text')
+    .attr('x', 6)
+    .attr('y', 34)
+    .attr('font-size', 10)
+    .attr('fill', 'var(--foreground)')
+    .attr('stroke', 'var(--card)')
+    .attr('stroke-width', 2)
+    .attr('paint-order', 'stroke')
+    .attr('pointer-events', 'none')
+    .text((node) => (node.data.row!.change == null ? 'No return data' : `${node.data.row!.change!.toFixed(1)}%`));
+}
+function inspect(event: PointerEvent, row: (typeof rows.value)[number]) {
+  if (isChartScrolling()) return;
+  tooltip.row = row;
+  tooltip.visible = true;
+  updateTooltipPosition(event);
+}
+useResizeObserver(containerRef, render);
+watch([visible, () => props.settings], () => nextTick(render), { deep: true });
+</script>
+<template>
+  <div class="min-w-0">
+    <button v-if="group" type="button" class="text-primary-text mb-2 text-xs underline" @click="group = null">
+      All holdings / {{ group }} ×
+    </button>
+    <div ref="containerRef" class="relative w-full" :class="compact ? 'h-56' : 'h-80'">
+      <svg ref="svgRef" class="h-full w-full" aria-label="Personal portfolio holdings treemap" />
+      <div
+        v-show="tooltip.visible"
+        ref="tooltipRef"
+        class="pointer-events-none absolute z-20"
+        :style="{ left: tooltip.x + 'px', top: tooltip.y + 'px' }"
+      >
+        <ChartTooltip
+          ><ChartTooltipHeader>{{ tooltip.row?.symbol }} · {{ tooltip.row?.name }}</ChartTooltipHeader
+          ><ChartTooltipRow label="Market value" :value="money(tooltip.row?.value ?? null)" /><ChartTooltipRow
+            label="Portfolio weight"
+            :value="tooltip.row?.weight == null ? 'Unknown' : tooltip.row.weight.toFixed(2) + '%'"
+          /><ChartTooltipRow
+            label="Selected return"
+            :value="tooltip.row?.change == null ? 'Unavailable' : tooltip.row.change.toFixed(2) + '%'"
+          />
+          <p class="text-card-tooltip-muted mt-2 max-w-64 text-xs">
+            {{ tooltip.row?.description }}<br />{{ tooltip.row?.asOf ?? 'Source date unavailable' }}
+          </p></ChartTooltip
+        >
+      </div>
+      <p
+        v-if="!visible.length"
+        class="text-muted-foreground absolute inset-0 flex items-center justify-center px-6 text-center text-sm"
+      >
+        No valued positions support this sizing mode.
+      </p>
+    </div>
+    <p class="text-muted-foreground mt-2 text-xs">
+      Size: {{ settings.sizeBy ?? 'marketValue' }} · color: {{ settings.colorBy ?? 'unrealized' }}. Neutral means
+      unavailable.
+      {{
+        settings.holdingsMode === 'underlying'
+          ? 'Indirect exposure is economic exposure; it does not represent owned shares or tax lots.'
+          : 'Select a group to drill down.'
+      }}
+    </p>
+    <p v-if="selected" class="bg-muted mt-2 rounded-md p-3 text-xs">
+      {{ rows.find((row) => row.id === selected)?.name }} · {{ rows.find((row) => row.id === selected)?.description
+      }}<button class="text-primary-text ml-2 underline" @click="selected = null">Close</button>
+    </p>
+  </div>
+</template>

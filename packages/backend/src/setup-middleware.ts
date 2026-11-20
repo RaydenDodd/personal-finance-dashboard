@@ -225,6 +225,9 @@ export function setupMiddleware(app: Express) {
     if (new RegExp(`^${API_PREFIX}/investments/portfolios/[^/]+/broker-records$`).test(req.path)) {
       return express.json({ limit: '10mb' })(req, res, next);
     }
+    if (req.path === `${API_PREFIX}/investments/analytics/fund-holdings`) {
+      return express.json({ limit: '5mb' })(req, res, next);
+    }
     return express.json()(req, res, next);
   });
 

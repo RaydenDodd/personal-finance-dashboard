@@ -21,6 +21,7 @@ import { type Component, computed } from 'vue';
 export interface SidebarNavChild {
   routeName: string;
   labelKey: string;
+  label?: string;
   icon: Component;
   /** Present on links the user can hide; the link shows unless its setting is `false`. */
   settingKey?: keyof SidebarNavConfig;
@@ -32,6 +33,38 @@ type ToggleableNavChild = SidebarNavChild & { settingKey: keyof SidebarNavConfig
 
 /** Sub-links of the collapsible nav groups, rendered by both the full nav and the rail flyouts. */
 export const SIDEBAR_NAV_CHILDREN = {
+  investmentAnalytics: [
+    {
+      routeName: ROUTES_NAMES.investmentOverview,
+      labelKey: 'navigation.investments',
+      label: 'Overview',
+      icon: WalletIcon,
+    },
+    {
+      routeName: ROUTES_NAMES.investmentPerformance,
+      labelKey: 'navigation.investments',
+      label: 'Performance',
+      icon: TrendingUpIcon,
+    },
+    {
+      routeName: ROUTES_NAMES.investmentHoldings,
+      labelKey: 'navigation.investments',
+      label: 'Holdings',
+      icon: GroupIcon,
+    },
+    {
+      routeName: ROUTES_NAMES.investmentAllocation,
+      labelKey: 'navigation.investments',
+      label: 'Allocation & Exposure',
+      icon: TargetIcon,
+    },
+    {
+      routeName: ROUTES_NAMES.investmentDividends,
+      labelKey: 'navigation.investments',
+      label: 'Dividends',
+      icon: BanknoteIcon,
+    },
+  ],
   income: [
     { routeName: ROUTES_NAMES.actualIncome, labelKey: 'navigation.actualIncome', icon: BanknoteIcon },
     { routeName: ROUTES_NAMES.projectedIncome, labelKey: 'navigation.projectedIncome', icon: TrendingUpIcon },

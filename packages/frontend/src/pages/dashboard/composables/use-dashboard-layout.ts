@@ -145,25 +145,22 @@ export function useDashboardLayout(options: LayoutOptions = {}) {
     }
   };
 
-  const saveWidgetConfigDirect = async ({
-    widgetId,
-    config,
-  }: {
-    widgetId: string;
-    config: Record<string, unknown>;
-  }) => {
-    if (!settings.value) return;
-
-    const widgets = cloneDeep(activeWidgets.value);
-    const widget = widgets.find((w) => identity(w) === widgetId);
-    if (widget) {
-      widget.config = { ...widget.config, ...config };
-      await persistWidgets(widgets);
-      trackAnalyticsEvent({
-        event: 'dashboard_widget_config_saved',
-        properties: { widget_id: widgetId },
-      });
-    }
+  let widgetConfigSaveQueue: Promise<unknown> = Promise.resolve();
+  const saveWidgetConfigDirect = ({ widgetId, config }: { widgetId: string; config: Record<string, unknown> }) => {
+    // Instances share one saved array. Read it after preceding saves finish so
+    // simultaneous controls in different widgets cannot overwrite each other.
+    const save = widgetConfigSaveQueue.then(async () => {
+      if (!settings.value) return;
+      const widgets = cloneDeep(activeWidgets.value);
+      const widget = widgets.find((w) => identity(w) === widgetId);
+      if (widget) {
+        widget.config = { ...widget.config, ...config };
+        await persistWidgets(widgets);
+        trackAnalyticsEvent({ event: 'dashboard_widget_config_saved', properties: { widget_id: widgetId } });
+      }
+    });
+    widgetConfigSaveQueue = save.catch(() => undefined);
+    return save;
   };
 
   return {
