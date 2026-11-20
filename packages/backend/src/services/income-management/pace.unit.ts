@@ -18,6 +18,20 @@ const tx = (
   date = '2026-11-10',
 ): FundingTransaction => ({ id, accountId, type, note, amount, date, nature: 'transfer_out_wallet', transferId: null });
 describe('planned vs actual funding boundary', () => {
+  it('treats the receiving account number as its own identifier, not as a savings source', () => {
+    const deposit = tx(
+      'in',
+      'broker',
+      'income',
+      'ACH deposit into Brokerage account ending in 4444',
+      100,
+      '2026-11-09',
+    );
+    expect(buildFundingEvents(accounts, [], [deposit])).toEqual([expect.objectContaining({ id: 'in', amount: 100 })]);
+    const events = buildFundingEvents(accounts, [], [tx('out', 'cash', 'expense', 'ROBINHOOD'), deposit]);
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({ date: '2026-11-09', amount: 100 });
+  });
   it('honors an excluded brokerage even when only its outgoing cash leg exists', () => {
     const excluded = accounts.map((a) => (a.id === 'broker' ? { ...a, excluded: true } : a));
     expect(buildFundingEvents(excluded, [], [tx('out', 'cash', 'expense', 'ROBINHOOD')])).toEqual([]);

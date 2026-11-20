@@ -52,13 +52,14 @@ export function buildFundingEvents(
       !isReturnOrAwardDescription(t.note) &&
       !/\b(?:buy|bought|purchase|sell|sold|sale|fee|commission)\b/i.test(t.note),
   );
-  const suffix = (note: string) =>
+  const suffix = (note: string, ownAccountId?: string) =>
     accounts.find((a) => {
+      if (a.id === ownAccountId) return false;
       const n = /\((\d{4})\)\s*$/.exec(a.name)?.[1];
       return n && new RegExp('(?:X+|\\b)' + n + '\\b', 'i').test(note);
     });
-  const target = (note: string) => {
-    const exact = suffix(note);
+  const target = (note: string, ownAccountId: string) => {
+    const exact = suffix(note, ownAccountId);
     if (exact) return exact.id;
     const merchant = /^(M1|ROBINHOOD(?: FINANCIAL| SECURITIES)?|PUBLIC(?:\.COM)?)$/i
       .exec(note.trim())?.[1]
@@ -78,7 +79,7 @@ export function buildFundingEvents(
     const linked = t.transferId
       ? valid.find((o) => o.id !== t.id && o.transferId === t.transferId && o.type === 'income')
       : undefined;
-    const to = linked?.accountId ?? target(t.note);
+    const to = linked?.accountId ?? target(t.note, t.accountId);
     if (!to) continue;
     const fromSaved = boundary.has(t.accountId),
       toSaved = boundary.has(to) || to.startsWith('provider:');
@@ -92,7 +93,7 @@ export function buildFundingEvents(
             o.accountId === to &&
             Math.round(o.amount * 100) === Math.round(t.amount * 100) &&
             Math.abs(Date.parse(o.date) - Date.parse(t.date)) <= 7 * 86400000 &&
-            (!suffix(o.note) || suffix(o.note)?.id === t.accountId),
+            (!suffix(o.note, o.accountId) || suffix(o.note, o.accountId)?.id === t.accountId),
         )
         .toSorted(
           (a, b) =>
@@ -118,10 +119,10 @@ export function buildFundingEvents(
   for (const t of valid) {
     if (used.has(t.id) || !eligible.has(t.accountId)) continue;
     if (t.type === 'income' && /\b(?:deposit|transfer|contribution|funding)\b/i.test(t.note)) {
-      if (boundary.has(suffix(t.note)?.id ?? '')) continue;
+      if (boundary.has(suffix(t.note, t.accountId)?.id ?? '')) continue;
       events.push({ id: t.id, date: t.date, amount: round(t.amount), accountId: t.accountId, description: t.note });
     } else if (t.type === 'expense' && /\b(?:withdrawal|transfer out|withdrawn)\b/i.test(t.note)) {
-      if (boundary.has(suffix(t.note)?.id ?? '')) continue;
+      if (boundary.has(suffix(t.note, t.accountId)?.id ?? '')) continue;
       events.push({ id: t.id, date: t.date, amount: -round(t.amount), accountId: t.accountId, description: t.note });
     }
   }
