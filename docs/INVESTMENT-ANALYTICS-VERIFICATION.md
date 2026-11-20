@@ -134,7 +134,7 @@ availability, partial coverage and live verification.
 - [x] Existing Income/dashboard/net worth/SimpleFIN behavior and six-hour sync retained.
 - [x] Existing other Pi services remain active and unaffected.
 - [x] Deployed pages/widgets verified with actual records and mouse/mobile touch.
-- [ ] Final local dev, origin/dev and Pi commit synchronization after verification documentation.
+- [x] Final local dev, origin/dev and Pi commit synchronization after verification documentation.
 
 ## Evidence and unresolved limitations
 
@@ -167,7 +167,7 @@ advanced live calculation is operational; partial coverage remains explicit.
   fund import, identical repeat, immutable conflict and invalid inputs were
   tested through the real API. The original restored database and all inspected
   financial tables remained unchanged. Temporary test containers were removed.
-- Eighteen live API checks verified native output parity, selections, ownership,
+- Nineteen live API checks verified native output parity, selections, ownership,
   invalid import rejection, exact quantities, valid weighted basis, source
   dates and partial-value semantics. A separate actual-data browser proof at
   all three widths verified every Direct Holdings identifier, actual fund
@@ -178,9 +178,13 @@ advanced live calculation is operational; partial coverage remains explicit.
   Saved Income and payroll records remained identical.
 - The backup was restored into a separate database and the additive migration
   passed there before production. All 22 inspected tables matched restoration
-  versus production. Relative to the initial capture, 21 tables matched exactly;
-  Securities differences were confined to normal `pricingLastSyncedAt` and
-  `updatedAt` metadata. Existing financial records and source evidence survived.
+  versus production at that checkpoint. The final comparison retained 19 exact
+  tables. Securities differences were normal `pricingLastSyncedAt`/`updatedAt`
+  metadata. The existing Public sync appended a fresh price valuation while
+  preserving every original snapshot, position quantity, basis, cash, lot,
+  source event and document. Its connection changed only `lastSyncAt`/`updatedAt`;
+  credentials and the active flag remained identical. Original financial ledgers
+  and source observations were preserved while normal synchronization continued.
 - All six finance services are healthy; Minecraft, WireGuard and the existing
   bank timer remained active. Existing stock and crypto scheduler startup was
   verified. Networking, credentials, persistent volumes and schedules were
@@ -189,6 +193,13 @@ advanced live calculation is operational; partial coverage remains explicit.
   every resolved dependency and backend/shared manifest matched the ARM runtime.
   That runtime's exact dependency manifest was retained without reinstalling
   packages.
+- Final deployed application release: `9c4b17cb544d8a83bf0bfae0133bd06a418123c8`.
+  Both images were built from the matching source and the existing prebuilt
+  helpers. Current-release checks connected all twenty widget types at all
+  three widths. Targeted follow-up verified eighteen performer-period rankings,
+  fifteen overlap detail interactions, three widget settings round trips, and
+  unavailable interest remaining unavailable. Native mouse-wheel and touch-swipe
+  checks confirmed scrolling works and dismisses chart selection.
 
 ## Remaining coverage and capability limits
 
@@ -224,5 +235,5 @@ advanced live calculation is operational; partial coverage remains explicit.
   helper's whole-dollar rounding remains unchanged and disclosed.
 
 Detailed source inventories, financial comparisons, backup information and
-browser evidence remain in ignored `private/`. No financial values, account
+browser evidence remain in ignored `private/`. No real financial values, account
 identifiers, credentials, exports or screenshots are tracked.

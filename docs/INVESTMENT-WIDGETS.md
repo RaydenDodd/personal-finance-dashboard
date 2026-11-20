@@ -17,26 +17,26 @@ checks preservation of an existing Balance Trend widget.
 
 | Widget                      | Implemented | Shared analytics adapter | Automated lifecycle | Shared panel connection | Desktop browser       | Mobile browser                    | Deployed/live verified |
 | --------------------------- | ----------- | ------------------------ | ------------------- | ----------------------- | --------------------- | --------------------------------- | ---------------------- |
-| Investment Overview         | Yes         | Yes                      | Passed              | Unit adapter passed     | Fixture + live passed | Fixture + live passed (390 / 320) | Verified 39e43789d     |
-| Portfolio Performance       | Yes         | Yes                      | Passed              | Unit adapter passed     | Fixture + live passed | Fixture + live passed (390 / 320) | Verified 39e43789d     |
-| Value vs. Invested Capital  | Yes         | Yes                      | Passed              | Unit adapter passed     | Fixture + live passed | Fixture + live passed (390 / 320) | Verified 39e43789d     |
-| Benchmark Comparison        | Yes         | Yes                      | Passed              | Unit adapter passed     | Fixture + live passed | Fixture + live passed (390 / 320) | Verified 39e43789d     |
-| Investment Allocation       | Yes         | Yes                      | Passed              | Unit adapter passed     | Fixture + live passed | Fixture + live passed (390 / 320) | Verified 39e43789d     |
-| Portfolio Heatmap / Treemap | Yes         | Yes                      | Passed              | Unit adapter passed     | Fixture + live passed | Fixture + live passed (390 / 320) | Verified 39e43789d     |
-| Combined Holdings           | Yes         | Yes                      | Passed              | Unit adapter passed     | Fixture + live passed | Fixture + live passed (390 / 320) | Verified 39e43789d     |
-| Underlying Company Exposure | Yes         | Yes                      | Passed              | Unit adapter passed     | Fixture + live passed | Fixture + live passed (390 / 320) | Verified 39e43789d     |
-| Sector Allocation           | Yes         | Yes                      | Passed              | Unit adapter passed     | Fixture + live passed | Fixture + live passed (390 / 320) | Verified 39e43789d     |
-| Geographical Allocation     | Yes         | Yes                      | Passed              | Unit adapter passed     | Fixture + live passed | Fixture + live passed (390 / 320) | Verified 39e43789d     |
-| Dividend Income             | Yes         | Yes                      | Passed              | Unit adapter passed     | Fixture + live passed | Fixture + live passed (390 / 320) | Verified 39e43789d     |
-| Dividend Calendar           | Yes         | Yes                      | Passed              | Unit adapter passed     | Fixture + live passed | Fixture + live passed (390 / 320) | Verified 39e43789d     |
-| Best & Worst Performers     | Yes         | Yes                      | Passed              | Unit adapter passed     | Fixture + live passed | Fixture + live passed (390 / 320) | Verified 39e43789d     |
-| Portfolio Concentration     | Yes         | Yes                      | Passed              | Unit adapter passed     | Fixture + live passed | Fixture + live passed (390 / 320) | Verified 39e43789d     |
-| Realized & Unrealized Gains | Yes         | Yes                      | Passed              | Unit adapter passed     | Fixture + live passed | Fixture + live passed (390 / 320) | Verified 39e43789d     |
-| ETF Overlap                 | Yes         | Yes                      | Passed              | Unit adapter passed     | Fixture + live passed | Fixture + live passed (390 / 320) | Verified 39e43789d     |
-| Investment Contributions    | Yes         | Yes                      | Passed              | Unit adapter passed     | Fixture + live passed | Fixture + live passed (390 / 320) | Verified 39e43789d     |
-| Risk & Drawdown             | Yes         | Yes                      | Passed              | Unit adapter passed     | Fixture + live passed | Fixture + live passed (390 / 320) | Verified 39e43789d     |
-| Portfolio Comparison        | Yes         | Yes                      | Passed              | Unit adapter passed     | Fixture + live passed | Fixture + live passed (390 / 320) | Verified 39e43789d     |
-| Market Data Health          | Yes         | Yes                      | Passed              | Unit adapter passed     | Fixture + live passed | Fixture + live passed (390 / 320) | Verified 39e43789d     |
+| Investment Overview         | Yes         | Yes                      | Passed              | Unit adapter passed     | Fixture + live passed | Fixture + live passed (390 / 320) | Verified 9c4b17cb5     |
+| Portfolio Performance       | Yes         | Yes                      | Passed              | Unit adapter passed     | Fixture + live passed | Fixture + live passed (390 / 320) | Verified 9c4b17cb5     |
+| Value vs. Invested Capital  | Yes         | Yes                      | Passed              | Unit adapter passed     | Fixture + live passed | Fixture + live passed (390 / 320) | Verified 9c4b17cb5     |
+| Benchmark Comparison        | Yes         | Yes                      | Passed              | Unit adapter passed     | Fixture + live passed | Fixture + live passed (390 / 320) | Verified 9c4b17cb5     |
+| Investment Allocation       | Yes         | Yes                      | Passed              | Unit adapter passed     | Fixture + live passed | Fixture + live passed (390 / 320) | Verified 9c4b17cb5     |
+| Portfolio Heatmap / Treemap | Yes         | Yes                      | Passed              | Unit adapter passed     | Fixture + live passed | Fixture + live passed (390 / 320) | Verified 9c4b17cb5     |
+| Combined Holdings           | Yes         | Yes                      | Passed              | Unit adapter passed     | Fixture + live passed | Fixture + live passed (390 / 320) | Verified 9c4b17cb5     |
+| Underlying Company Exposure | Yes         | Yes                      | Passed              | Unit adapter passed     | Fixture + live passed | Fixture + live passed (390 / 320) | Verified 9c4b17cb5     |
+| Sector Allocation           | Yes         | Yes                      | Passed              | Unit adapter passed     | Fixture + live passed | Fixture + live passed (390 / 320) | Verified 9c4b17cb5     |
+| Geographical Allocation     | Yes         | Yes                      | Passed              | Unit adapter passed     | Fixture + live passed | Fixture + live passed (390 / 320) | Verified 9c4b17cb5     |
+| Dividend Income             | Yes         | Yes                      | Passed              | Unit adapter passed     | Fixture + live passed | Fixture + live passed (390 / 320) | Verified 9c4b17cb5     |
+| Dividend Calendar           | Yes         | Yes                      | Passed              | Unit adapter passed     | Fixture + live passed | Fixture + live passed (390 / 320) | Verified 9c4b17cb5     |
+| Best & Worst Performers     | Yes         | Yes                      | Passed              | Unit adapter passed     | Fixture + live passed | Fixture + live passed (390 / 320) | Verified 9c4b17cb5     |
+| Portfolio Concentration     | Yes         | Yes                      | Passed              | Unit adapter passed     | Fixture + live passed | Fixture + live passed (390 / 320) | Verified 9c4b17cb5     |
+| Realized & Unrealized Gains | Yes         | Yes                      | Passed              | Unit adapter passed     | Fixture + live passed | Fixture + live passed (390 / 320) | Verified 9c4b17cb5     |
+| ETF Overlap                 | Yes         | Yes                      | Passed              | Unit adapter passed     | Fixture + live passed | Fixture + live passed (390 / 320) | Verified 9c4b17cb5     |
+| Investment Contributions    | Yes         | Yes                      | Passed              | Unit adapter passed     | Fixture + live passed | Fixture + live passed (390 / 320) | Verified 9c4b17cb5     |
+| Risk & Drawdown             | Yes         | Yes                      | Passed              | Unit adapter passed     | Fixture + live passed | Fixture + live passed (390 / 320) | Verified 9c4b17cb5     |
+| Portfolio Comparison        | Yes         | Yes                      | Passed              | Unit adapter passed     | Fixture + live passed | Fixture + live passed (390 / 320) | Verified 9c4b17cb5     |
+| Market Data Health          | Yes         | Yes                      | Passed              | Unit adapter passed     | Fixture + live passed | Fixture + live passed (390 / 320) | Verified 9c4b17cb5     |
 
 Desktop (1440 pixels, dark theme, actual mouse) and mobile (390 and 320 pixels,
 light theme, actual touch) exercised every row using an explicitly synthetic
@@ -55,6 +55,15 @@ only browser settings writes were simulated. The separate trace is
 the original production dashboard, reported zero browser errors and financial
 writes, and fit without horizontal page overflow. Missing or partial data remains
 subject to the shared service quality status.
+
+The final release `9c4b17cb5` passed a targeted real-data smoke check at all three
+viewports: twenty widget types and twenty-two instances, including three
+independent Allocation configurations, connected to their shared panels with
+successful analytics responses. There were no browser errors, horizontal page
+overflow or financial writes, and the saved production dashboard remained
+unchanged. Prior lifecycle and isolated server-persistence evidence remains
+applicable; those full checks were not unnecessarily repeated. Current-release
+evidence: `private/investment-widget-browser/current-release-smoke.json`.
 
 Actual server persistence was also verified on an isolated copy of the restored
 verification database. The existing ARM64 backend ran with its supported test
