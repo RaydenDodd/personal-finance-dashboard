@@ -39,7 +39,8 @@ import { consolidatedReturns, normalizeComparableSeries, recordedPriceReturns } 
 
 const decimal = (m: Money | string | number): string => (Money.isMoney(m) ? m.toDecimalString(18) : String(m));
 const dateString = (d: Date | string | null | undefined) => (d ? new Date(d).toISOString() : null);
-const isFundName = (name: string) => /\b(etf|mutual fund|index fund|ishares|vanguard|invesco|spdr)\b/i.test(name);
+const isFundName = (name: string) =>
+  /\b(etf|mutual fund|index fund|total market index|stock market index|ishares|vanguard|invesco|spdr)\b/i.test(name);
 
 export const assertOwnedSelection = (requested: string[] | undefined, owned: string[]): string[] => {
   if (!requested?.length) return owned;
@@ -642,7 +643,9 @@ async function getAnalyticsImpl({
   const knownBasisValue = sum(
     holdings.filter((h) => h.costBasis !== null && h.marketValue !== null).map((h) => h.marketValue),
   )!;
-  const dates = history.filter((p) => p.marketValue !== null).map((p) => p.date);
+  // MAX includes genuine partial observations/events even when selected portfolios
+  // have no common fully valued date. Missing aggregate values remain null.
+  const dates = history.map((p) => p.date);
   const syncDates = securities
     .map((s) => dateString(s.pricingLastSyncedAt))
     .filter((s): s is string => !!s)

@@ -39,6 +39,7 @@ import SecurityPricing from '@models/investments/security-pricing.model';
 import { getHoldingValues } from '@services/investments/holdings/get-holding-values.service';
 import { getPortfolioSummary } from '@services/investments/portfolios/get-portfolio-summary.service';
 
+import { buildHistory } from './history';
 import { assertOwnedSelection, getInvestmentAnalytics } from './service';
 
 const portfolios = [
@@ -89,6 +90,7 @@ const summary = (id: string) => ({
 describe('owner-scoped native portfolio analytics adapter', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.mocked(buildHistory).mockReturnValue([]);
     jest.mocked(Portfolios.findAll).mockResolvedValue(portfolios as never);
     for (const model of [
       BrokerPortfolioData,
@@ -165,5 +167,42 @@ describe('owner-scoped native portfolio analytics adapter', () => {
     expect(result.allocations.holdings?.find((r) => r.key === 'security')?.label).toBe('SAME');
     expect(result.allocations.underlying?.some((r) => r.label.includes('Unknown holdings'))).toBe(true);
     expect(result.exposure.some((r) => r.id === 'security')).toBe(false);
+  });
+  it('recognizes explicit total-market-index fund names while retaining the actual FSKAX direct ticker', async () => {
+    jest.mocked(getHoldingValues).mockImplementation(
+      async ({ portfolioId }) =>
+        [
+          {
+            ...holding(
+              portfolioId,
+              portfolioId === 'a' ? '0.25' : '0.75',
+              portfolioId === 'a' ? '10' : '60',
+              portfolioId === 'a' ? '25' : '75',
+            ),
+            security: { ...security, symbol: 'FSKAX', providerSymbol: 'FSKAX', name: 'Fidelity Total Market Index' },
+          },
+        ] as never,
+    );
+    const result = await getInvestmentAnalytics({ userId: 1 });
+    expect(result.holdings[0]).toMatchObject({ symbol: 'FSKAX', isFund: true });
+    expect(result.allocations.holdings?.find((r) => r.key === 'security')?.label).toBe('FSKAX');
+    expect(result.exposure.find((r) => r.id === 'unknown:security')).toMatchObject({
+      unknown: true,
+      totalValue: '100',
+    });
+    expect(result.exposure.some((r) => r.id === 'security')).toBe(false);
+    expect(result.health.find((r) => r.id === 'fund-classification:security')?.status).toBe('partial');
+  });
+  it('preserves the complete available MAX range when only partial portfolio observations exist', async () => {
+    jest.mocked(buildHistory).mockReturnValue([
+      { date: '2019-12-12', marketValue: null, portfolios: { a: '100', b: null }, coverage: 50 },
+      { date: '2026-11-20', marketValue: null, portfolios: { a: null, b: '200' }, coverage: 50 },
+    ] as never);
+    const result = await getInvestmentAnalytics({ userId: 1 });
+    expect(result.coverage.historyStart).toBe('2019-12-12');
+    expect(result.coverage.historyEnd).toBe('2026-11-20');
+    expect(result.history).toHaveLength(2);
+    expect(result.history.every((point) => point.marketValue === null)).toBe(true);
+    expect(result.history[0]?.portfolios.a).toBe('100');
   });
 });
