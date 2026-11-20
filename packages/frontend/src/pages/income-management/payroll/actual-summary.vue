@@ -6,6 +6,9 @@ import { usePayroll } from './use-payroll';
 import { money } from './format';
 import { incomeColors } from '../income-allocation';
 import { payrollFieldUnavailable } from './completeness';
+import ModuleBody from '@/components/widgets/components/module-body.vue';
+import { useModuleLayout } from '@/components/widgets/composables/use-module-layout';
+const { bounded } = useModuleLayout();
 const props = defineProps<{ data?: PayrollDashboard; from?: string; through?: string; employmentId?: string }>();
 const query = usePayroll(() => ({ from: props.from, through: props.through, employmentId: props.employmentId }));
 const payroll = computed(() => props.data ?? query.data.value);
@@ -38,12 +41,19 @@ const categories = computed(() =>
 );
 </script>
 <template>
-  <Card class="@container p-5 sm:p-7" data-testid="actual-payroll-summary">
-    <div v-if="summary" class="space-y-5">
+  <Card
+    class="@container flex min-h-0 min-w-0 flex-col overflow-hidden"
+    :class="bounded ? 'h-full p-4' : 'p-5 sm:p-7'"
+    data-testid="actual-payroll-summary"
+  >
+    <ModuleBody v-if="summary" class="space-y-3">
       <div class="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p class="text-muted-foreground text-xs font-medium">Current annualized base salary</p>
-          <p class="text-primary-text mt-2 text-4xl font-semibold tracking-tight tabular-nums">
+          <p
+            class="text-primary-text mt-2 font-semibold tracking-tight tabular-nums"
+            :class="bounded ? 'text-3xl' : 'text-4xl'"
+          >
             {{ money(summary.currentSalary) }}
           </p>
           <p class="text-muted-foreground mt-2 text-xs">
@@ -52,15 +62,16 @@ const categories = computed(() =>
           </p>
         </div>
       </div>
-      <div class="grid grid-cols-1 gap-3 min-[360px]:grid-cols-2 @3xl:grid-cols-3">
+      <div class="grid grid-cols-2 gap-2 @3xl:grid-cols-3">
         <div
           v-for="item in categories"
           :key="item.label"
-          class="border-border/50 bg-muted/20 @container min-w-0 rounded-lg border px-3 py-4 sm:px-4"
+          class="border-border/50 bg-muted/20 @container min-w-0 rounded-lg border"
+          :class="bounded ? 'px-2 py-2' : 'px-3 py-3 @lg:px-4'"
         >
           <p class="text-muted-foreground text-xs font-medium">{{ item.label }}</p>
           <p
-            class="mt-2 text-[clamp(1rem,16cqi,1.875rem)] font-bold tracking-tight tabular-nums"
+            class="mt-1 text-[clamp(0.875rem,15cqi,1.875rem)] font-bold tracking-tight tabular-nums"
             :style="{ color: item.color }"
           >
             {{ money(item.value) }}
@@ -117,7 +128,7 @@ const categories = computed(() =>
       <p v-if="!summary.count" class="text-muted-foreground text-sm">
         No payroll statements in this period. Import payroll files from Manage payroll.
       </p>
-    </div>
+    </ModuleBody>
     <p v-else-if="query.isError.value" class="text-destructive-text text-sm">Payroll could not be loaded. Try again.</p>
     <div v-else class="bg-muted h-40 animate-pulse rounded-md" />
   </Card>

@@ -4,7 +4,7 @@
 
     <!-- Center label: shows Total by default, category info on hover -->
     <div class="pointer-events-none absolute inset-0 flex items-center justify-center">
-      <div class="flex flex-col items-center gap-0.5 text-center">
+      <div class="flex max-w-[68%] min-w-0 flex-col items-center gap-0.5 text-center">
         <template v-if="centerLabel.isHovering">
           <div class="text-muted-foreground text-xs">{{ centerLabel.name }}</div>
           <div class="text-base font-semibold">{{ centerLabel.amount }}</div>

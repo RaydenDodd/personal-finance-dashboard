@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils';
 import { GripVerticalIcon, XIcon, ArrowUpIcon, ArrowDownIcon } from '@lucide/vue';
 import { useI18n } from 'vue-i18n';
 import { computed, defineAsyncComponent, provide, toRef } from 'vue';
+import { useMediaQuery } from '@vueuse/core';
 
 import type { Period } from '../types';
 
@@ -32,6 +33,11 @@ const emit = defineEmits<{
 }>();
 
 provide('dashboard-widget-stretch', true);
+const fixedRows = useMediaQuery('(min-width: 768px)');
+provide(
+  'dashboard-widget-bounded',
+  computed(() => !props.naturalHeight && fixedRows.value),
+);
 provide('dashboard-widget-config', toRef(props, 'widgetConfig'));
 
 const { t } = useI18n();
@@ -81,7 +87,11 @@ const isConfigChoiceActive = ({ option, value }: { option: WidgetConfigOption; v
 </script>
 
 <template>
-  <div v-if="def" :data-widget-id="widgetConfig.widgetId" :class="['relative h-full', colSpanClass, rowSpanClass]">
+  <div
+    v-if="def"
+    :data-widget-id="widgetConfig.widgetId"
+    :class="['relative min-h-0 min-w-0', !naturalHeight && 'h-full', colSpanClass, rowSpanClass]"
+  >
     <!-- Edit-mode only: always-on isolation would trap widgets' fixed z-50 panels
          (spike-transactions-panel, balance-trend tooltip) under the header. -->
     <div

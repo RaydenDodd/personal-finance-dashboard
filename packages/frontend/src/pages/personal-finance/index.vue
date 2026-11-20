@@ -23,6 +23,7 @@ import { VUE_QUERY_CACHE_KEYS } from '@/common/const';
 import { Button } from '@/components/lib/ui/button';
 import { Callout } from '@/components/lib/ui/callout';
 import { Card } from '@/components/lib/ui/card';
+import { ScrollArea } from '@/components/lib/ui/scroll-area';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/lib/ui/popover';
 import { Dialog, DialogScrollContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/lib/ui/dialog';
 import { ROUTES_NAMES } from '@/routes/constants';
@@ -796,7 +797,7 @@ const inputClass =
           <Card
             as="button"
             type="button"
-            class="focus-visible:ring-ring w-full cursor-pointer p-5 text-left focus-visible:ring-2 focus-visible:outline-none sm:p-6"
+            class="focus-visible:ring-ring @container w-full min-w-0 cursor-pointer p-5 text-left focus-visible:ring-2 focus-visible:outline-none sm:p-6"
             aria-label="View total net worth balances and history"
             @click="openDetails('all')"
           >
@@ -806,7 +807,7 @@ const inputClass =
                   {{ !throughDate && data.currentSummary?.assetsOnly ? 'Tracked assets' : 'Total net worth' }}
                   <span v-if="!summaryPoint?.complete" class="text-warning-text">· partial</span>
                 </p>
-                <p class="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">
+                <p class="mt-2 text-[clamp(1.5rem,7cqi,2.25rem)] font-semibold tracking-tight">
                   {{ money(summaryPoint ? (summaryPoint.total ?? summaryPoint.knownTotal) : null) }}
                 </p>
                 <p v-if="!summaryPoint?.complete && summaryPoint?.date" class="text-warning-text mt-1 text-xs">
@@ -824,7 +825,7 @@ const inputClass =
                   >
                 </p>
               </div>
-              <div class="grid grid-cols-2 gap-x-8 gap-y-3 text-sm sm:grid-cols-3">
+              <div class="grid grid-cols-1 gap-x-5 gap-y-3 text-sm @sm:grid-cols-2 @2xl:grid-cols-3">
                 <div>
                   <p class="text-muted-foreground">Monthly change</p>
                   <p class="mt-1 font-semibold">{{ money(changeAmount(data.monthlyChange)) }}</p>
@@ -847,7 +848,7 @@ const inputClass =
           <Card
             as="button"
             type="button"
-            class="hover:border-primary/50 focus-visible:ring-ring w-full cursor-pointer p-4 text-left transition-colors focus-visible:ring-2 focus-visible:outline-none"
+            class="hover:border-primary/50 focus-visible:ring-ring @container w-full min-w-0 cursor-pointer p-4 text-left transition-colors focus-visible:ring-2 focus-visible:outline-none"
             :aria-label="`View ${category.name} balances and history`"
             @click="openDetails('category', category.id)"
           >
@@ -863,7 +864,7 @@ const inputClass =
           </Card>
         </template>
         <template #history>
-          <Card class="p-4 sm:p-5">
+          <Card class="@container min-w-0 p-4 sm:p-5">
             <div class="mb-4 space-y-4" data-testid="finance-chart-controls">
               <div class="flex items-center justify-between gap-3">
                 <h2 class="flex items-center gap-2 text-base font-semibold">
@@ -915,15 +916,15 @@ const inputClass =
                   </PopoverContent>
                 </Popover>
               </div>
-              <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+              <div class="flex flex-col gap-3 @lg:flex-row @lg:flex-wrap @lg:items-center">
                 <label class="sr-only" for="finance-chart">Chart</label>
-                <select id="finance-chart" v-model="chart" :class="[inputClass, 'sm:max-w-72']">
+                <select id="finance-chart" v-model="chart" :class="[inputClass, '@lg:max-w-72']">
                   <option v-for="option in chartOptions" :key="option[0]" :value="option[0]">{{ option[1] }}</option>
                 </select>
                 <select
                   v-if="accountIsRequired"
                   v-model="selectedAccount"
-                  :class="[inputClass, 'sm:max-w-64']"
+                  :class="[inputClass, '@lg:max-w-64']"
                   aria-label="Chart account"
                 >
                   <option v-for="account in filteredAccounts" :key="account.id" :value="account.id">
@@ -931,7 +932,7 @@ const inputClass =
                   </option>
                 </select>
                 <div
-                  class="bg-muted grid w-full grid-cols-6 rounded-lg p-1 sm:ml-auto sm:w-auto"
+                  class="bg-muted grid w-full grid-cols-6 rounded-lg p-1 @2xl:ml-auto @2xl:w-auto"
                   role="group"
                   aria-label="Chart date range"
                 >
@@ -987,7 +988,7 @@ const inputClass =
           </Card>
         </template>
         <template #accounts
-          ><section class="space-y-4">
+          ><section class="@container min-w-0 space-y-4">
             <div class="flex flex-wrap items-center justify-between gap-3">
               <h2 class="text-lg font-semibold">Accounts & contribution basis</h2>
               <div class="flex flex-wrap gap-2">
@@ -1009,31 +1010,38 @@ const inputClass =
               </p>
               <Button class="mt-5" @click="editAccount()">Add your first account</Button></Card
             >
-            <div
+            <ScrollArea
               v-else
-              class="grid gap-3 lg:hidden"
+              class="max-h-96 @3xl:hidden"
+              viewport-class="max-h-96 md:overscroll-contain-if-scrollable"
               aria-label="Account balances"
               data-testid="finance-mobile-accounts"
             >
-              <AccountSummaryCard
-                v-for="account in filteredAccounts"
-                :key="account.id"
-                :account="account"
-                :category="categoryById(account.categoryId)"
-                :native-accounts="nativeAccounts"
-                @history="openDetails('account', account.id)"
-                @record="recordBalance(account.id)"
-                @edit="editAccount(account)"
-              />
-              <p v-if="!filteredAccounts.length" class="text-muted-foreground py-4 text-sm">
-                No accounts in this category.
-              </p>
-            </div>
+              <div class="grid gap-3">
+                <AccountSummaryCard
+                  v-for="account in filteredAccounts"
+                  :key="account.id"
+                  :account="account"
+                  :category="categoryById(account.categoryId)"
+                  :native-accounts="nativeAccounts"
+                  @history="openDetails('account', account.id)"
+                  @record="recordBalance(account.id)"
+                  @edit="editAccount(account)"
+                />
+                <p v-if="!filteredAccounts.length" class="text-muted-foreground py-4 text-sm">
+                  No accounts in this category.
+                </p>
+              </div>
+            </ScrollArea>
             <Card
               v-if="data.accounts.length"
-              class="hidden overflow-hidden lg:block"
+              class="hidden overflow-hidden @3xl:block"
               data-testid="finance-desktop-accounts"
-              ><div class="overflow-x-auto">
+              ><ScrollArea
+                class="max-h-96"
+                viewport-class="max-h-96 md:overscroll-contain-if-scrollable"
+                with-horizontal-scrollbar
+              >
                 <table class="w-full text-left text-sm">
                   <thead class="bg-muted/50 text-muted-foreground text-xs">
                     <tr>
@@ -1184,14 +1192,18 @@ const inputClass =
                     </tr>
                   </tbody>
                 </table>
-              </div></Card
+              </ScrollArea></Card
             >
           </section></template
         >
         <template #snapshots>
           <details v-if="history.length" class="border-border rounded-lg border">
             <summary class="cursor-pointer p-4 text-sm font-medium">Recorded snapshots & completeness</summary>
-            <div class="max-h-80 overflow-auto border-t">
+            <ScrollArea
+              class="max-h-80 border-t"
+              viewport-class="max-h-80 md:overscroll-contain-if-scrollable"
+              with-horizontal-scrollbar
+            >
               <table class="w-full text-left text-xs">
                 <thead class="bg-muted">
                   <tr>
@@ -1225,7 +1237,7 @@ const inputClass =
                   </tr>
                 </tbody>
               </table>
-            </div>
+            </ScrollArea>
           </details>
         </template>
         <template #ledger>
@@ -1238,7 +1250,11 @@ const inputClass =
             @toggle="ledgerOpen = ($event.target as HTMLDetailsElement).open"
           >
             <summary class="cursor-pointer p-4 text-sm font-medium">Contribution & transfer ledger</summary>
-            <div class="max-h-80 overflow-auto border-t">
+            <ScrollArea
+              class="max-h-80 border-t"
+              viewport-class="max-h-80 md:overscroll-contain-if-scrollable"
+              with-horizontal-scrollbar
+            >
               <table class="w-full text-left text-xs">
                 <thead class="bg-muted">
                   <tr>
@@ -1302,7 +1318,7 @@ const inputClass =
                   </tr>
                 </tbody>
               </table>
-            </div>
+            </ScrollArea>
           </details>
         </template>
         <template #sources>
@@ -1684,7 +1700,11 @@ const inputClass =
               <Callout v-for="warning in preview.warnings" :key="warning" variant="warning" title="Review needed">{{
                 warning
               }}</Callout>
-              <div class="max-h-96 overflow-auto rounded-md border">
+              <ScrollArea
+                class="max-h-96 rounded-md border"
+                viewport-class="max-h-96 md:overscroll-contain-if-scrollable"
+                with-horizontal-scrollbar
+              >
                 <table class="w-full text-left text-xs">
                   <thead class="bg-muted sticky top-0">
                     <tr>
@@ -1712,7 +1732,7 @@ const inputClass =
                     </tr>
                   </tbody>
                 </table>
-              </div>
+              </ScrollArea>
               <Button :disabled="busy || !preview.counts.insert" @click="commitImport"
                 ><CheckIcon class="size-4" />Import {{ preview.counts.insert }} records</Button
               >
@@ -1919,7 +1939,11 @@ const inputClass =
               </tbody>
             </table>
           </div>
-          <div class="max-h-72 overflow-auto rounded-md border">
+          <ScrollArea
+            class="max-h-72 rounded-md border"
+            viewport-class="max-h-72 md:overscroll-contain-if-scrollable"
+            with-horizontal-scrollbar
+          >
             <table class="w-full text-left text-xs" aria-label="Detail balance history">
               <thead class="bg-muted/50 text-muted-foreground sticky top-0">
                 <tr>
@@ -1956,7 +1980,7 @@ const inputClass =
                 </tr>
               </tbody>
             </table>
-          </div>
+          </ScrollArea>
         </template>
       </DialogScrollContent>
     </Dialog>

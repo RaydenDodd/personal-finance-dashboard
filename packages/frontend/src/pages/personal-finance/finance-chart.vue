@@ -37,6 +37,7 @@ const container = ref<HTMLDivElement | null>(null);
 const svg = ref<SVGSVGElement | null>(null);
 const tooltipElement = ref<HTMLDivElement | null>(null);
 const width = ref(700);
+const plotHeight = computed(() => (width.value < 420 ? 220 : 300));
 const gradientNamespace = useId().replace(/:/g, '');
 const hiddenSeries = ref<string[]>([]);
 const selectedPie = ref<string | null>(null);
@@ -116,22 +117,22 @@ function render() {
   const colors = getChartColors();
   const root = d3.select(svg.value);
   root.selectAll('*').remove();
-  const w = Math.max(width.value, 280),
-    h = 300;
+  const w = Math.max(width.value, 160),
+    h = plotHeight.value;
   root.attr('viewBox', `0 0 ${w} ${h}`);
   if (props.mode === 'donut') {
     const row = props.rows.at(-1)!;
     const data = visibleSeries.value
       .map((s) => ({ ...s, value: Math.max(0, row.values[s.id] ?? 0) }))
       .filter((s) => s.value > 0);
-    const radius = Math.min(w / 2 - 10, 130);
+    const radius = Math.min(w / 2 - 10, h / 2 - 12, 130);
     const arc = d3
       .arc<d3.PieArcDatum<(typeof data)[number]>>()
       .innerRadius(radius * 0.65)
       .outerRadius(radius);
     root
       .append('g')
-      .attr('transform', `translate(${w / 2},150)`)
+      .attr('transform', `translate(${w / 2},${h / 2})`)
       .selectAll('path')
       .data(
         d3
@@ -194,7 +195,7 @@ function render() {
         .sort(null)(data);
       root
         .append('g')
-        .attr('transform', `translate(${w / 2},150)`)
+        .attr('transform', `translate(${w / 2},${h / 2})`)
         .selectAll('text')
         .data(arcs.filter((d) => d.endAngle - d.startAngle > 0.16))
         .join('text')
@@ -215,7 +216,7 @@ function render() {
     root
       .append('text')
       .attr('x', w / 2)
-      .attr('y', 145)
+      .attr('y', h / 2 - 5)
       .attr('text-anchor', 'middle')
       .attr('fill', colors.text)
       .attr('font-size', 12)
@@ -223,15 +224,15 @@ function render() {
     root
       .append('text')
       .attr('x', w / 2)
-      .attr('y', 170)
+      .attr('y', h / 2 + 20)
       .attr('text-anchor', 'middle')
       .attr('fill', colors.foreground)
-      .attr('font-size', 21)
+      .attr('font-size', w < 300 ? 16 : 21)
       .attr('font-weight', 600)
       .text(formatValue(data.reduce((sum, s) => sum + s.value, 0)));
     return;
   }
-  const margin = { top: 12, right: 12, bottom: 38, left: w < 420 ? 62 : 75 };
+  const margin = { top: 12, right: 30, bottom: 38, left: w < 420 ? 62 : 75 };
   const plotW = w - margin.left - margin.right,
     plotH = h - margin.top - margin.bottom;
   const plot = root.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
@@ -306,7 +307,7 @@ function render() {
     xAxis.call(
       d3
         .axisBottom(temporalX)
-        .ticks(w < 420 ? 4 : 8)
+        .ticks(Math.max(2, Math.min(8, Math.floor(plotW / 75))))
         .tickSize(0)
         .tickPadding(14)
         .tickFormat((date) => d3.utcFormat(maxDate - minDate < 180 * 86400000 ? '%b %d' : '%b %Y')(date as Date)),
@@ -603,11 +604,16 @@ onMounted(render);
 </script>
 
 <template>
-  <div>
+  <div class="@container min-w-0">
     <div v-if="!hasValues" class="text-muted-foreground flex h-72 items-center justify-center text-sm">
       No recorded values in this period.
     </div>
-    <div v-else ref="container" class="relative h-75 w-full" style="touch-action: pan-y pinch-zoom">
+    <div
+      v-else
+      ref="container"
+      class="relative w-full min-w-0"
+      :style="{ height: plotHeight + 'px', touchAction: 'pan-y pinch-zoom' }"
+    >
       <svg
         ref="svg"
         class="h-full w-full"
@@ -643,7 +649,7 @@ onMounted(render);
         </ChartTooltip>
       </div>
     </div>
-    <div class="mt-4 flex flex-wrap justify-center gap-x-5 gap-y-2 text-xs">
+    <div class="mt-3 flex flex-wrap justify-center gap-x-3 gap-y-1 text-xs">
       <span v-if="rows.some((row) => row.partial)" class="text-warning-text"
         >○ Dashed / open points: partial recorded subtotal</span
       >

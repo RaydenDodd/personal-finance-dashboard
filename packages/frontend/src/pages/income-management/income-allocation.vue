@@ -2,7 +2,10 @@
 import { computed, ref, nextTick } from 'vue';
 import type { IncomePlanInput, IncomePlanResult } from '@bt/shared/finance-income';
 import { Button } from '@/components/lib/ui/button';
-import { Card } from '@/components/lib/ui/card';
+import WidgetWrapper from '@/components/widgets/components/widget-wrapper.vue';
+import ModuleBody from '@/components/widgets/components/module-body.vue';
+import { useModuleLayout } from '@/components/widgets/composables/use-module-layout';
+import { ChartPieIcon, WorkflowIcon } from '@lucide/vue';
 import ExpenseDonut from '@/components/widgets/expenses-structure/donut-chart.vue';
 import MoneyFlowChart from '@/pages/analytics/subpages/cash-flow/components/money-flow-chart.vue';
 import { incomeAllocation, incomeBreakdown } from './income-allocation';
@@ -21,6 +24,7 @@ const props = withDefaults(
 const emit = defineEmits<{ select: [categoryId: string] }>();
 const view = defineModel<'donut' | 'flow'>('view', { default: 'donut' });
 const expanded = ref<string[]>([]);
+const { bounded } = useModuleLayout();
 const allocation = computed(() => incomeAllocation(props.result, props.divisor));
 const details = computed(() => incomeBreakdown(props.result, props.input, props.divisor));
 const chartData = computed(
@@ -60,34 +64,44 @@ function toggle(id: string) {
 }
 </script>
 <template>
-  <Card class="overflow-hidden" :data-testid="part === 'breakdown' ? 'income-breakdown-card' : 'income-allocation'">
-    <div class="flex flex-wrap items-center justify-between gap-3 p-5 sm:p-6">
-      <h2 class="text-lg font-semibold">{{ part === 'breakdown' ? 'Income breakdown' : 'Income allocation' }}</h2>
-      <div v-if="part !== 'breakdown'" class="flex gap-1" role="group" aria-label="Allocation view">
+  <WidgetWrapper
+    class="@container min-h-0 min-w-0 overflow-hidden"
+    :data-testid="part === 'breakdown' ? 'income-breakdown-card' : 'income-allocation'"
+  >
+    <template #title>{{ part === 'breakdown' ? 'Income breakdown' : 'Income allocation' }}</template>
+    <template v-if="part !== 'breakdown'" #action>
+      <div class="bg-muted/60 flex shrink-0 gap-0.5 rounded-lg p-0.5" role="group" aria-label="Allocation view">
         <Button
-          size="sm"
+          size="icon-sm"
+          aria-label="Doughnut"
+          title="Doughnut"
           :variant="view === 'donut' ? 'secondary' : 'ghost'"
           :aria-pressed="view === 'donut'"
           @click="view = 'donut'"
-          >Doughnut</Button
-        >
+          ><ChartPieIcon class="size-3.5"
+        /></Button>
         <Button
-          size="sm"
+          size="icon-sm"
+          aria-label="Flow diagram"
+          title="Flow diagram"
           :variant="view === 'flow' ? 'secondary' : 'ghost'"
           :aria-pressed="view === 'flow'"
           @click="view = 'flow'"
-          >Flow diagram</Button
-        >
+          ><WorkflowIcon class="size-3.5"
+        /></Button>
       </div>
-    </div>
+    </template>
     <template v-if="allocation">
-      <div v-if="part !== 'breakdown' && view === 'donut'" class="px-5 pb-5">
+      <div
+        v-if="part !== 'breakdown' && view === 'donut'"
+        :class="bounded ? 'relative min-h-0 flex-1' : 'h-64 @lg:h-80'"
+      >
         <ExpenseDonut
           :data="chartData"
           :total-amount="allocation.flow.income"
           :total-label="periodLabel + ' income'"
           chart-label="Income allocation doughnut"
-          height-class="h-72 sm:h-80"
+          height-class="h-full min-h-0"
           show-percentages
           selection-mode="highlight"
           @category-click="select"
@@ -95,20 +109,20 @@ function toggle(id: string) {
       </div>
       <div
         v-else-if="part !== 'breakdown'"
-        class="max-w-full overflow-x-auto overscroll-x-contain px-5 pb-6"
+        :class="bounded ? 'relative min-h-0 flex-1' : 'min-w-0'"
         role="region"
-        aria-label="Income flow, scroll for details"
-        tabindex="0"
+        aria-label="Income flow"
       >
         <MoneyFlowChart
-          class="min-w-190"
+          :fit-height="bounded"
+          responsive
           :flow="allocation.flow"
           :branches="allocation.branches"
           total-label="Total income"
           chart-label="Income allocation flow diagram"
         />
       </div>
-      <div
+      <ModuleBody
         v-if="part !== 'chart'"
         class="divide-border/60 border-border/60 divide-y border-t"
         data-testid="income-breakdown"
@@ -157,8 +171,8 @@ function toggle(id: string) {
             class="bg-muted/20 border-border/50 mx-5 mb-4 border-t"
           />
         </div>
-      </div>
+      </ModuleBody>
     </template>
     <p v-else class="text-muted-foreground p-6 text-sm">Add salary and tax settings to view a balanced allocation.</p>
-  </Card>
+  </WidgetWrapper>
 </template>

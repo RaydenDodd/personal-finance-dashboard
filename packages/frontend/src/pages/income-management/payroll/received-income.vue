@@ -19,6 +19,10 @@ import { payrollRange, payrollToday, type PayrollRange } from './date-range';
 import { usePayroll } from './use-payroll';
 import { money, payrollCategories } from './format';
 import { payrollPeriodFieldUnavailable } from './completeness';
+import CategoryLegend from './category-legend.vue';
+import { useModuleLayout } from '@/components/widgets/composables/use-module-layout';
+const { bounded } = useModuleLayout();
+const plotHeight = ref(260);
 const props = withDefaults(defineProps<{ data?: PayrollDashboard; settingsKey?: string }>(), {
   settingsKey: 'payroll:received-income',
 });
@@ -83,6 +87,7 @@ const tooltip = reactive({
   category: null as PayrollCategory | null,
 });
 const selectedCategory = computed(() => categories.value.find((c) => c.id === tooltip.category));
+const compactControls = computed(() => width.value < 640);
 const selectedAmount = computed(() =>
   tooltip.row ? (tooltip.category ? tooltip.row.allocations[tooltip.category] : tooltip.row.totalCompensation) : 0,
 );
@@ -108,7 +113,7 @@ function render() {
   const root = d3.select(svgRef.value),
     colors = getChartColors(),
     w = Math.max(200, width.value),
-    h = w < 500 ? 260 : 320,
+    h = bounded.value ? plotHeight.value : w < 500 ? 260 : 320,
     m = { left: w < 400 ? 42 : 60, right: w < 400 ? 10 : 20, top: 18, bottom: 28 };
   root.selectAll('*').remove();
   root.attr('viewBox', `0 0 ${w} ${h}`);
@@ -302,15 +307,19 @@ function render() {
 watch([rows, visible, percentage, totalCompensation, currentTheme], () => nextTick(render), { deep: true });
 useResizeObserver(containerRef, (e) => {
   width.value = e[0]?.contentRect.width ?? 700;
+  if (bounded.value) plotHeight.value = Math.max(120, e[0]?.contentRect.height ?? 260);
   render();
 });
 onMounted(() => nextTick(render));
 </script>
 <template>
-  <Card class="min-w-0 p-5 sm:p-6" data-testid="payroll-received-income"
-    ><header class="mb-3 flex items-center justify-between gap-3">
+  <Card
+    class="@container flex min-h-0 min-w-0 flex-col overflow-hidden"
+    :class="bounded ? 'h-full p-4' : 'p-5 sm:p-6'"
+    data-testid="payroll-received-income"
+    ><header class="mb-2 flex shrink-0 items-center justify-between gap-2">
       <div>
-        <h2 class="text-lg font-semibold">Received income</h2>
+        <h2 class="font-semibold">Received income</h2>
         <p class="text-muted-foreground text-xs">Total compensation</p>
       </div>
       <Popover
@@ -367,6 +376,15 @@ onMounted(() => nextTick(render));
               </option>
             </select></label
           >
+          <div v-if="compactControls" class="space-y-2">
+            <p class="text-sm font-medium">Categories</p>
+            <CategoryLegend
+              :categories="categories"
+              :hidden="hidden"
+              :total-compensation="totalCompensation"
+              @toggle="toggle"
+            />
+          </div>
           <p class="text-muted-foreground text-xs">
             Employer retirement is included. Hover a segment for its amount and share; hover a dot for total
             compensation.
@@ -374,7 +392,12 @@ onMounted(() => nextTick(render));
         ></Popover
       >
     </header>
-    <DateRange v-model="range" :earliest="data?.summary.coverageFrom ?? '1900-01-01'" class="mb-3" />
+    <DateRange
+      v-model="range"
+      :earliest="data?.summary.coverageFrom ?? '1900-01-01'"
+      :compact="bounded"
+      class="mb-2 shrink-0"
+    />
     <div v-if="query.isLoading.value && !data" class="bg-muted h-80 animate-pulse rounded-md" />
     <p v-else-if="query.isError.value" class="text-destructive-text py-10 text-center text-sm">
       Received income could not be loaded.
@@ -382,32 +405,26 @@ onMounted(() => nextTick(render));
     <p v-else-if="!rows.length" class="text-muted-foreground py-16 text-center text-sm">
       No payroll recorded for this period.
     </p>
-    <div v-else ref="containerRef" class="relative">
+    <div v-else ref="containerRef" class="relative" :class="bounded && 'min-h-0 flex-1'">
       <svg
         ref="svgRef"
         class="w-full"
-        :style="{ height: width < 500 ? '260px' : '320px' }"
+        :style="{ height: bounded ? '100%' : width < 500 ? '260px' : '320px' }"
         role="img"
         aria-label="Actual payroll allocation stacked bars and total compensation line"
       />
     </div>
-    <div class="mt-2 flex flex-wrap justify-center gap-x-2 gap-y-0.5" data-chart-legend>
-      <Button
-        v-for="category in categories"
-        :key="category.id"
-        variant="ghost"
-        size="sm"
-        class="h-6 gap-1 px-1.5 text-[11px]"
-        :aria-pressed="!hidden.includes(category.id)"
-        @click="toggle(category.id)"
-        ><span class="size-2 rounded-sm" :style="{ background: category.color }" /><span
-          :class="['text-muted-foreground', hidden.includes(category.id) && 'line-through opacity-60']"
-          >{{ category.name }}</span
-        ></Button
-      ><span class="text-muted-foreground flex items-center gap-1.5 px-2 text-xs"
-        ><span class="bg-primary h-0.5 w-4" />{{ totalCompensation ? 'Total compensation' : 'Gross earnings' }}</span
-      >
-    </div>
+    <CategoryLegend
+      v-if="!compactControls"
+      class="mt-2 shrink-0"
+      :categories="categories"
+      :hidden="hidden"
+      :total-compensation="totalCompensation"
+      @toggle="toggle"
+    />
+    <p v-else class="text-muted-foreground mt-2 flex shrink-0 items-center justify-center gap-1.5 text-xs">
+      <span class="bg-primary h-0.5 w-4" />Total compensation
+    </p>
     <p v-if="percentage" class="text-muted-foreground mt-2 text-xs">
       Percent of total compensation. Dollar amounts are available in the tooltip.
     </p>

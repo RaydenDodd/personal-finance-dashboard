@@ -22,6 +22,9 @@ import DateRange from './date-range.vue';
 import { payrollRange, payrollToday, type PayrollRange } from './date-range';
 import { usePayroll } from './use-payroll';
 import { money } from './format';
+import { useModuleLayout } from '@/components/widgets/composables/use-module-layout';
+const { bounded } = useModuleLayout();
+const plotHeight = ref(250);
 const props = withDefaults(defineProps<{ data?: PayrollDashboard; settingsKey?: string }>(), {
   settingsKey: 'payroll:salary-history',
 });
@@ -68,7 +71,7 @@ function render() {
   const colors = getChartColors(),
     root = d3.select(svgRef.value),
     w = Math.max(200, width.value),
-    h = w < 500 ? 250 : 300,
+    h = bounded.value ? plotHeight.value : w < 500 ? 250 : 300,
     m = { left: w < 400 ? 42 : 58, right: w < 400 ? 10 : 18, top: 26, bottom: 32 };
   root.selectAll('*').remove();
   root.attr('viewBox', `0 0 ${w} ${h}`);
@@ -248,15 +251,19 @@ function render() {
 watch([allEvents, bounds, currentTheme], () => nextTick(render), { deep: true });
 useResizeObserver(containerRef, (entries) => {
   width.value = entries[0]?.contentRect.width ?? 700;
+  if (bounded.value) plotHeight.value = Math.max(120, entries[0]?.contentRect.height ?? 250);
   render();
 });
 onMounted(() => nextTick(render));
 </script>
 <template>
-  <Card class="min-w-0 p-5 sm:p-6" data-testid="payroll-salary-history"
-    ><header class="mb-3 flex items-center justify-between gap-3">
+  <Card
+    class="@container flex min-h-0 min-w-0 flex-col overflow-hidden"
+    :class="bounded ? 'h-full p-4' : 'p-5 sm:p-6'"
+    data-testid="payroll-salary-history"
+    ><header class="mb-2 flex shrink-0 items-center justify-between gap-2">
       <div class="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5">
-        <h2 class="text-lg font-semibold">Salary history</h2>
+        <h2 class="font-semibold">Salary history</h2>
         <span
           v-if="data?.summary.salaryGrowthPercent != null"
           data-testid="salary-growth-badge"
@@ -272,7 +279,7 @@ onMounted(() => nextTick(render));
             class="size-3.5"
           />
           {{ data.summary.salaryGrowthPercent > 0 ? '+' : '' }}{{ data.summary.salaryGrowthPercent.toFixed(1) }}% base
-          salary growth
+          <span :class="width < 640 && 'sr-only'">salary growth</span>
         </span>
       </div>
       <Popover
@@ -298,16 +305,16 @@ onMounted(() => nextTick(render));
         ></Popover
       >
     </header>
-    <DateRange v-model="range" :earliest="earliest" class="mb-3" />
+    <DateRange v-model="range" :earliest="earliest" :compact="bounded" class="mb-2 shrink-0" />
     <div v-if="query.isLoading.value && !data" class="bg-muted h-72 animate-pulse rounded-md" />
     <p v-else-if="!allEvents.length" class="text-muted-foreground py-16 text-center text-sm">
       Import payroll or add an earlier salary from Manage payroll.
     </p>
-    <div v-else ref="containerRef" class="relative w-full">
+    <div v-else ref="containerRef" class="relative w-full" :class="bounded && 'min-h-0 flex-1'">
       <svg
         ref="svgRef"
         class="w-full"
-        :style="{ height: width < 500 ? '250px' : '300px' }"
+        :style="{ height: bounded ? '100%' : width < 500 ? '250px' : '300px' }"
         role="img"
         aria-label="Annualized base salary step chart"
       />

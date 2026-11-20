@@ -1,5 +1,10 @@
 <template>
-  <div ref="containerRef" class="relative w-full" @pointercancel="tooltip.visible = false">
+  <div
+    ref="containerRef"
+    class="relative w-full min-w-0"
+    :class="fitHeight && 'h-full min-h-0'"
+    @pointercancel="tooltip.visible = false"
+  >
     <svg ref="svgRef" class="block w-full" role="img" :aria-label="chartLabel ?? 'Cash flow diagram'"></svg>
 
     <div
@@ -57,6 +62,8 @@ const props = defineProps<{
   branches?: MoneyFlowBranch[];
   totalLabel?: string;
   chartLabel?: string;
+  fitHeight?: boolean;
+  responsive?: boolean;
 }>();
 
 const { t } = useI18n();
@@ -209,11 +216,13 @@ const renderChart = () => {
     d3.select(svgRef.value).selectAll('*').remove();
     return;
   }
-  const grouped = flow.expenseGroups.length > 0;
-  const columns = grouped ? GROUPED_COLUMNS : COLUMNS;
-
   const colors = getChartColors();
-  const width = containerRef.value.clientWidth;
+  const availableHeight = containerRef.value.clientHeight;
+  const compact =
+    props.responsive && (containerRef.value.clientWidth < 620 || (props.fitHeight && availableHeight < 540));
+  const grouped = !compact && flow.expenseGroups.length > 0;
+  const columns = compact ? { hub: 0.45, mid: 0.78, group: 0 } : grouped ? GROUPED_COLUMNS : COLUMNS;
+  const width = props.responsive ? Math.max(440, containerRef.value.clientWidth) : containerRef.value.clientWidth;
   const fontFamily = getComputedStyle(svgRef.value).fontFamily;
   const nameFont = `600 ${LABEL_FONT_SIZE}px ${fontFamily}`;
   const detailFont = `${DETAIL_FONT_SIZE}px ${fontFamily}`;
@@ -258,6 +267,8 @@ const renderChart = () => {
     const detailWidth = textWidth({ text: `${amount} ${share}`, font: detailFont });
     const text = nodeLabel({ node, t });
     const row = { node, box, content, key, detailed };
+    if (compact && nameOnly && detailWidth > max)
+      return { ...row, name: fitText({ text, font: nameFont, max }), amount, share: '' };
     if (nameOnly && !detailed && textWidth({ text, font: nameFont }) + detailWidth + 5 > max) {
       return { ...row, name: fitText({ text, font: nameFont, max }), amount: '', share: '' };
     }
@@ -329,7 +340,10 @@ const renderChart = () => {
       shareLabel: t('analytics.cashFlow.composition.shareOfSavings'),
     },
   ];
-  const outflows = (props.branches ?? allOutflows).filter((n) => n.value > 0);
+  const originalOutflows = (props.branches ?? allOutflows).filter((n) => n.value > 0);
+  // Narrow tiles show the same major branches as Expenses structure. Their full
+  // item breakdown remains available in the existing tooltip and larger tiles.
+  const outflows = compact ? originalOutflows.map((node) => ({ ...node, items: [] })) : originalOutflows;
   const isTerminal = ({ outflow }: { outflow: Outflow }) => outflow.items.length === 0;
   const rightNodes = outflows.flatMap((o) => o.items);
 
@@ -359,6 +373,12 @@ const renderChart = () => {
     rows: [
       amountRow({ value: node.value, color: node.color }),
       ...(flow.income > 0 ? [{ label: shareOfIncome, value: formatShare(node.value / flow.income) }] : []),
+      ...(compact && node.id !== 'taxes'
+        ? originalOutflows
+            .find((n) => n.id === node.id)!
+            .items.slice(0, 6)
+            .map((n) => ({ label: n.name, value: formatBaseCurrency(n.value), color: node.color }))
+        : []),
       ...(node.id === 'taxes' && flow.taxNodes.length > 1
         ? flow.taxNodes.map((n) => ({ label: n.name, value: formatBaseCurrency(n.value), color: n.color }))
         : []),
@@ -382,7 +402,9 @@ const renderChart = () => {
     outflows.findIndex((outflow) => !isTerminal({ outflow })),
   );
   const rows = Math.max(flow.sources.length, outflows.length, rightNodes.length + terminalMidNodes);
-  const height = Math.max(MIN_HEIGHT, rows * (grouped ? GROUPED_ROW_HEIGHT : ROW_HEIGHT));
+  const height = props.fitHeight
+    ? Math.max(160, availableHeight)
+    : Math.max(compact ? 240 : MIN_HEIGHT, rows * (grouped ? GROUPED_ROW_HEIGHT : ROW_HEIGHT));
   const scale = (height - (rows - 1) * NODE_GAP) / hub;
 
   const leftBoxes = stack({ values: flow.sources.map((n) => n.value), scale });
@@ -446,7 +468,7 @@ const renderChart = () => {
   );
   const svg = d3.select(svgRef.value);
   svg.selectAll('*').remove();
-  svg.attr('viewBox', `0 0 ${width} ${height}`).attr('height', height);
+  svg.attr('viewBox', `0 0 ${width} ${height}`).attr('height', props.fitHeight ? '100%' : height);
 
   const links = svg.append('g');
   const nodes = svg.append('g');
@@ -784,12 +806,17 @@ const renderChart = () => {
     const label = labels
       .append('text')
       .attr('x', xMid + HUB_WIDTH + LABEL_OFFSET)
-      .attr('y', Math.max(LABEL_FONT_SIZE, (box.y0 + box.y1) / 2 + CENTERED_BASELINE_OFFSET))
+      .attr('y', Math.max(LABEL_FONT_SIZE, (box.y0 + box.y1) / 2 + (compact ? -3 : CENTERED_BASELINE_OFFSET)))
       .attr('fill', colors.foreground)
       .attr('font-weight', 600)
       .attr('pointer-events', 'none')
-      .text(node.name);
+      .text(
+        props.responsive
+          ? fitText({ text: node.name, font: nameFont, max: width - (xMid + HUB_WIDTH + LABEL_OFFSET) })
+          : node.name,
+      );
     const detail = label.append('tspan').attr('font-size', DETAIL_FONT_SIZE).attr('font-weight', 400);
+    if (compact) detail.attr('x', xMid + HUB_WIDTH + LABEL_OFFSET).attr('dy', DETAIL_LINE_OFFSET);
     detail.append('tspan').text(` ${compactAmount(node.value)}`);
     if (flow.income > 0) {
       detail
@@ -804,17 +831,32 @@ const renderChart = () => {
 // redraw, and DOM writes must happen outside the ResizeObserver delivery cycle.
 let renderFrame = 0;
 let observedWidth = -1;
+let observedHeight = -1;
 const scheduleRender = () => {
   cancelAnimationFrame(renderFrame);
   renderFrame = requestAnimationFrame(renderChart);
 };
 useResizeObserver(containerRef, ([entry]) => {
-  if (!entry || entry.contentRect.width === observedWidth) return;
+  if (
+    !entry ||
+    (entry.contentRect.width === observedWidth && (!props.fitHeight || entry.contentRect.height === observedHeight))
+  )
+    return;
   observedWidth = entry.contentRect.width;
+  observedHeight = entry.contentRect.height;
   scheduleRender();
 });
 watch(
-  [() => props.flow, () => props.branches, () => props.totalLabel, locale, currentTheme, baseCurrency],
+  [
+    () => props.flow,
+    () => props.branches,
+    () => props.totalLabel,
+    () => props.fitHeight,
+    () => props.responsive,
+    locale,
+    currentTheme,
+    baseCurrency,
+  ],
   scheduleRender,
   { deep: true, flush: 'post' },
 );

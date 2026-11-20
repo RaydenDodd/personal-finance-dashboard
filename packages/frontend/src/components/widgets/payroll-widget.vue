@@ -76,7 +76,7 @@ const detail = computed(
 </script>
 
 <template>
-  <div class="h-full min-w-0 overflow-auto rounded-xl" :data-payroll-widget="id">
+  <div class="h-full min-h-0 min-w-0" :data-payroll-widget="id">
     <template v-if="projected">
       <LoadingState v-if="planPending" />
       <ErrorState v-else-if="planError" message="Projected income could not be loaded." @retry="reloadPlans()" />

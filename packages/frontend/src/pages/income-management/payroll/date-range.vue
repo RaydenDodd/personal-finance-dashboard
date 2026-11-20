@@ -43,17 +43,18 @@ function apply() {
 </script>
 <template>
   <div
-    class="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5"
+    class="@container flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1.5"
     data-testid="payroll-date-range"
     data-chart-controls
   >
-    <div class="bg-muted/60 grid w-full max-w-full grid-cols-8 items-center gap-0.5 rounded-lg p-1 sm:w-fit">
+    <div class="bg-muted/60 grid w-full max-w-full grid-cols-8 items-center gap-0.5 rounded-lg p-0.5 @2xl:w-fit">
       <Button
         v-for="preset in presets"
         :key="preset.id"
         size="sm"
         :variant="model.preset === preset.id ? 'secondary' : 'ghost'"
-        class="h-7 min-w-0 px-0.5 text-[11px] sm:px-2 sm:text-xs"
+        class="min-w-0 px-0.5 text-[11px] @2xl:px-2"
+        :class="compact ? 'h-6' : 'h-7'"
         :aria-pressed="model.preset === preset.id"
         @click="choose(preset.id)"
         >{{ preset.name }}</Button
