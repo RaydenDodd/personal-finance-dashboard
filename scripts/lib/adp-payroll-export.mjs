@@ -73,7 +73,23 @@ export async function collectAdpPayroll({ workerId, pauseMs = 750, timeoutMs = 3
     const adjustment = detailAdjustment ?? summaryAdjustment;
     if (adjustment === undefined) throw new Error('ADP adjustment status is missing. Export stopped without guessing.');
     // The requested detail URL provides identity; history supplies omitted adjustment metadata.
-    payStatements.push({ ...raw, statementId: id, payAdjustmentIndicator: adjustment });
+    const payrollFields = [
+      'payDate',
+      'payPeriod',
+      'netPayAmount',
+      'grossPayAmount',
+      'grossPayYTDAmount',
+      'totalHours',
+      'earnings',
+      'deductionCategoryDetails',
+      'deductions',
+      'memos',
+    ];
+    payStatements.push({
+      ...Object.fromEntries(payrollFields.filter((k) => raw[k] !== undefined).map((k) => [k, raw[k]])),
+      statementId: id,
+      payAdjustmentIndicator: adjustment,
+    });
     if (index + 1 < ids.length) await new Promise((resolve) => setTimeout(resolve, pauseMs));
   }
   // Matches the already verified detailed-export schema; do not emit browser/session metadata.

@@ -1,5 +1,5 @@
 import type { PayrollDashboard } from '@bt/shared/types/payroll';
-import { mount } from '@vue/test-utils';
+import { flushPromises, mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { nextTick, reactive, ref } from 'vue';
 
@@ -7,14 +7,29 @@ import ActualSummary from './actual-summary.vue';
 import DateRange from './date-range.vue';
 import PayrollManagement from './management.vue';
 
-const calls = vi.hoisted(() => ({ save: vi.fn(), invalidate: vi.fn() }));
+const calls = vi.hoisted(() => ({
+  save: vi.fn(),
+  invalidate: vi.fn(),
+  get: vi.fn(),
+  import: vi.fn(),
+  companion: vi.fn(),
+  success: vi.fn(),
+}));
+vi.mock('./adp-companion', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./adp-companion')>()),
+  startAdpCompanion: calls.companion,
+}));
+vi.mock('@/components/notification-center', () => ({
+  useNotificationCenter: () => ({ addSuccessNotification: calls.success }),
+}));
 vi.mock('@/api/payroll', () => ({
   savePayrollManagement: calls.save,
-  importPayroll: vi.fn(),
+  importPayroll: calls.import,
   linkPayrollDeposits: vi.fn(),
   parsePayrollPdf: vi.fn(),
   importReviewedPayroll: vi.fn(),
   reconcilePayrollRetirement: vi.fn(),
+  getPayroll: calls.get,
 }));
 vi.mock('./use-payroll', () => ({
   PAYROLL_QUERY_KEY: 'actual-payroll',
@@ -105,6 +120,10 @@ describe('actual payroll components', () => {
   beforeEach(() => {
     calls.save.mockReset().mockResolvedValue({});
     calls.invalidate.mockReset().mockResolvedValue(undefined);
+    calls.import.mockReset();
+    calls.get.mockReset();
+    calls.companion.mockReset();
+    calls.success.mockReset();
   });
   it('keeps current base salary distinct from historical earnings and employer-funded compensation', () => {
     const wrapper = mount(ActualSummary, { props: { data: data() } });
@@ -184,5 +203,80 @@ describe('actual payroll components', () => {
       expect.objectContaining({ revision: 3, settings: expect.objectContaining({ reminderDays: 45 }) }),
     );
     expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual([null]);
+  });
+  function syncView() {
+    const sample = data();
+    sample.employments.push({
+      ...sample.employments[0]!,
+      id: 'old',
+      employerName: 'Previous employer',
+      status: 'previous',
+    });
+    sample.statements = [
+      { source: 'adp', statementId: 'known-old', employmentId: 'old' },
+    ] as PayrollDashboard['statements'];
+    const Slot = { template: '<div><slot /></div>' };
+    calls.get.mockResolvedValue(sample);
+    return mount(PayrollManagement, {
+      props: { data: sample, modelValue: 'sync' },
+      global: {
+        stubs: {
+          Dialog: Slot,
+          DialogScrollContent: Slot,
+          DialogHeader: Slot,
+          DialogTitle: Slot,
+          DialogDescription: Slot,
+        },
+      },
+    });
+  }
+  it('automatically previews every employer before importing, retains mappings, and closes on success', async () => {
+    const cancel = vi.fn();
+    calls.companion.mockReturnValue({
+      result: Promise.resolve([{ statementId: 'known-old' }, { statementId: 'new-current' }]),
+      cancel,
+    });
+    const order: string[] = [];
+    calls.import.mockImplementation(async (input) => {
+      order.push(`${input.previewOnly ? 'preview' : 'write'}:${input.employmentId}`);
+      return {
+        inserted: input.previewOnly ? 0 : 1,
+        updated: 0,
+        duplicates: 0,
+        rejected: 0,
+        revision: input.previewOnly ? 3 : input.revision + 1,
+      };
+    });
+    const wrapper = syncView();
+    await wrapper
+      .findAll('button')
+      .find((b) => b.text() === 'Open ADP and sync')!
+      .trigger('click');
+    await flushPromises();
+    expect(order).toEqual(['preview:old', 'preview:employment', 'write:old', 'write:employment']);
+    expect(calls.import.mock.calls[3]![0].revision).toBe(4);
+    expect(JSON.parse(calls.import.mock.calls[2]![0].content).payStatements).toEqual([{ statementId: 'known-old' }]);
+    expect(calls.success).toHaveBeenCalledOnce();
+    expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual([null]);
+    expect(cancel).toHaveBeenCalled();
+    wrapper.unmount();
+  });
+  it('does not write any employment group if a preview rejects a record', async () => {
+    calls.companion.mockReturnValue({
+      result: Promise.resolve([{ statementId: 'known-old' }, { statementId: 'new-current' }]),
+      cancel: vi.fn(),
+    });
+    calls.import.mockResolvedValueOnce({ rejected: 0 }).mockResolvedValueOnce({ rejected: 1 });
+    const wrapper = syncView();
+    await wrapper
+      .findAll('button')
+      .find((b) => b.text() === 'Open ADP and sync')!
+      .trigger('click');
+    await flushPromises();
+    expect(calls.import).toHaveBeenCalledTimes(2);
+    expect(calls.import.mock.calls.every(([input]) => input.previewOnly)).toBe(true);
+    expect(calls.success).not.toHaveBeenCalled();
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined();
+    wrapper.unmount();
   });
 });

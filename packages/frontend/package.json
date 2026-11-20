@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "prebuild": "node ../../scripts/adp-companion/package.mjs --publish",
     "build": "vue-tsc --noEmit && vite build",
     "lint": "oxlint . && node scripts/check-i18n-keys.mjs",
     "typecheck": "vue-tsc --noEmit -p tsconfig.json",
@@ -70,6 +71,7 @@
     "@types/lodash-es": "^4.17.12",
     "@vitejs/plugin-vue": "^6.0.7",
     "@vue/test-utils": "^2.4.6",
+    "adm-zip": "0.6.1",
     "autoprefixer": "^10.4.20",
     "jsdom": "^29.1.1",
     "tailwindcss": "^4.2.1",

@@ -50,6 +50,9 @@ COPY tsconfig.json ./
 COPY packages/shared ./packages/shared
 COPY packages/frontend ./packages/frontend
 COPY packages/landing ./packages/landing
+COPY LICENSE ./LICENSE
+COPY scripts/adp-companion ./scripts/adp-companion
+COPY scripts/lib/adp-interactive-sync.mjs scripts/lib/adp-payroll-export.mjs ./scripts/lib/
 
 # vue-tsc + vite exceed Node's default heap on hosts with less than ~16 GB RAM
 # (the default scales with system memory), so the heap is set explicitly.

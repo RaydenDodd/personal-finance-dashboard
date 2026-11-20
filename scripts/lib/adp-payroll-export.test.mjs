@@ -150,6 +150,25 @@ test('detail identity mismatch and interrupted fetch cannot emit a successful ex
   await assert.rejects(collectAdpPayroll({ workerId, pauseMs: 0, timeoutMs: 2 }), /aborted/);
 });
 
+test('only payroll fields leave the authenticated page', async (t) => {
+  let calls = 0;
+  t.mock.method(globalThis, 'fetch', async () =>
+    ++calls === 1
+      ? response({ payStatements: [history.payStatements[0]] })
+      : response({
+          ...detail('stmt-1'),
+          accessToken: 'synthetic-token',
+          cookies: 'synthetic-cookie',
+          loginInputs: { password: 'synthetic-only' },
+        }),
+  );
+  const result = await collectAdpPayroll({ workerId, pauseMs: 0 });
+  assert.equal(result.payStatements[0].accessToken, undefined);
+  assert.equal(result.payStatements[0].cookies, undefined);
+  assert.equal(result.payStatements[0].loginInputs, undefined);
+  assert.deepEqual(result.payStatements[0].grossPayAmount, detail('stmt-1').grossPayAmount);
+});
+
 for (const failure of [false, true]) {
   test(`isolated nonpersistent browser is cleaned on ${failure ? 'failure' : 'success'}`, async () => {
     const calls = [];

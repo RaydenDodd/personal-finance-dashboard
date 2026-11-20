@@ -1,0 +1,5 @@
+export const config = {
+  extensionId: 'jiinbmaejjmmoiknlkfolonmkhonjfaj',
+  webOrigin: 'https://raydenfinance.duckdns.org',
+  hostName: 'com.moneymatter.adp_companion',
+};

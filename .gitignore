@@ -181,6 +181,7 @@ packages/backend/.e2e-template-cache/
 .env.pi.local
 .env.pi.local.tmp
 private/
+/packages/frontend/public/downloads/moneymatter-adp-companion.zip
 .preview/
 playwright-report/
 test-results/

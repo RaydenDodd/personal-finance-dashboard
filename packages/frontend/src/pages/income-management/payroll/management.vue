@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import {
   importPayroll,
+  getPayroll,
   savePayrollManagement,
   linkPayrollDeposits,
   parsePayrollPdf,
@@ -21,7 +22,10 @@ import type {
   PayrollStatement,
 } from '@bt/shared/types/payroll';
 import { useQuery, useQueryClient } from '@tanstack/vue-query';
-import { computed, ref, watch } from 'vue';
+import { computed, onScopeDispose, ref, watch } from 'vue';
+import { useNotificationCenter } from '@/components/notification-center';
+import { startAdpCompanion, AdpCompanionError } from './adp-companion';
+import { planAdpImport } from './adp-import-plan';
 import LegacyPaychecks from '../index.vue';
 import { money } from './format';
 import { PAYROLL_QUERY_KEY } from './use-payroll';
@@ -67,6 +71,21 @@ const draft = ref<PayrollManagementInput | null>(null),
   selectedStatement = ref<PayrollStatement | null>(null),
   depositSelections = ref<string[]>([]);
 const salaryEdit = ref<PayrollSalaryEvent | null>(null);
+const adpBusy = ref(false),
+  adpPhase = ref(''),
+  adpSetup = ref(false),
+  adpEmploymentId = ref('');
+let adpJob: ReturnType<typeof startAdpCompanion> | null = null;
+let adpCancelled = false;
+const { addSuccessNotification } = useNotificationCenter();
+function cancelAdp() {
+  adpCancelled = true;
+  adpJob?.cancel();
+  adpJob = null;
+  adpBusy.value = false;
+  adpPhase.value = '';
+}
+onScopeDispose(cancelAdp);
 const pdfRecord = ref<IncomePaycheck | null>(null),
   pdfHash = ref<string | null>(null),
   pdfIssues = ref<string[]>([]),
@@ -110,6 +129,7 @@ function refreshDraft() {
 watch(
   section,
   () => {
+    if (section.value !== 'sync') cancelAdp();
     refreshDraft();
     error.value = '';
     notice.value = '';
@@ -121,6 +141,8 @@ watch(
     pdfIssues.value = [];
     pdfReviewed.value = false;
     retirementPreview.value = null;
+    adpEmploymentId.value ||=
+      props.data.employments.find((e) => e.status === 'current')?.id ?? props.data.employments[0]?.id ?? '';
   },
   { immediate: true },
 );
@@ -129,6 +151,71 @@ const employerName = (id: string) =>
 async function saved() {
   await client.invalidateQueries({ queryKey: [PAYROLL_QUERY_KEY] });
   emit('saved');
+}
+async function syncAdp() {
+  if (adpBusy.value || !adpEmploymentId.value) return;
+  error.value = '';
+  adpSetup.value = false;
+  adpBusy.value = true;
+  adpCancelled = false;
+  adpPhase.value = 'Opening the temporary ADP window';
+  const targetEmployment = adpEmploymentId.value;
+  try {
+    adpJob = startAdpCompanion((phase) => {
+      adpPhase.value =
+        phase === 'sign-in'
+          ? 'Sign in and complete MFA at ADP. If needed, open Pay statements.'
+          : 'Retrieving your payroll statements';
+    });
+    const records = await adpJob.result;
+    if (adpCancelled) return;
+    adpPhase.value = 'Checking payroll records';
+    const current = await getPayroll({ from: '1900-01-01', through: payrollToday() });
+    const plan = planAdpImport(current, records, targetEmployment);
+    // Validate every employment group before writing any group. New records use the explicit target above.
+    for (const group of plan) {
+      if (adpCancelled) return;
+      const checked = await importPayroll({ ...group, source: 'adp', revision: current.revision, previewOnly: true });
+      if (checked.rejected) throw new Error('ADP records need review; no automatic import was applied.');
+    }
+    let revision = current.revision,
+      inserted = 0,
+      updated = 0,
+      duplicates = 0;
+    adpPhase.value = 'Saving payroll updates';
+    for (const group of plan) {
+      if (adpCancelled) return;
+      const result = await importPayroll({ ...group, source: 'adp', revision, previewOnly: false });
+      if (result.rejected) throw new Error('Some records need review. Refresh before retrying.');
+      revision = result.revision;
+      inserted += result.inserted;
+      updated += result.updated;
+      duplicates += result.duplicates;
+    }
+    await saved();
+    addSuccessNotification(`ADP payroll updated: ${inserted} new, ${updated} corrected, ${duplicates} unchanged.`);
+    section.value = null;
+  } catch (value) {
+    if (adpCancelled) return;
+    const code = value instanceof AdpCompanionError ? value.code : '';
+    adpSetup.value = ['setup-required', 'helper-unavailable'].includes(code);
+    error.value = adpSetup.value
+      ? 'The desktop companion needs its one-time setup.'
+      : code === 'cancelled'
+        ? 'ADP window closed. No further import was started.'
+        : code === 'busy'
+          ? 'An ADP update is already open. Finish or cancel it first.'
+          : code === 'access-stopped'
+            ? 'ADP stopped access. The update was cancelled; sign in normally or try later.'
+            : code === 'timeout'
+              ? 'The ADP window timed out. Start a new update when ready.'
+              : 'ADP payroll could not be fully updated. Existing records are preserved; refresh and retry or use file import.';
+  } finally {
+    adpJob?.cancel();
+    adpJob = null;
+    adpBusy.value = false;
+    adpPhase.value = '';
+  }
 }
 async function save() {
   if (!draft.value) return;
@@ -393,21 +480,66 @@ async function reconcileRetirement(previewOnly: boolean) {
       <template v-if="section === 'sync'"
         ><div class="space-y-4 text-sm">
           <p>
-            Open the official ADP site and authenticate there, including MFA. Export your detailed payroll JSON, then
-            import it here. Updates run only when you initiate them; no background ADP synchronization occurs.
+            Open a temporary ADP window, sign in and complete MFA there. Your statements are retrieved and imported
+            automatically, then the ADP window closes.
           </p>
-          <Button as-child variant="outline"
-            ><a href="https://my.adp.com/" target="_blank" rel="noopener noreferrer">Open ADP</a></Button
-          >
+          <label class="block space-y-1.5 text-sm"
+            >New paychecks belong to
+            <select
+              v-model="adpEmploymentId"
+              :class="field"
+              :disabled="adpBusy"
+              aria-label="Employer for new ADP paychecks"
+            >
+              <option value="" disabled>Choose employment</option>
+              <option v-for="employment in data.employments" :key="employment.id" :value="employment.id">
+                {{ employment.employerName }}
+              </option>
+            </select>
+          </label>
+          <p class="text-muted-foreground text-xs">
+            Previously imported paychecks keep their verified employer. New statement IDs use the employment selected
+            above.
+          </p>
+          <div class="flex flex-wrap items-center gap-2">
+            <Button :disabled="adpBusy || !adpEmploymentId" @click="syncAdp">{{
+              adpBusy ? 'Updating payroll' : 'Open ADP and sync'
+            }}</Button>
+            <Button v-if="adpBusy" variant="outline" @click="cancelAdp">Cancel</Button>
+          </div>
+          <p v-if="adpBusy" role="status" class="text-muted-foreground text-sm">{{ adpPhase }}</p>
+          <div v-if="adpSetup" class="space-y-2 rounded-lg border p-3" data-testid="adp-companion-setup">
+            <p class="font-medium">One-time desktop setup</p>
+            <p class="text-muted-foreground text-xs">
+              The companion opens your isolated ADP window without saving passwords, MFA codes, profiles or session
+              tokens.
+            </p>
+            <Button as-child variant="outline" size="sm"
+              ><a href="/downloads/moneymatter-adp-companion.zip" download>Download Windows companion</a></Button
+            >
+            <ol class="list-inside list-decimal space-y-1 text-xs">
+              <li>Extract the download and run install.ps1 with PowerShell.</li>
+              <li>In Edge or Chrome Extensions, enable Developer mode and choose Load unpacked.</li>
+              <li>
+                Select the extension folder in your local MoneyMatter ADPCompanion directory, then reload this page.
+              </li>
+            </ol>
+            <p class="text-muted-foreground text-xs">
+              This desktop companion does not run inside iPhone Safari or the Home Screen app. File import remains
+              available there.
+            </p>
+          </div>
           <details class="rounded-md border p-3">
-            <summary class="hover:text-primary-text cursor-pointer font-medium">
-              Optional interactive local export helper
-            </summary>
-            <p class="text-muted-foreground mt-2">
-              On your own computer with this repository, run
-              <code class="text-foreground">node scripts/export-adp-payroll.mjs</code>. Sign in inside the local
-              browser, approve export, and import the resulting JSON here. The temporary authenticated browser closes
-              when the export finishes or fails. See <code>docs/PAYROLL-ADP-EXPORT.md</code>.
+            <summary class="hover:text-primary-text cursor-pointer font-medium">Other ways to update</summary>
+            <div class="mt-3 flex flex-wrap gap-2">
+              <Button as-child variant="outline" size="sm"
+                ><a href="https://my.adp.com/" target="_blank" rel="noopener noreferrer">Visit ADP</a></Button
+              >
+              <Button variant="outline" size="sm" @click="section = 'import'">Import a payroll file</Button>
+            </div>
+            <p class="text-muted-foreground mt-2 text-xs">
+              Updates run only when you start them; no background ADP synchronization occurs. The standalone export
+              helper remains available if preferred.
             </p>
           </details>
           <div class="divide-border/50 divide-y">
@@ -424,7 +556,6 @@ async function reconcileRetirement(previewOnly: boolean) {
               ><span>{{ data.status.statementCount }}</span>
             </p>
           </div>
-          <Button @click="section = 'import'">Import payroll JSON</Button>
         </div></template
       >
       <template v-if="section === 'import'"

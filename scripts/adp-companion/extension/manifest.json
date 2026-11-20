@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "MoneyMatter ADP Companion",
+  "version": "1.0.0",
+  "description": "Open a temporary ADP sign-in window and return your payroll to your own MoneyMatter page.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAurUDVplDSFy5LAzgFkmKnyu9QELve/5aAQPyc5BMTHSnkGgyKM7loXAgDaLO20kb6a2tC5xZoHbCdxoXxetYCsUJgl6Zw5KPDPoyOPLwWUpXNhTyEFpMDOYIUaFbwua0A6Zw30wECQQyR+b/HfVjp2KdDqCOkGW0QGrQT9F8jZ6I6z6C/v0s52LgW2OXkiGVtqXXeHZ+wIEkcom/PHDv+84QamvRw8WX5sdjLkl7+vd6nGRpcb34jttLz00d+kTqHd9d3QEw/eJpP1bF3gTEyNIx+bnFrQhnzch8z8837MsAH/FzGpgd2l4EUgfVkYes9ReLILAN39vDHcF44aHiMwIDAQAB",
+  "permissions": ["nativeMessaging"],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "externally_connectable": {
+    "matches": ["https://raydenfinance.duckdns.org/*"],
+    "ids": []
+  }
+}
