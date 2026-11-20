@@ -1,5 +1,7 @@
+import type { PayrollTotals, PayrollCategory } from '@bt/shared/types/payroll';
 import { z } from 'zod';
 
+import { emptyPayrollTotals, payrollCategories } from './payroll-normalize';
 import { incomeDate } from './schema';
 
 const amount = z.number().finite().min(0).max(1e9);
@@ -55,6 +57,32 @@ export const payrollManagementSchema = z.object({
   employments: z.array(payrollEmploymentSchema).max(200),
   manualSalaryEvents: z.array(payrollSalaryEventSchema).max(2000),
   settings: payrollSettingsSchema,
+  annualEvidence: z
+    .array(
+      z.object({
+        id: z.string().uuid(),
+        employmentId: z.string().uuid(),
+        year: z.number().int().min(1900).max(2200),
+        asOf: incomeDate,
+        statementIds: z.array(z.string().min(1).max(300)).min(1).max(200),
+        sourceLabel: z.string().trim().min(1).max(3000),
+        documentHash: z.string().regex(/^[a-f0-9]{64}$/),
+        totals: z.object(
+          Object.fromEntries(
+            Object.keys(emptyPayrollTotals()).map((k) => [k, z.number().finite().min(-1e9).max(1e9)]),
+          ) as Record<keyof PayrollTotals, z.ZodNumber>,
+        ),
+        allocations: z.object(
+          Object.fromEntries(payrollCategories.map((k) => [k, z.number().finite().min(-1e9).max(1e9)])) as Record<
+            PayrollCategory,
+            z.ZodNumber
+          >,
+        ),
+        incompleteFields: z.array(z.string().max(100)).max(30),
+      }),
+    )
+    .max(200)
+    .optional(),
 });
 export const payrollQuerySchema = z
   .object({

@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, ref, useTemplateRef } from 'vue';
 import { useQuery } from '@tanstack/vue-query';
-import { useElementSize, onClickOutside } from '@vueuse/core';
+import { useElementSize } from '@vueuse/core';
+import { useChartInteraction } from '@/composable/charts/use-chart-interaction';
 import { format } from 'date-fns';
 import { getIncomePlanPace } from '@/api/income-management';
 import PacePlot from '@/components/widgets/spending-pace-widget/pace-plot.vue';
@@ -47,10 +48,14 @@ const geometry = computed(() =>
   }),
 );
 const hoverIndex = ref<number | null>(null);
-onClickOutside(plot, () => {
-  hoverIndex.value = null;
+const { isScrolling } = useChartInteraction({
+  containerRef: plot,
+  clear: () => {
+    hoverIndex.value = null;
+  },
 });
 function pointer(e: PointerEvent) {
+  if (isScrolling()) return;
   const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
   hoverIndex.value = Math.round(
     Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)) * Math.max(0, points.value.length - 1),

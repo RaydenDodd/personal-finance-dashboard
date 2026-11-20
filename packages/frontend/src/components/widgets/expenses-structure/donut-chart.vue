@@ -40,6 +40,7 @@
 <script lang="ts" setup>
 import Button from '@/components/lib/ui/button/Button.vue';
 import { useFormatCurrency } from '@/composable';
+import { useChartInteraction } from '@/composable/charts/use-chart-interaction';
 import { useMediaQuery, useResizeObserver } from '@vueuse/core';
 import * as d3 from 'd3';
 import { ExternalLinkIcon } from '@lucide/vue';
@@ -76,6 +77,16 @@ const centerLabel = reactive({
   amount: '',
   percent: '',
   isHovering: false,
+});
+let clearHighlight = () => {};
+const { isScrolling } = useChartInteraction({
+  containerRef: chartContainerRef,
+  clear: () => {
+    if (!selectedCategoryId.value && !centerLabel.isHovering) return;
+    selectedCategoryId.value = null;
+    centerLabel.isHovering = false;
+    clearHighlight();
+  },
 });
 
 const renderChart = () => {
@@ -123,6 +134,7 @@ const renderChart = () => {
     centerLabel.isHovering = !!datum;
   };
   const select = (d: d3.PieArcDatum<ChartDataItem>) => {
+    if (isScrolling()) return;
     if (props.selectionMode === 'highlight' || isTouch.value) {
       selectedCategoryId.value = d.data.categoryId;
       highlight(d.data.categoryId);
@@ -130,6 +142,7 @@ const renderChart = () => {
     if (props.selectionMode === 'highlight' || !isTouch.value)
       emit('category-click', { categoryId: d.data.categoryId });
   };
+  clearHighlight = () => highlight(null);
   arcs
     .append('path')
     .attr('d', arc)

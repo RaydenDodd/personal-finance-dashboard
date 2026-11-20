@@ -5,15 +5,12 @@ import { Button } from '@/components/lib/ui/button';
 import { Card } from '@/components/lib/ui/card';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/lib/ui/popover';
 import { SettingsIcon } from '@lucide/vue';
-import {
-  ChartTooltip,
-  ChartTooltipHeader,
-  ChartTooltipRow,
-  ChartTooltipDivider,
-} from '@/components/common/charts/chart-tooltip';
+import { ChartTooltip, ChartTooltipHeader, ChartTooltipRow } from '@/components/common/charts/chart-tooltip';
 import { getChartColors } from '@/composable/charts/chart-colors';
 import { formatAxisCurrency } from '@/composable/charts/format-axis-currency';
 import { useChartTooltipPosition } from '@/composable/charts/use-chart-tooltip-position';
+import { STACKED_CHART_STYLE, stackedSegmentAt } from '@/composable/charts/stacked-chart';
+import { nearestChartBucket } from '@/composable/charts/chart-hit-testing';
 import { useLocalStorage, useResizeObserver } from '@vueuse/core';
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
 import * as d3 from 'd3';
@@ -56,7 +53,17 @@ watch(
       range.value = { ...range.value, from: value };
   },
 );
-const rows = computed(() => data.value?.received ?? []);
+const rows = computed(() => {
+  const covered = new Set(data.value?.annualEvidence?.flatMap((e) => e.statementIds) ?? []);
+  return (data.value?.received ?? []).filter(
+    (row) =>
+      row.basis === 'annual-ytd' ||
+      row.gross !== 0 ||
+      row.totalCompensation !== 0 ||
+      !row.statementIds.every((id) => covered.has(id)),
+  );
+});
+const annualHistory = computed(() => data.value?.includedAnnualEvidence ?? []);
 const categories = computed(() =>
   payrollCategories.filter(
     (c) =>
@@ -68,7 +75,20 @@ const containerRef = ref<HTMLElement | null>(null),
   svgRef = ref<SVGSVGElement | null>(null),
   tooltipRef = ref<HTMLElement | null>(null),
   width = ref(700);
-const tooltip = reactive({ visible: false, x: 0, y: 0, row: null as PayrollPeriod | null });
+const tooltip = reactive({
+  visible: false,
+  x: 0,
+  y: 0,
+  row: null as PayrollPeriod | null,
+  category: null as PayrollCategory | null,
+});
+const selectedCategory = computed(() => categories.value.find((c) => c.id === tooltip.category));
+const selectedAmount = computed(() =>
+  tooltip.row ? (tooltip.category ? tooltip.row.allocations[tooltip.category] : tooltip.row.totalCompensation) : 0,
+);
+const selectedPercent = computed(() =>
+  tooltip.row?.totalCompensation ? (selectedAmount.value / Math.abs(tooltip.row.totalCompensation)) * 100 : null,
+);
 const { updateTooltipPosition } = useChartTooltipPosition({ containerRef, tooltipRef, tooltip, strategy: 'fixed' });
 const lineTotal = (row: PayrollPeriod) => (totalCompensation.value ? row.totalCompensation : row.gross);
 const periodLabel = (row: PayrollPeriod) =>
@@ -87,9 +107,9 @@ function render() {
   tooltip.visible = false;
   const root = d3.select(svgRef.value),
     colors = getChartColors(),
-    w = Math.max(280, width.value),
+    w = Math.max(200, width.value),
     h = w < 500 ? 260 : 320,
-    m = { left: 55, right: 16, top: 20, bottom: 48 };
+    m = { left: w < 400 ? 42 : 60, right: w < 400 ? 10 : 20, top: 18, bottom: 28 };
   root.selectAll('*').remove();
   root.attr('viewBox', `0 0 ${w} ${h}`);
   if (!rows.value.length) return;
@@ -97,7 +117,10 @@ function render() {
     .scaleBand<number>()
     .domain(rows.value.map((_, i) => i))
     .range([m.left, w - m.right])
-    .padding(rows.value.length > 40 ? 0.2 : 0.35);
+    .padding(STACKED_CHART_STYLE.padding);
+  const barWidth = Math.min(x.bandwidth(), STACKED_CHART_STYLE.maxBarWidth);
+  const barOffset = (x.bandwidth() - barWidth) / 2;
+  const centres = rows.value.map((_, i) => (x(i) ?? 0) + x.bandwidth() / 2);
   const value = (r: PayrollPeriod, id: string) =>
     percentage.value
       ? lineTotal(r) > 0
@@ -159,14 +182,19 @@ function render() {
     .join('g')
     .attr('fill', (s) => categories.value.find((c) => c.id === s.key)!.color)
     .selectAll('rect')
-    .data((s) => s)
+    .data((s) => s.map((bounds, i) => ({ bounds, i, key: s.key })))
     .join('rect')
-    .attr('x', (_d, i) => x(i) ?? 0)
-    .attr('y', (d) => y(Math.max(d[0], d[1])))
-    .attr('height', (d) => Math.abs(y(d[0]) - y(d[1])))
-    .attr('width', x.bandwidth())
+    .attr('class', 'payroll-stack-segment')
+    .attr('data-category', (d) => d.key)
+    .attr('data-index', (d) => d.i)
+    .attr('x', (d) => (x(d.i) ?? 0) + barOffset)
+    .attr('y', (d) => y(Math.max(d.bounds[0], d.bounds[1])))
+    .attr('height', (d) => Math.abs(y(d.bounds[0]) - y(d.bounds[1])))
+    .attr('width', barWidth)
     .attr('rx', 1);
-  if (!percentage.value) {
+  const plottedTotal = (row: PayrollPeriod) =>
+    percentage.value ? (row.totalCompensation === 0 ? 0 : 100 * Math.sign(row.totalCompensation)) : lineTotal(row);
+  {
     root
       .append('path')
       .datum(rows.value)
@@ -174,12 +202,27 @@ function render() {
         'd',
         d3
           .line<PayrollPeriod>()
-          .x((_d, i) => (x(i) ?? 0) + x.bandwidth() / 2)
-          .y((d) => y(lineTotal(d))),
+          .x((_d, i) => centres[i]!)
+          .y((d) => y(plottedTotal(d)))
+          .curve(d3.curveMonotoneX),
       )
       .attr('fill', 'none')
-      .attr('stroke', colors.primary)
-      .attr('stroke-width', 2.5);
+      .attr('class', 'payroll-total-line')
+      .attr('stroke', colors.foreground)
+      .attr('stroke-linecap', 'round')
+      .attr('stroke-width', STACKED_CHART_STYLE.lineWidth)
+      .style('pointer-events', 'none');
+    root
+      .append('g')
+      .selectAll('circle')
+      .data(rows.value)
+      .join('circle')
+      .attr('class', 'payroll-total-dot')
+      .attr('cx', (_d, i) => centres[i]!)
+      .attr('cy', (d) => y(plottedTotal(d)))
+      .attr('r', STACKED_CHART_STYLE.dotRadius)
+      .attr('fill', colors.foreground)
+      .style('pointer-events', 'none');
   }
   const cross = root
       .append('line')
@@ -192,13 +235,15 @@ function render() {
       .append('rect')
       .attr('y', m.top)
       .attr('height', h - m.top - m.bottom)
-      .attr('fill', colors.foreground)
-      .attr('opacity', 0.05)
+      .attr('class', 'payroll-segment-highlight')
+      .attr('fill', 'none')
+      .attr('stroke', colors.foreground)
+      .attr('stroke-width', 1.5)
       .attr('visibility', 'hidden'),
     dot = root
       .append('circle')
-      .attr('r', 4)
-      .attr('fill', colors.primary)
+      .attr('r', STACKED_CHART_STYLE.hoverRadius)
+      .attr('fill', colors.foreground)
       .attr('stroke', colors.card)
       .attr('stroke-width', 2)
       .attr('visibility', 'hidden');
@@ -209,31 +254,49 @@ function render() {
     .attr('width', w - m.left - m.right)
     .attr('height', h - m.top - m.bottom)
     .attr('fill', 'transparent')
-    .style('touch-action', 'pan-y')
+    .attr('class', 'chart-interaction-surface')
+    .attr('cursor', 'crosshair')
+    .style('touch-action', 'pan-y pinch-zoom')
     .on('pointermove pointerdown', (event: PointerEvent) => {
-      const [px] = d3.pointer(event, svgRef.value);
-      const i = Math.min(rows.value.length - 1, Math.max(0, Math.round((px - m.left - x.bandwidth() / 2) / x.step())));
+      const [px, py] = d3.pointer(event, svgRef.value);
+      const i = nearestChartBucket(centres, px);
       const row = rows.value[i];
       if (!row) return;
       tooltip.row = row;
+      const onTotal =
+        Math.hypot(centres[i]! - px, y(plottedTotal(row)) - py) <= (event.pointerType === 'touch' ? 22 : 14);
+      const segment = onTotal
+        ? undefined
+        : stackedSegmentAt(
+            stack.map((s) => ({ key: s.key, bounds: s[i]! as readonly [number, number] })),
+            y.invert(py),
+          );
+      tooltip.category = (segment?.key as PayrollCategory) ?? null;
       tooltip.visible = true;
       const cx = (x(i) ?? 0) + x.bandwidth() / 2;
       cross.attr('x1', cx).attr('x2', cx).attr('visibility', 'visible');
       highlight
-        .attr('x', (x(i) ?? 0) - 3)
-        .attr('width', x.bandwidth() + 6)
-        .attr('visibility', 'visible');
+        .attr('x', (x(i) ?? 0) + barOffset)
+        .attr('y', segment ? y(Math.max(...segment.bounds)) : m.top)
+        .attr('height', segment ? Math.abs(y(segment.bounds[0]) - y(segment.bounds[1])) : 0)
+        .attr('width', barWidth)
+        .attr('visibility', segment ? 'visible' : 'hidden');
+      root
+        .selectAll<SVGRectElement, { i: number; key: string }>('.payroll-stack-segment')
+        .attr('opacity', (d) => (!segment || (d.i === i && d.key === segment.key) ? 1 : 0.4));
       dot
         .attr('cx', cx)
-        .attr('cy', y(lineTotal(row)))
-        .attr('visibility', percentage.value ? 'hidden' : 'visible');
+        .attr('cy', y(plottedTotal(row)))
+        .attr('visibility', 'visible');
       void nextTick(() => updateTooltipPosition(event));
     })
-    .on('pointerleave', () => {
+    .on('pointerleave', (event: PointerEvent) => {
+      if (event.pointerType === 'touch') return;
       tooltip.visible = false;
       cross.attr('visibility', 'hidden');
       highlight.attr('visibility', 'hidden');
       dot.attr('visibility', 'hidden');
+      root.selectAll('.payroll-stack-segment').attr('opacity', 1);
     });
 }
 watch([rows, visible, percentage, totalCompensation, currentTheme], () => nextTick(render), { deep: true });
@@ -305,7 +368,8 @@ onMounted(() => nextTick(render));
             </select></label
           >
           <p class="text-muted-foreground text-xs">
-            Employer retirement is included in total compensation. Gross earnings remain available in the tooltip.
+            Employer retirement is included. Hover a segment for its amount and share; hover a dot for total
+            compensation.
           </p></PopoverContent
         ></Popover
       >
@@ -327,7 +391,7 @@ onMounted(() => nextTick(render));
         aria-label="Actual payroll allocation stacked bars and total compensation line"
       />
     </div>
-    <div class="mt-2 flex flex-wrap justify-center gap-1">
+    <div class="mt-2 flex flex-wrap justify-center gap-x-2 gap-y-0.5" data-chart-legend>
       <Button
         v-for="category in categories"
         :key="category.id"
@@ -340,68 +404,54 @@ onMounted(() => nextTick(render));
           :class="['text-muted-foreground', hidden.includes(category.id) && 'line-through opacity-60']"
           >{{ category.name }}</span
         ></Button
-      ><span v-if="!percentage" class="text-muted-foreground flex items-center gap-1.5 px-2 text-xs"
+      ><span class="text-muted-foreground flex items-center gap-1.5 px-2 text-xs"
         ><span class="bg-primary h-0.5 w-4" />{{ totalCompensation ? 'Total compensation' : 'Gross earnings' }}</span
       >
     </div>
     <p v-if="percentage" class="text-muted-foreground mt-2 text-xs">
       Percent of total compensation. Dollar amounts are available in the tooltip.
     </p>
+    <p v-if="annualHistory.length && aggregation !== 'yearly'" class="text-muted-foreground mt-3 text-xs">
+      {{ annualHistory.map((e) => e.year).join(', ') }} history is verified as YTD totals, with no individual paycheck
+      dates.
+      <button class="text-primary-text hover:underline" @click="aggregation = 'yearly'">View annual totals</button>
+    </p>
     <div
       v-show="tooltip.visible"
       ref="tooltipRef"
-      class="pointer-events-none fixed z-50 max-h-[80vh] overflow-hidden"
+      class="pointer-events-none fixed z-50 max-h-[60dvh] overflow-hidden"
       :style="{ left: `${tooltip.x}px`, top: `${tooltip.y}px` }"
     >
-      <ChartTooltip v-if="tooltip.row"
-        ><ChartTooltipHeader
-          >{{ periodLabel(tooltip.row)
-          }}<span v-if="tooltip.row.incomplete" class="text-card-tooltip-muted ml-2 text-xs"
-            >Partial period</span
-          ></ChartTooltipHeader
-        ><ChartTooltipRow label="Gross earnings" :value="money(tooltip.row.gross)" total /><ChartTooltipRow
-          label="Regular earnings"
-          :value="
-            money(payrollPeriodFieldUnavailable(data, tooltip.row, 'regularEarnings') ? null : tooltip.row.regular)
-          "
-        /><ChartTooltipRow
-          label="Additional earnings"
-          :value="
-            money(payrollPeriodFieldUnavailable(data, tooltip.row, 'regularEarnings') ? null : tooltip.row.additional)
-          "
-        /><ChartTooltipRow
-          v-if="tooltip.row.bonus"
-          label="Bonuses and awards"
-          :value="money(tooltip.row.bonus)"
-        /><ChartTooltipDivider /><ChartTooltipRow
-          v-for="category in categories.filter((c) => tooltip.row!.allocations[c.id] !== 0)"
-          :key="category.id"
-          :label="category.name"
-          :color="category.color"
-          :value="`${money(tooltip.row.allocations[category.id])}${lineTotal(tooltip.row) > 0 ? ' · ' + ((tooltip.row.allocations[category.id] / lineTotal(tooltip.row)) * 100).toFixed(1) + '%' : ''}`"
-        /><ChartTooltipDivider /><ChartTooltipRow
-          label="Employee retirement"
-          :value="money(tooltip.row.employeeRetirement)"
-        /><ChartTooltipRow label="Employer retirement" :value="money(tooltip.row.employerRetirement)" /><ChartTooltipRow
-          label="Total compensation"
-          :value="money(tooltip.row.totalCompensation)"
+      <ChartTooltip v-if="tooltip.row" class="max-w-72 min-w-48">
+        <ChartTooltipHeader>{{ periodLabel(tooltip.row) }}</ChartTooltipHeader>
+        <ChartTooltipRow
+          :label="selectedCategory?.name ?? 'Total compensation'"
+          :color="selectedCategory?.color"
+          :value="money(selectedAmount)"
           total
-        /><ChartTooltipRow
-          v-if="!tooltip.row.incomplete && tooltip.row.change != null"
-          label="Change vs previous period"
-          :value="`${money(tooltip.row.change)}${tooltip.row.changePercent != null ? ' · ' + tooltip.row.changePercent.toFixed(1) + '%' : ''}`"
         />
-        <p
-          v-if="payrollPeriodFieldUnavailable(data, tooltip.row, 'withholding')"
-          class="text-card-tooltip-muted mt-2 text-xs"
-        >
-          Withholding fields are incomplete. Unreconciled payroll is shown separately; missing taxes are not verified
-          zero amounts.
+        <p v-if="tooltip.category && selectedPercent !== null" class="text-card-tooltip-muted mt-1 text-xs">
+          {{ selectedPercent.toFixed(1) }}% of total compensation
         </p>
-        <p v-if="tooltip.row.incomplete" class="text-card-tooltip-muted mt-2 text-xs">
-          Comparison withheld for an incomplete period.
-        </p></ChartTooltip
-      >
+        <template v-if="!tooltip.category">
+          <ChartTooltipRow label="Gross earnings" :value="money(tooltip.row.gross)" />
+          <ChartTooltipRow label="Employer retirement" :value="money(tooltip.row.employerRetirement)" />
+        </template>
+        <p
+          v-if="
+            tooltip.category &&
+            ['federal', 'state', 'local', 'socialSecurity', 'medicare'].includes(tooltip.category) &&
+            payrollPeriodFieldUnavailable(data, tooltip.row, 'withholding')
+          "
+          class="text-card-tooltip-muted mt-1 text-xs"
+        >
+          Withholding is incomplete.
+        </p>
+        <p v-if="tooltip.row.basis === 'annual-ytd'" class="text-card-tooltip-muted mt-1 text-xs">
+          Verified YTD through {{ tooltip.row.evidenceAsOf }}; payment dates unavailable.
+        </p>
+        <p v-else-if="tooltip.row.incomplete" class="text-card-tooltip-muted mt-1 text-xs">Partial period</p>
+      </ChartTooltip>
     </div>
   </Card>
 </template>

@@ -7,8 +7,10 @@ import type {
   PayrollSalaryEvent,
   PayrollStatement,
   PayrollTotals,
+  PayrollAnnualEvidence,
 } from '@bt/shared/types/payroll';
 
+import { applyAnnualEvidence, annualEvidenceRemainder } from './payroll-annual-evidence';
 import {
   annualizePayrollRate,
   emptyAllocations,
@@ -26,6 +28,7 @@ export interface PayrollLedgerDocument {
   imports: import('@bt/shared/types/payroll').PayrollImportRun[];
   sources: Record<string, Record<string, unknown>>;
   revisions: { statementId: string; replacedAt: string; statement: PayrollStatement; raw: Record<string, unknown> }[];
+  annualEvidence?: PayrollAnnualEvidence[];
 }
 export const emptyPayrollDocument = (): PayrollLedgerDocument => ({
   revision: 0,
@@ -272,7 +275,10 @@ export function getPayrollContributions(document: Pick<PayrollLedgerDocument, 's
       source: 'actual-payroll' as const,
     }));
 }
-export function payrollDataIssues(statements: PayrollStatement[]): string[] {
+export function payrollDataIssues(
+  statements: PayrollStatement[],
+  annualEvidence: PayrollAnnualEvidence[] = [],
+): string[] {
   const issues = statements.flatMap((s) => s.issues.map((i) => `${s.payDate}: ${i}`));
   for (const employmentId of new Set(statements.map((s) => s.employmentId))) {
     for (const year of new Set(
@@ -283,6 +289,12 @@ export function payrollDataIssues(statements: PayrollStatement[]): string[] {
         .toSorted((a, b) => a.payDate.localeCompare(b.payDate));
       const latest = group.toReversed().find((s) => s.grossYtd !== null);
       if (!latest) continue;
+      if (
+        annualEvidence.some(
+          (e) => e.employmentId === employmentId && e.year === Number(year) && annualEvidenceRemainder(e, statements),
+        )
+      )
+        continue;
       const gross = payrollRound(
         group.filter((s) => s.payDate <= latest.payDate).reduce((sum, s) => sum + s.totals.gross, 0),
       );
@@ -310,6 +322,19 @@ export function buildPayrollDashboard(
     .toSorted((a, b) => a.payDate.localeCompare(b.payDate) || a.statementId.localeCompare(b.statementId));
   const selected = statements.filter((s) => s.payDate >= options.from && s.payDate <= options.through),
     totals = sumPayroll(selected);
+  const annualEvidence = (document.annualEvidence ?? []).filter(
+    (e) => !options.employmentId || e.employmentId === options.employmentId,
+  );
+  const annual = applyAnnualEvidence({
+    evidence: annualEvidence,
+    statements,
+    from: options.from,
+    through: options.through,
+    periods: aggregatePayroll(statements, options.from, options.through, options.aggregation ?? 'monthly'),
+    yearly: options.aggregation === 'yearly',
+  });
+  for (const key of Object.keys(totals) as (keyof PayrollTotals)[])
+    totals[key] = payrollRound(totals[key] + annual.additional[key]);
   const salaryEvents = deriveSalaryEvents(document),
     today = payrollToday();
   const currentEmployments = document.employments.filter(
@@ -374,7 +399,10 @@ export function buildPayrollDashboard(
       salaryGrowth: growth(starting),
       salaryGrowthPercent: growthPercent(starting),
       lastRaiseDate: lastRaise?.date ?? null,
-      coverageFrom: statements[0]?.payDate ?? null,
+      coverageFrom:
+        [statements[0]?.payDate, ...annualEvidence.map((e) => `${e.year}-01-01`)]
+          .filter((d): d is string => !!d)
+          .toSorted()[0] ?? null,
       coverageThrough: statements.at(-1)?.payDate ?? null,
       positionStartingSalary: positionStarting?.salary ?? null,
       currentPositionGrowth: growth(positionStarting),
@@ -386,7 +414,9 @@ export function buildPayrollDashboard(
       allTimeSalaryGrowth: growth(starting),
       allTimeSalaryGrowthPercent: growthPercent(starting),
     },
-    received: aggregatePayroll(statements, options.from, options.through, options.aggregation ?? 'monthly'),
+    received: annual.received,
+    annualEvidence,
+    includedAnnualEvidence: annual.included,
     reconciliation: reconcilePayrollDeposits(statements, bank),
     status: {
       connectionStatus: 'assisted-export',
@@ -402,6 +432,6 @@ export function buildPayrollDashboard(
       settings: document.settings,
       history: imports.slice(-100).toReversed(),
     },
-    issues: payrollDataIssues(statements),
+    issues: [...payrollDataIssues(statements, annualEvidence), ...annual.issues],
   };
 }

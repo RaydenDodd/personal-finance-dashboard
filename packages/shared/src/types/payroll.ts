@@ -142,6 +142,22 @@ export interface PayrollPeriod extends PayrollTotals {
   previousGross: number | null;
   change: number | null;
   changePercent: number | null;
+  basis?: 'dated-payroll' | 'annual-ytd';
+  evidenceAsOf?: string;
+  incompleteFields?: string[];
+}
+/** Verified cumulative evidence, never a fabricated paycheck or monthly distribution. */
+export interface PayrollAnnualEvidence {
+  id: string;
+  employmentId: string;
+  year: number;
+  asOf: string;
+  statementIds: string[];
+  sourceLabel: string;
+  documentHash: string;
+  totals: PayrollTotals;
+  allocations: Record<PayrollCategory, number>;
+  incompleteFields: string[];
 }
 export interface PayrollReconciliation {
   statementId: string;
@@ -183,6 +199,8 @@ export interface PayrollDashboard {
   reconciliation: PayrollReconciliation[];
   status: PayrollStatus;
   issues: string[];
+  annualEvidence?: PayrollAnnualEvidence[];
+  includedAnnualEvidence?: PayrollAnnualEvidence[];
 }
 export interface PayrollImportResult {
   inserted: number;
@@ -199,4 +217,5 @@ export interface PayrollManagementInput {
   employments: PayrollEmployment[];
   manualSalaryEvents: PayrollSalaryEvent[];
   settings: PayrollSettings;
+  annualEvidence?: PayrollAnnualEvidence[];
 }

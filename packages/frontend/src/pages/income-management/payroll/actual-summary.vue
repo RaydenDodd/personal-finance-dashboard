@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import type { PayrollDashboard } from '@bt/shared/types/payroll';
 import { Card } from '@/components/lib/ui/card';
-import { ArrowUpRightIcon, ArrowDownRightIcon } from '@lucide/vue';
 import { computed } from 'vue';
 import { usePayroll } from './use-payroll';
 import { money } from './format';
@@ -37,9 +36,6 @@ const categories = computed(() =>
       ]
     : [],
 );
-const careerVisible = computed(
-  () => !!props.employmentId || (payroll.value?.employments.filter((e) => e.status === 'current').length ?? 0) <= 1,
-);
 </script>
 <template>
   <Card class="@container p-5 sm:p-7" data-testid="actual-payroll-summary">
@@ -54,23 +50,6 @@ const careerVisible = computed(
             {{ summary.currentEmployer ?? 'No current employer recorded'
             }}<template v-if="summary.currentJobTitle"> / {{ summary.currentJobTitle }}</template>
           </p>
-        </div>
-        <div
-          v-if="careerVisible && summary.salaryGrowthPercent != null"
-          :class="[
-            'flex items-center gap-1 rounded-full px-3 py-1.5 text-sm font-semibold',
-            summary.salaryGrowthPercent >= 0
-              ? 'bg-success-text/10 text-success-text'
-              : 'bg-destructive-text/10 text-destructive-text',
-          ]"
-        >
-          <ArrowUpRightIcon v-if="summary.salaryGrowthPercent >= 0" class="size-4" /><ArrowDownRightIcon
-            v-else
-            class="size-4"
-          />{{ summary.salaryGrowthPercent > 0 ? '+' : '' }}{{ summary.salaryGrowthPercent.toFixed(1) }}%<span
-            class="ml-1 text-xs font-normal"
-            >base salary growth</span
-          >
         </div>
       </div>
       <div class="grid grid-cols-2 gap-3 @3xl:grid-cols-3">
@@ -87,6 +66,10 @@ const careerVisible = computed(
       </div>
       <p v-if="withholdingIncomplete" class="text-muted-foreground text-xs">
         Tax withholding is incomplete for this period. Unavailable amounts are not treated as verified zero withholding.
+      </p>
+      <p v-if="payroll?.includedAnnualEvidence?.length" class="text-muted-foreground text-xs">
+        Includes verified {{ payroll.includedAnnualEvidence.map((e) => e.year).join(', ') }} YTD history once.
+        Individual paycheck dates are unavailable for that history.
       </p>
       <details>
         <summary class="hover:text-primary-text text-muted-foreground cursor-pointer text-xs">

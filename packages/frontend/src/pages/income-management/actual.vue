@@ -24,6 +24,7 @@ import { computed, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useLocalStorage } from '@vueuse/core';
 import DashboardPageLayout from '@/pages/dashboard/components/dashboard-page-layout.vue';
+import DashboardEditToolbar from '@/pages/dashboard/components/dashboard-edit-toolbar.vue';
 import { pageBlock, defaultPageLayout } from '@/pages/dashboard/composables/page-blocks';
 import DateRange from './payroll/date-range.vue';
 import { payrollRange, type PayrollRange } from './payroll/date-range';
@@ -98,52 +99,68 @@ const menus = [
 </script>
 <template>
   <PageWrapper
-    ><div class="mx-auto w-full max-w-6xl space-y-6 p-4 md:p-6" data-testid="actual-income-page">
-      <header class="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 class="text-2xl font-semibold">Actual Income</h1>
-          <p class="text-muted-foreground mt-1 text-sm">Recorded pay, base salary and compensation history.</p>
-        </div>
-        <DropdownMenu
-          ><DropdownMenuTrigger as-child
-            ><Button variant="outline"
-              >Manage payroll<ChevronDownIcon class="ml-2 size-4" /></Button></DropdownMenuTrigger
-          ><DropdownMenuContent align="end" class="w-64"
-            ><template v-for="(item, i) in menus" :key="item.id"
-              ><DropdownMenuSeparator v-if="i === 3" /><DropdownMenuItem @select="management = item.id"
-                ><component :is="item.icon" class="size-4" />{{ item.name }}</DropdownMenuItem
-              ></template
-            ></DropdownMenuContent
-          ></DropdownMenu
-        >
-      </header>
-      <div class="flex items-start justify-between gap-2">
-        <DateRange v-model="range" :earliest="data?.summary.coverageFrom ?? '1900-01-01'" /><Popover
-          ><PopoverTrigger as-child
-            ><Button variant="ghost" size="icon" aria-label="Actual income settings"
-              ><SettingsIcon class="size-4" /></Button></PopoverTrigger
-          ><PopoverContent align="end" class="w-72"
-            ><label class="block space-y-2 text-sm"
-              >Employer<select
-                v-model="employmentId"
-                aria-label="Actual income employment"
-                class="border-input bg-background h-9 w-full rounded-md border px-2 text-sm"
-              >
-                <option value="all">All employers</option>
-                <option v-for="employment in data?.employments" :key="employment.id" :value="employment.id">
-                  {{ employment.employerName }} / {{ employment.jobTitle || 'Employment' }}
-                </option>
-              </select></label
-            ></PopoverContent
-          ></Popover
-        >
-      </div>
+    ><div class="mx-auto w-full max-w-6xl space-y-4 p-4 md:p-6" data-testid="actual-income-page">
       <Callout v-if="query.isError.value" variant="destructive"
         >Actual payroll could not be loaded.
         <button class="underline" @click="query.refetch()">Try again</button></Callout
       >
-      <DashboardPageLayout page="actualIncome" :registry="blocks" :default-layout="defaultLayout"
-        ><template #actual-summary
+      <DashboardPageLayout page="actualIncome" :registry="blocks" :default-layout="defaultLayout">
+        <template #toolbar="{ grid }"
+          ><div class="space-y-3">
+            <header class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+              <div>
+                <h1 class="text-2xl font-semibold">Actual Income</h1>
+                <p class="text-muted-foreground mt-0.5 text-sm">Recorded pay, base salary and compensation history.</p>
+              </div>
+              <div class="flex flex-wrap items-center gap-2">
+                <DropdownMenu
+                  ><DropdownMenuTrigger as-child
+                    ><Button variant="outline"
+                      >Manage payroll<ChevronDownIcon class="ml-2 size-4" /></Button></DropdownMenuTrigger
+                  ><DropdownMenuContent align="end" class="w-64"
+                    ><template v-for="(item, i) in menus" :key="item.id"
+                      ><DropdownMenuSeparator v-if="i === 3" /><DropdownMenuItem @select="management = item.id"
+                        ><component :is="item.icon" class="size-4" />{{ item.name }}</DropdownMenuItem
+                      ></template
+                    ></DropdownMenuContent
+                  ></DropdownMenu
+                ><DashboardEditToolbar
+                  :is-edit-mode="grid?.isEditMode ?? false"
+                  :is-saving="grid?.isSaving"
+                  @enter="grid?.enterEditMode()"
+                  @save="grid?.saveLayout()"
+                  @cancel="grid?.cancelEdit()"
+                />
+              </div>
+            </header>
+            <div class="flex flex-wrap items-center gap-2">
+              <DateRange v-model="range" :earliest="data?.summary.coverageFrom ?? '1900-01-01'"
+                ><template #actions
+                  ><Popover
+                    ><PopoverTrigger as-child
+                      ><Button variant="ghost" size="icon" class="size-7" aria-label="Actual income settings"
+                        ><SettingsIcon class="size-4" /></Button></PopoverTrigger
+                    ><PopoverContent align="end" class="w-72"
+                      ><label class="block space-y-2 text-sm"
+                        >Employer<select
+                          v-model="employmentId"
+                          aria-label="Actual income employment"
+                          class="border-input bg-background h-9 w-full rounded-md border px-2 text-sm"
+                        >
+                          <option value="all">All employers</option>
+                          <option v-for="employment in data?.employments" :key="employment.id" :value="employment.id">
+                            {{ employment.employerName }} / {{ employment.jobTitle || 'Employment' }}
+                          </option>
+                        </select></label
+                      ></PopoverContent
+                    ></Popover
+                  ></template
+                ></DateRange
+              >
+            </div>
+          </div></template
+        >
+        <template #actual-summary
           ><ActualSummary
             :data="data"
             :from="range.from"

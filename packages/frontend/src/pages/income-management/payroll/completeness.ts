@@ -6,14 +6,17 @@ export function payrollFieldUnavailable(
   field: string,
   employmentId?: string,
 ): boolean {
-  return (
+  return !!(
+    data?.includedAnnualEvidence?.some(
+      (e) => (!employmentId || e.employmentId === employmentId) && e.incompleteFields.includes(field),
+    ) ||
     data?.statements.some(
       (statement) =>
         statement.payDate >= data.summary.from &&
         statement.payDate <= data.summary.through &&
         (!employmentId || statement.employmentId === employmentId) &&
         statement.incompleteFields?.includes(field),
-    ) ?? false
+    )
   );
 }
 export function payrollPeriodFieldUnavailable(
@@ -21,9 +24,10 @@ export function payrollPeriodFieldUnavailable(
   period: PayrollPeriod,
   field: string,
 ): boolean {
-  return (
+  return !!(
+    period.incompleteFields?.includes(field) ||
     data?.statements.some(
       (statement) => period.statementIds.includes(statement.id) && statement.incompleteFields?.includes(field),
-    ) ?? false
+    )
   );
 }

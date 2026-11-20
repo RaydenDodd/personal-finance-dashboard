@@ -242,10 +242,14 @@ const tooltip = reactive({
 // Flag to prevent chart interactions while tooltip link is being clicked
 const isTooltipInteracting = ref(false);
 
-const { updateTooltipPosition } = useChartTooltipPosition({
+const { updateTooltipPosition, isChartScrolling } = useChartTooltipPosition({
   containerRef,
   tooltipRef,
   tooltip,
+  onDismiss: () => {
+    isTooltipInteracting.value = false;
+    handleStackedMouseLeave();
+  },
 });
 
 // Query params — snap to whole months so partial first/last months don't
@@ -893,7 +897,7 @@ function navigateToTransactions({
 
 function handleMouseEnter(event: MouseEvent, d: PeriodWithChange) {
   // Skip if user is interacting with tooltip
-  if (isTooltipInteracting.value) return;
+  if (isTooltipInteracting.value || isChartScrolling()) return;
 
   const startDate = parseISO(d.periodStart);
   tooltip.period = format(startDate, 'MMMM yyyy');
@@ -913,7 +917,7 @@ function handleMouseEnter(event: MouseEvent, d: PeriodWithChange) {
 
 function handleStackedMouseEnter(event: MouseEvent, period: PeriodWithChange, cat: CashFlowCategoryData) {
   // Skip if user is interacting with tooltip
-  if (isTooltipInteracting.value) return;
+  if (isTooltipInteracting.value || isChartScrolling()) return;
 
   const startDate = parseISO(period.periodStart);
   tooltip.period = format(startDate, 'MMMM yyyy');

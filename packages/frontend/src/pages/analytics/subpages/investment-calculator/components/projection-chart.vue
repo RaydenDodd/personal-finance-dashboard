@@ -90,7 +90,7 @@ const tooltip = reactive({
   totalInvested: 0,
 });
 
-const { updateTooltipPosition } = useChartTooltipPosition({
+const { updateTooltipPosition, isChartScrolling } = useChartTooltipPosition({
   containerRef,
   tooltipRef,
   tooltip,
@@ -348,19 +348,15 @@ const renderChart = () => {
     .attr('width', innerWidth)
     .attr('height', innerHeight)
     .attr('fill', 'transparent')
-    .on('mousemove', (event: MouseEvent) => {
+    .style('touch-action', 'pan-y pinch-zoom')
+    .on('pointermove pointerdown', (event: PointerEvent) => {
+      if (isChartScrolling()) return hideTooltip();
       const [mouseX] = d3.pointer(event);
       showTooltipAt(mouseX, event);
     })
-    .on('mouseleave', hideTooltip)
-    .on('touchstart touchmove', (event: TouchEvent) => {
-      const touch = event.touches[0];
-      if (!touch) return;
-      event.preventDefault();
-      const [touchX] = d3.pointer(touch, svgRef.value!);
-      showTooltipAt(touchX - margin.left, { clientX: touch.clientX, clientY: touch.clientY });
-    })
-    .on('touchend', hideTooltip);
+    .on('pointerleave', (event: PointerEvent) => {
+      if (event.pointerType !== 'touch') hideTooltip();
+    });
 
   // Raise hover dots above overlay for visibility
   hoverGroup.raise();

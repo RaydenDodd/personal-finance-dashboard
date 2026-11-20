@@ -56,6 +56,16 @@ No paid services, public infrastructure, SimpleFIN schedule changes or unrelated
 
 Exact source mappings, hashes, totals, statement anomalies and PDF comparisons are documented in ignored `private/payroll-source-audit*` outputs. Synthetic tests may use invented data only; real payroll payloads must not enter fixtures, source files, logs or commits.
 
+## Shared chart interaction update
+
+Salary History uses Balance Trend's shared nearest-date bisector with larger change dots and a nearby-point hit area. Its growth badge belongs in the Salary History header. Received Income shares Net Worth History's bar padding, capped widths, foreground total line, dots and crosshair; cursor height selects one signed stack segment and a compact native tooltip. Dollar/percent modes and category filters remain independent of date ranges and aggregation. The page toolbar keeps management, customization, settings and dates together.
+
+Shared chart interaction lifetime clears touch selections on outside taps, scrolling, cancellation, Escape, resize and window blur. It resets existing hover handlers as well as tooltips, preserving normal vertical touch scrolling. The native expense/allocation doughnut, personal finance charts, shared chart tooltips, pace charts and responsive chart popovers use this behavior; full-page charts and widgets share the same components. Tooltip positioning clamps viewport coordinates even when a chart is partly offscreen. Compact grouped chart controls avoid oversized mobile presets and legends.
+
+## Reviewed annual YTD history
+
+The already imported Cubic/GATR zero-period statements retain their original source values and IDs. Explicitly reviewed annual evidence can supplement missing dated payroll once per employment/year. Evidence is source-linked, audited, validated against an imported gross-YTD checkpoint and reconciled to net and compensation allocations. The supplement subtracts overlapping dated payroll, holds conflicting excess for review, and never creates a paycheck, deposit, salary rate or monthly distribution. Only a range covering the start of the evidence year through its actual as-of date includes it. Yearly Received Income displays a labeled YTD bucket; other aggregations retain actual dated data and offer an annual-history link. An unknown employer match/contribution split remains unavailable. Omitted evidence in an ordinary management save is preserved.
+
 ## Live reconciliation checkpoint
 
 All supplied statements were imported after a database backup. Independent 2024–2026 source totals and source hashes match; repeated imports insert zero and existing bank, portfolio, valuation and original Income-document fingerprints are unchanged. A live principal preview found five existing coverage items needing review, including one owner-confirmed amount that differs from payroll. No principal reconciliation was applied; the original principal records remain preserved. Exact amounts and source comparisons are in ignored private reports. The November 20 owner-operated browser export/import test passed with 72 duplicates and no financial revisions; synchronization remains assisted export, without a website-to-helper launcher.

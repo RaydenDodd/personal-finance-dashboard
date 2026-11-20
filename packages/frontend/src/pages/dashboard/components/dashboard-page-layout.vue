@@ -16,15 +16,17 @@ defineExpose({ revealWidget: (id: string) => grid.value?.revealWidget(id) });
 </script>
 <template>
   <div class="space-y-4" :data-page-layout="page">
-    <div class="bg-background/95 sticky top-(--header-height) z-(--z-navbar) flex justify-end py-2 backdrop-blur-sm">
-      <DashboardEditToolbar
-        :is-edit-mode="grid?.isEditMode ?? false"
-        :is-saving="grid?.isSaving"
-        @enter="grid?.enterEditMode()"
-        @save="grid?.saveLayout()"
-        @cancel="grid?.cancelEdit()"
-      />
-    </div>
+    <slot name="toolbar" :grid="grid">
+      <div class="bg-background/95 sticky top-(--header-height) z-(--z-navbar) flex justify-end py-2 backdrop-blur-sm">
+        <DashboardEditToolbar
+          :is-edit-mode="grid?.isEditMode ?? false"
+          :is-saving="grid?.isSaving"
+          @enter="grid?.enterEditMode()"
+          @save="grid?.saveLayout()"
+          @cancel="grid?.cancelEdit()"
+        />
+      </div>
+    </slot>
     <DashboardGrid
       ref="grid"
       :page="page"

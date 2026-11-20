@@ -92,4 +92,18 @@ describe('useChartTooltipPosition', () => {
     expect(tooltip.x).toBe(60);
     expect(tooltip.y).toBe(40);
   });
+
+  it('clamps relative tooltips to the viewport when their chart is partly above the screen', () => {
+    const containerRef = ref({
+      getBoundingClientRect: () => makeRect({ left: 20, top: -300 }),
+    } as unknown as HTMLElement);
+    const tooltipRef = ref({
+      getBoundingClientRect: () => makeRect({ width: 220, height: 160 }),
+    } as unknown as HTMLElement);
+    const tooltip = reactive({ x: 0, y: 0 });
+    useChartTooltipPosition({ containerRef, tooltipRef, tooltip }).updateTooltipPosition({ clientX: 390, clientY: 0 });
+    expect(tooltip.x + 20).toBeGreaterThanOrEqual(8);
+    expect(tooltip.x + 20 + 220).toBeLessThanOrEqual(392);
+    expect(tooltip.y - 300).toBe(8);
+  });
 });

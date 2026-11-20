@@ -719,6 +719,18 @@ select:focus-visible,
   button:has(> svg:only-child) {
     min-width: 44px;
   }
+
+  /* Dense chart presets and legends are grouped controls, not full form actions. */
+  [data-chart-controls] button {
+    min-height: 32px;
+    min-width: 0;
+  }
+  [data-chart-controls] button:has(> svg:only-child) {
+    min-width: 32px;
+  }
+  [data-chart-legend] button {
+    min-height: 28px;
+  }
 }
 
 @media (max-width: 360px) {

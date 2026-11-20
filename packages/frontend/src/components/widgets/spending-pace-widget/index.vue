@@ -23,6 +23,7 @@ import { SORT_DIRECTIONS, TRANSACTION_SORT_FIELD, TRANSACTION_TYPES } from '@bt/
 import { GaugeIcon } from '@lucide/vue';
 import { useQuery } from '@tanstack/vue-query';
 import { useElementSize } from '@vueuse/core';
+import { useChartInteraction } from '@/composable/charts/use-chart-interaction';
 import PacePlot from './pace-plot.vue';
 import { buildPaceGeometry } from './pace-geometry';
 import { addDays, format, subMonths } from 'date-fns';
@@ -288,7 +289,14 @@ const axisTicks = computed(() => {
 });
 
 const hoverIndex = ref<number | null>(null);
+const { isScrolling } = useChartInteraction({
+  containerRef: plotRef,
+  clear: () => {
+    hoverIndex.value = null;
+  },
+});
 const onPointer = (event: PointerEvent) => {
+  if (isScrolling()) return;
   const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
   const ratio = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
   hoverIndex.value = Math.round(ratio * (payMonth.value.daysInMonth - 1));

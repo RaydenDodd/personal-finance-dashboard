@@ -4,13 +4,24 @@ import * as Popover from '@/components/lib/ui/popover';
 import * as Tooltip from '@/components/lib/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { createReusableTemplate, useMediaQuery } from '@vueuse/core';
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
+import { useChartInteraction } from '@/composable/charts/use-chart-interaction';
 
 defineOptions({ inheritAttrs: false });
 
 const [UseTemplate, SlotContent] = createReusableTemplate();
 // Detect touch-primary devices (coarse pointer = finger/stylus)
 const isTouch = useMediaQuery('(pointer: coarse)');
+const triggerRef = ref<HTMLElement | null>(null),
+  contentRef = ref<HTMLElement | null>(null),
+  open = ref(false);
+useChartInteraction({
+  containerRef: triggerRef,
+  tooltipRef: contentRef,
+  clear: () => {
+    if (props.variant === 'chart') open.value = false;
+  },
+});
 
 const props = withDefaults(
   defineProps<{
@@ -30,39 +41,41 @@ const contentClass = computed(() =>
 </script>
 
 <template>
-  <UseTemplate>
-    <slot name="content">
-      {{ content }}
-    </slot>
-  </UseTemplate>
+  <span ref="triggerRef" class="contents">
+    <UseTemplate>
+      <slot name="content">
+        {{ content }}
+      </slot>
+    </UseTemplate>
 
-  <slot v-if="disabled" />
+    <slot v-if="disabled" />
 
-  <!-- Touch devices: Popover (tap to open) -->
-  <template v-else-if="isTouch">
-    <Popover.Popover>
-      <Popover.PopoverTrigger as-child :class="$attrs.class">
-        <slot />
-      </Popover.PopoverTrigger>
-
-      <Popover.PopoverContent :class="cn('w-max max-w-62.5 p-2 text-sm', contentClass)">
-        <SlotContent />
-      </Popover.PopoverContent>
-    </Popover.Popover>
-  </template>
-
-  <!-- Non-touch devices: Tooltip (hover to show) -->
-  <template v-else>
-    <Tooltip.TooltipProvider :delay-duration="delayDuration">
-      <Tooltip.Tooltip>
-        <Tooltip.TooltipTrigger as-child :class="$attrs.class">
+    <!-- Touch devices: Popover (tap to open) -->
+    <template v-else-if="isTouch">
+      <Popover.Popover v-model:open="open">
+        <Popover.PopoverTrigger as-child :class="$attrs.class">
           <slot />
-        </Tooltip.TooltipTrigger>
+        </Popover.PopoverTrigger>
 
-        <Tooltip.TooltipContent :class="contentClass">
-          <SlotContent />
-        </Tooltip.TooltipContent>
-      </Tooltip.Tooltip>
-    </Tooltip.TooltipProvider>
-  </template>
+        <Popover.PopoverContent :class="cn('w-max max-w-62.5 p-2 text-sm', contentClass)">
+          <div ref="contentRef"><SlotContent /></div>
+        </Popover.PopoverContent>
+      </Popover.Popover>
+    </template>
+
+    <!-- Non-touch devices: Tooltip (hover to show) -->
+    <template v-else>
+      <Tooltip.TooltipProvider :delay-duration="delayDuration">
+        <Tooltip.Tooltip>
+          <Tooltip.TooltipTrigger as-child :class="$attrs.class">
+            <slot />
+          </Tooltip.TooltipTrigger>
+
+          <Tooltip.TooltipContent :class="contentClass">
+            <SlotContent />
+          </Tooltip.TooltipContent>
+        </Tooltip.Tooltip>
+      </Tooltip.TooltipProvider>
+    </template>
+  </span>
 </template>

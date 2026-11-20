@@ -177,6 +177,7 @@ import { useFormatCurrency } from '@/composable';
 import { getChartColors } from '@/composable/charts/chart-colors';
 import { formatAxisCurrency } from '@/composable/charts/format-axis-currency';
 import { useChartTooltipPosition } from '@/composable/charts/use-chart-tooltip-position';
+import { nearestChartPoint } from '@/composable/charts/chart-hit-testing';
 import {
   SPIKE_DEFAULTS,
   type SpikeDetectionOptions,
@@ -1018,7 +1019,6 @@ const renderChart = () => {
     });
 
   // Invisible overlay for mouse tracking
-  const bisect = d3.bisector<(typeof chartData.value)[0], number>((d) => d.date).left;
 
   // Hover dot (hidden by default)
   const hoverDot = g
@@ -1047,28 +1047,23 @@ const renderChart = () => {
     .attr('height', innerHeight)
     .attr('fill', 'transparent')
     .attr('cursor', 'crosshair')
-    .on('mouseenter', () => {
+    .style('touch-action', 'pan-y pinch-zoom')
+    .on('pointerenter', () => {
       hoverDot.style('opacity', 1);
       hoverLine.style('opacity', 0.5);
     })
-    .on('mousemove', (event: MouseEvent) => {
+    .on('pointermove pointerdown', (event: PointerEvent) => {
       const [mouseX] = d3.pointer(event);
       const x0 = xScale.invert(mouseX);
-      const index = bisect(chartData.value, x0, 1);
-      const d0 = chartData.value[index - 1];
-      const d1 = chartData.value[index];
-
-      if (!d0) return;
-
-      const isCloserToD1 = d1 && x0 - d0.date > d1.date - x0;
-      const d = isCloserToD1 ? d1 : d0;
-      const currentIndex = isCloserToD1 ? index : index - 1;
+      const d = nearestChartPoint(chartData.value, x0, (point) => point.date);
+      if (!d) return;
+      const currentIndex = chartData.value.indexOf(d);
 
       // Update hover dot position
-      hoverDot.attr('cx', xScale(d.date)).attr('cy', yScale(d.value));
+      hoverDot.attr('cx', xScale(d.date)).attr('cy', yScale(d.value)).style('opacity', 1);
 
       // Update hover line position
-      hoverLine.attr('x1', xScale(d.date)).attr('x2', xScale(d.date));
+      hoverLine.attr('x1', xScale(d.date)).attr('x2', xScale(d.date)).style('opacity', 0.5);
 
       // Update tooltip
       tooltip.date = new Date(d.date).toLocaleDateString('en-US', {
@@ -1110,7 +1105,8 @@ const renderChart = () => {
 
       updateTooltipPosition(event);
     })
-    .on('mouseleave', () => {
+    .on('pointerleave', (event: PointerEvent) => {
+      if (event.pointerType === 'touch') return;
       tooltip.visible = false;
       hoverDot.style('opacity', 0);
       hoverLine.style('opacity', 0);

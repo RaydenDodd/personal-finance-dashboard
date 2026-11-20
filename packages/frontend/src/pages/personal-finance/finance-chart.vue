@@ -4,6 +4,7 @@ import { ChartTooltip, ChartTooltipHeader, ChartTooltipRow } from '@/components/
 import { getChartColors } from '@/composable/charts/chart-colors';
 import { formatAxisCurrency } from '@/composable/charts/format-axis-currency';
 import { useResizeObserver } from '@vueuse/core';
+import { useChartInteraction } from '@/composable/charts/use-chart-interaction';
 import * as d3 from 'd3';
 import { computed, nextTick, onMounted, reactive, ref, useId, watch } from 'vue';
 import { chartTooltipPosition, stackedUpperBoundary } from './chart-geometry';
@@ -62,6 +63,17 @@ function toggleSeries(id: string) {
     : [...hiddenSeries.value, id];
 }
 const tooltip = reactive({ visible: false, x: 0, y: 0, row: null as ChartRow | null });
+let clearPlotSelection = () => {};
+const { isScrolling } = useChartInteraction({
+  containerRef: container,
+  tooltipRef: tooltipElement,
+  clear: () => {
+    tooltip.visible = false;
+    selectedPie.value = null;
+    highlightPie(null);
+    clearPlotSelection();
+  },
+});
 const formatValue = (n: number) =>
   props.percentage
     ? `${n.toFixed(2)}%`
@@ -90,6 +102,7 @@ function positionTooltip(anchor: { x: number; y: number }) {
   );
 }
 function showTooltip(event: MouseEvent, row: ChartRow) {
+  if (isScrolling()) return;
   const bounds = container.value!.getBoundingClientRect();
   const anchor = { x: event.clientX - bounds.left, y: event.clientY - bounds.top };
   tooltip.row = row;
@@ -99,6 +112,7 @@ function showTooltip(event: MouseEvent, row: ChartRow) {
 function render() {
   if (!svg.value || !hasValues.value) return;
   tooltip.visible = false;
+  clearPlotSelection = () => {};
   const colors = getChartColors();
   const root = d3.select(svg.value);
   root.selectAll('*').remove();
@@ -437,6 +451,7 @@ function render() {
     .attr('stroke-width', 1)
     .attr('stroke-dasharray', '4 3');
   function activate(row: ChartRow, event?: PointerEvent) {
+    if (isScrolling()) return dismiss();
     hover.attr('display', null);
     guide.attr('x1', x(row.label)).attr('x2', x(row.label));
     hover
@@ -481,6 +496,7 @@ function render() {
     tooltip.visible = false;
     hover.attr('display', 'none');
   }
+  clearPlotSelection = dismiss;
   function nearest(event: PointerEvent): ChartRow {
     const [px] = d3.pointer(event, plot.node());
     return props.rows.reduce(

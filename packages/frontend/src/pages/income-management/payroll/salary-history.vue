@@ -4,7 +4,7 @@ import { currentTheme } from '@/common/utils/color-theme';
 import { Card } from '@/components/lib/ui/card';
 import { Button } from '@/components/lib/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/lib/ui/popover';
-import { SettingsIcon } from '@lucide/vue';
+import { SettingsIcon, ArrowUpRightIcon, ArrowDownRightIcon } from '@lucide/vue';
 import {
   ChartTooltip,
   ChartTooltipHeader,
@@ -14,6 +14,7 @@ import {
 import { getChartColors } from '@/composable/charts/chart-colors';
 import { formatAxisCurrency } from '@/composable/charts/format-axis-currency';
 import { useChartTooltipPosition } from '@/composable/charts/use-chart-tooltip-position';
+import { nearestChartPoint } from '@/composable/charts/chart-hit-testing';
 import { useLocalStorage, useResizeObserver } from '@vueuse/core';
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
 import * as d3 from 'd3';
@@ -66,9 +67,9 @@ function render() {
   tooltip.visible = false;
   const colors = getChartColors(),
     root = d3.select(svgRef.value),
-    w = Math.max(280, width.value),
+    w = Math.max(200, width.value),
     h = w < 500 ? 250 : 300,
-    m = { left: 58, right: 18, top: 26, bottom: 32 };
+    m = { left: w < 400 ? 42 : 58, right: w < 400 ? 10 : 18, top: 26, bottom: 32 };
   root.selectAll('*').remove();
   root.attr('viewBox', `0 0 ${w} ${h}`);
   if (!allEvents.value.length) return;
@@ -108,8 +109,10 @@ function render() {
     .call(
       d3
         .axisBottom(x)
-        .ticks(w < 500 ? 3 : 6)
-        .tickFormat((d) => d3.timeFormat('%b %Y')(d as Date)),
+        .ticks(w < 400 ? 2 : w < 500 ? 3 : 6)
+        .tickFormat((d) =>
+          d3.timeFormat(w < 400 ? (+end - +start > 730 * 86400000 ? '%Y' : '%b %y') : '%b %Y')(d as Date),
+        ),
     )
     .call((g) => g.selectAll('path,line').attr('stroke', colors.grid))
     .call((g) => g.selectAll('text').attr('fill', colors.text));
@@ -160,9 +163,10 @@ function render() {
       .selectAll('circle')
       .data(markers)
       .join('circle')
+      .attr('class', 'salary-change-dot')
       .attr('cx', (e) => x(new Date(e.date + 'T12:00:00')))
       .attr('cy', (e) => y(e.salary))
-      .attr('r', 4.5)
+      .attr('r', 6)
       .attr('fill', (e) => (e.change == null ? colors.primary : e.change < 0 ? colors.appExpense : colors.appIncome))
       .attr('stroke', colors.card)
       .attr('stroke-width', 2);
@@ -173,7 +177,7 @@ function render() {
         .data(markers.filter((e) => e.changePercent != null))
         .join('text')
         .attr('x', (e) => x(new Date(e.date + 'T12:00:00')))
-        .attr('y', (e) => y(e.salary) - 11)
+        .attr('y', (e) => y(e.salary) - 14)
         .attr('text-anchor', 'middle')
         .attr('font-size', 10)
         .attr('fill', (e) => ((e.change ?? 0) < 0 ? colors.appExpense : colors.appIncome))
@@ -194,10 +198,21 @@ function render() {
     .attr('width', w - m.left - m.right)
     .attr('height', h - m.top - m.bottom)
     .attr('fill', 'transparent')
-    .style('touch-action', 'pan-y')
+    .attr('class', 'chart-interaction-surface')
+    .attr('cursor', 'crosshair')
+    .style('touch-action', 'pan-y pinch-zoom')
     .on('pointermove pointerdown', (event: PointerEvent) => {
-      const [px] = d3.pointer(event, svgRef.value);
-      const selected = x.invert(Math.max(m.left, Math.min(w - m.right, px)));
+      const [mouseX, mouseY] = d3.pointer(event, svgRef.value);
+      let px = Math.max(m.left, Math.min(w - m.right, mouseX));
+      const markers = visibleEvents.filter((e) => e.date >= bounds.value.from);
+      const nearby = nearestChartPoint(markers, +x.invert(px), (e) => +new Date(e.date + 'T12:00:00'));
+      // Large invisible hit area around change dots, with the same date bisector as Balance Trend.
+      const snap =
+        nearby &&
+        Math.hypot(x(new Date(nearby.date + 'T12:00:00')) - px, y(nearby.salary) - mouseY) <=
+          (event.pointerType === 'touch' ? 32 : 24);
+      if (snap) px = x(new Date(nearby.date + 'T12:00:00'));
+      const selected = x.invert(px);
       const date = d3.timeFormat('%Y-%m-%d')(selected);
       tooltip.date = date;
       tooltip.events = [...grouped.values()]
@@ -207,7 +222,7 @@ function render() {
           const employment = data.value?.employments.find((em) => em.id === e.employmentId);
           return !employment?.endDate || employment.endDate >= date;
         });
-      tooltip.onEvent = tooltip.events.some((e) => e.date === date);
+      tooltip.onEvent = !!snap || tooltip.events.some((e) => e.date === date);
       tooltip.visible = !!tooltip.events.length;
       cross.attr('x1', px).attr('x2', px).attr('visibility', 'visible');
       dots
@@ -216,13 +231,15 @@ function render() {
         .join('circle')
         .attr('cx', px)
         .attr('cy', (e) => y(e.salary))
-        .attr('r', 4)
+        .attr('class', 'salary-hover-dot')
+        .attr('r', snap ? 7 : 5)
         .attr('fill', colors.primary)
         .attr('stroke', colors.card)
         .attr('stroke-width', 2);
       void nextTick(() => updateTooltipPosition(event));
     })
-    .on('pointerleave', () => {
+    .on('pointerleave', (event: PointerEvent) => {
+      if (event.pointerType === 'touch') return;
       tooltip.visible = false;
       cross.attr('visibility', 'hidden');
       dots.selectAll('*').remove();
@@ -238,7 +255,26 @@ onMounted(() => nextTick(render));
 <template>
   <Card class="min-w-0 p-5 sm:p-6" data-testid="payroll-salary-history"
     ><header class="mb-3 flex items-center justify-between gap-3">
-      <h2 class="text-lg font-semibold">Salary history</h2>
+      <div class="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5">
+        <h2 class="text-lg font-semibold">Salary history</h2>
+        <span
+          v-if="data?.summary.salaryGrowthPercent != null"
+          data-testid="salary-growth-badge"
+          :class="[
+            'inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold',
+            data.summary.salaryGrowthPercent >= 0
+              ? 'bg-success-text/10 text-success-text'
+              : 'bg-destructive-text/10 text-destructive-text',
+          ]"
+        >
+          <ArrowUpRightIcon v-if="data.summary.salaryGrowthPercent >= 0" class="size-3.5" /><ArrowDownRightIcon
+            v-else
+            class="size-3.5"
+          />
+          {{ data.summary.salaryGrowthPercent > 0 ? '+' : '' }}{{ data.summary.salaryGrowthPercent.toFixed(1) }}% base
+          salary growth
+        </span>
+      </div>
       <Popover
         ><PopoverTrigger as-child
           ><Button variant="ghost" size="icon" aria-label="Salary chart settings"

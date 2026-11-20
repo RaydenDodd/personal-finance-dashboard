@@ -1,5 +1,7 @@
 import { nextTick, type Ref } from 'vue';
 
+import { useChartInteraction } from './use-chart-interaction';
+
 interface TooltipPosition {
   x: number;
   y: number;
@@ -18,16 +20,40 @@ export function useChartTooltipPosition({
   tooltipRef,
   tooltip,
   strategy = 'absolute',
+  onDismiss,
 }: {
   containerRef: Ref<HTMLElement | null>;
   tooltipRef: Ref<HTMLElement | null>;
-  tooltip: TooltipPosition;
+  tooltip: TooltipPosition & { visible?: boolean };
   strategy?: 'absolute' | 'fixed';
+  onDismiss?: () => void;
 }) {
+  let activeTarget: EventTarget | null = null;
+  const interaction = useChartInteraction({
+    containerRef,
+    tooltipRef,
+    clear: () => {
+      const wasActive = tooltip.visible === true || activeTarget !== null;
+      if ('visible' in tooltip) tooltip.visible = false;
+      // Reset each chart's own hover dot/line/segment through its existing leave handler.
+      // Store the overlay, not event.currentTarget after the native event has returned.
+      if (activeTarget instanceof Element) {
+        activeTarget.dispatchEvent(new MouseEvent('mouseleave'));
+        activeTarget.dispatchEvent(new PointerEvent('pointerleave', { pointerType: 'mouse' }));
+      }
+      activeTarget = null;
+      if (wasActive) onDismiss?.();
+    },
+  });
   function updateTooltipPosition(
     event: MouseEvent | { clientX: number; clientY: number },
     { allowRetry = true }: { allowRetry?: boolean } = {},
   ) {
+    if (event instanceof Event) activeTarget = event.currentTarget ?? event.target;
+    if (interaction.isScrolling()) {
+      interaction.dismiss();
+      return;
+    }
     if (!containerRef.value || !tooltipRef.value) return;
 
     const tooltipRect = tooltipRef.value.getBoundingClientRect();
@@ -62,13 +88,13 @@ export function useChartTooltipPosition({
     if (originY + y + tooltipRect.height > viewportHeight) {
       y = event.clientY - originY - tooltipRect.height - 10;
     }
-    if (y < 0) {
-      y = 10;
-    }
+    // Clamp viewport coordinates before converting back to container space.
+    x = Math.max(8 - originX, Math.min(x, viewportWidth - tooltipRect.width - 8 - originX));
+    y = Math.max(8 - originY, Math.min(y, viewportHeight - tooltipRect.height - 8 - originY));
 
     tooltip.x = x;
     tooltip.y = y;
   }
 
-  return { updateTooltipPosition };
+  return { updateTooltipPosition, dismissTooltip: interaction.dismiss, isChartScrolling: interaction.isScrolling };
 }

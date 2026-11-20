@@ -97,6 +97,8 @@ import {
 import { getChartColors } from '@/composable/charts/chart-colors';
 import { formatAxisCurrency } from '@/composable/charts/format-axis-currency';
 import { useChartTooltipPosition } from '@/composable/charts/use-chart-tooltip-position';
+import { STACKED_CHART_STYLE } from '@/composable/charts/stacked-chart';
+import { nearestChartBucket } from '@/composable/charts/chart-hit-testing';
 import { useFormatCurrency } from '@/composable/formatters';
 import { useDateLocale } from '@/composable/use-date-locale';
 import {
@@ -134,7 +136,7 @@ const containerRef = ref<HTMLDivElement | null>(null);
 const svgRef = ref<SVGSVGElement | null>(null);
 const tooltipRef = ref<HTMLDivElement | null>(null);
 
-const MAX_BAR_WIDTH = 60;
+const MAX_BAR_WIDTH = STACKED_CHART_STYLE.maxBarWidth;
 // Below this container width the chart tightens margins and shrinks tick labels.
 const MOBILE_BREAKPOINT_PX = 400;
 // Beyond this many buckets, per-point dots on the net-worth line become noise.
@@ -279,7 +281,7 @@ const renderChart = () => {
     .scaleBand()
     .domain(points.map((point) => point.date))
     .range([0, innerWidth])
-    .padding(0.2);
+    .padding(STACKED_CHART_STYLE.padding);
 
   const drawYAxisWithGrid = ({
     scale,
@@ -526,7 +528,7 @@ const renderChart = () => {
     .attr('class', 'net-worth-line')
     .attr('fill', 'none')
     .attr('stroke', colors.foreground)
-    .attr('stroke-width', 2)
+    .attr('stroke-width', STACKED_CHART_STYLE.lineWidth)
     .attr('stroke-linecap', 'round')
     .style('pointer-events', 'none')
     .attr('d', line);
@@ -539,7 +541,7 @@ const renderChart = () => {
       .attr('class', 'net-worth-dot')
       .attr('cx', bandCenter)
       .attr('cy', (point) => yFor(point.netWorth))
-      .attr('r', 2.5)
+      .attr('r', STACKED_CHART_STYLE.dotRadius)
       .attr('fill', colors.foreground)
       .style('pointer-events', 'none');
   }
@@ -587,13 +589,14 @@ const renderChart = () => {
     .attr('height', innerHeight)
     .attr('fill', 'transparent')
     .attr('cursor', 'crosshair')
-    .on('mouseenter', () => {
+    .style('touch-action', 'pan-y pinch-zoom')
+    .on('pointerenter', () => {
       hoverLine.style('opacity', 0.5);
       hoverDot.style('opacity', 1);
     })
-    .on('mousemove', (event: MouseEvent) => {
+    .on('pointermove pointerdown', (event: PointerEvent) => {
       const [mouseX] = d3.pointer(event);
-      const index = Math.max(0, Math.min(points.length - 1, Math.floor(mouseX / xScale.step())));
+      const index = nearestChartBucket(points.map(bandCenter), mouseX);
       const point = points[index];
       if (!point) return;
 
@@ -624,7 +627,8 @@ const renderChart = () => {
       tooltip.visible = true;
       updateTooltipPosition(event);
     })
-    .on('mouseleave', () => {
+    .on('pointerleave', (event: PointerEvent) => {
+      if (event.pointerType === 'touch') return;
       tooltip.visible = false;
       hoverLine.style('opacity', 0);
       hoverDot.style('opacity', 0);

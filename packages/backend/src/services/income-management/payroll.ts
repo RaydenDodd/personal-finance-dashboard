@@ -8,6 +8,7 @@ import { QueryTypes, type Transaction } from 'sequelize';
 
 import { parsePaystubText } from './import';
 import { getBankIncome } from './index';
+import { validateAnnualEvidence } from './payroll-annual-evidence';
 import {
   buildPayrollDashboard,
   emptyPayrollDocument,
@@ -96,16 +97,24 @@ export async function savePayrollManagement(userId: number, input: PayrollManage
       fail('An employment with payroll statements cannot be removed. Retain it as previous employment.');
     if (input.manualSalaryEvents.some((e) => !ids.has(e.employmentId)))
       fail('Salary events must reference an existing employment');
+    if (input.annualEvidence) {
+      if (input.annualEvidence.some((e) => !ids.has(e.employmentId)))
+        fail('Historical evidence must reference an existing employment');
+      const error = validateAnnualEvidence(input.annualEvidence, document.statements);
+      if (error) fail(error);
+    }
     const before = {
       employments: document.employments,
       manualSalaryEvents: document.manualSalaryEvents,
       settings: document.settings,
+      annualEvidence: document.annualEvidence ?? [],
     };
     if (input.settings.reminderDays !== document.settings.reminderDays)
       input.settings = { ...input.settings, reminderDismissed: false };
     document.employments = input.employments;
     document.manualSalaryEvents = input.manualSalaryEvents.map((e) => ({ ...e, source: 'manual' }));
     document.settings = input.settings;
+    if (input.annualEvidence) document.annualEvidence = input.annualEvidence;
     await save(
       userId,
       document,
@@ -116,6 +125,7 @@ export async function savePayrollManagement(userId: number, input: PayrollManage
           employments: document.employments,
           manualSalaryEvents: document.manualSalaryEvents,
           settings: document.settings,
+          annualEvidence: document.annualEvidence ?? [],
         },
       },
       transaction,
