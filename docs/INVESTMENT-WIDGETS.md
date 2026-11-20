@@ -1,4 +1,4 @@
-﻿# Investment dashboard widget verification
+# Investment dashboard widget verification
 
 All twenty optional investment widgets are registered in MoneyMatter's existing
 Add Widget interface. Registration does not change a saved or default dashboard.
@@ -15,28 +15,28 @@ different portfolios and periods, moves and resizes one, saves and reloads the
 layout, changes one instance's settings, and removes only its sibling. It also
 checks preservation of an existing Balance Trend widget.
 
-| Widget                      | Implemented | Shared analytics adapter | Automated lifecycle | Shared panel connection | Desktop browser | Mobile browser | Deployed/live verified |
-| --------------------------- | ----------- | ------------------------ | ------------------- | ----------------------- | --------------- | -------------- | ---------------------- |
-| Investment Overview         | Yes         | Yes                      | Passed              | Unit adapter passed     | Fixture passed  | Pending        | Pending                |
-| Portfolio Performance       | Yes         | Yes                      | Passed              | Unit adapter passed     | Fixture passed  | Pending        | Pending                |
-| Value vs. Invested Capital  | Yes         | Yes                      | Passed              | Unit adapter passed     | Fixture passed  | Pending        | Pending                |
-| Benchmark Comparison        | Yes         | Yes                      | Passed              | Unit adapter passed     | Fixture passed  | Pending        | Pending                |
-| Investment Allocation       | Yes         | Yes                      | Passed              | Unit adapter passed     | Fixture passed  | Pending        | Pending                |
-| Portfolio Heatmap / Treemap | Yes         | Yes                      | Passed              | Unit adapter passed     | Fixture passed  | Pending        | Pending                |
-| Combined Holdings           | Yes         | Yes                      | Passed              | Unit adapter passed     | Fixture passed  | Pending        | Pending                |
-| Underlying Company Exposure | Yes         | Yes                      | Passed              | Unit adapter passed     | Fixture passed  | Pending        | Pending                |
-| Sector Allocation           | Yes         | Yes                      | Passed              | Unit adapter passed     | Fixture passed  | Pending        | Pending                |
-| Geographical Allocation     | Yes         | Yes                      | Passed              | Unit adapter passed     | Fixture passed  | Pending        | Pending                |
-| Dividend Income             | Yes         | Yes                      | Passed              | Unit adapter passed     | Fixture passed  | Pending        | Pending                |
-| Dividend Calendar           | Yes         | Yes                      | Passed              | Unit adapter passed     | Fixture passed  | Pending        | Pending                |
-| Best & Worst Performers     | Yes         | Yes                      | Passed              | Unit adapter passed     | Fixture passed  | Pending        | Pending                |
-| Portfolio Concentration     | Yes         | Yes                      | Passed              | Unit adapter passed     | Fixture passed  | Pending        | Pending                |
-| Realized & Unrealized Gains | Yes         | Yes                      | Passed              | Unit adapter passed     | Fixture passed  | Pending        | Pending                |
-| ETF Overlap                 | Yes         | Yes                      | Passed              | Unit adapter passed     | Fixture passed  | Pending        | Pending                |
-| Investment Contributions    | Yes         | Yes                      | Passed              | Unit adapter passed     | Fixture passed  | Pending        | Pending                |
-| Risk & Drawdown             | Yes         | Yes                      | Passed              | Unit adapter passed     | Fixture passed  | Pending        | Pending                |
-| Portfolio Comparison        | Yes         | Yes                      | Passed              | Unit adapter passed     | Fixture passed  | Pending        | Pending                |
-| Market Data Health          | Yes         | Yes                      | Passed              | Unit adapter passed     | Fixture passed  | Pending        | Pending                |
+| Widget                      | Implemented | Shared analytics adapter | Automated lifecycle | Shared panel connection | Desktop browser       | Mobile browser                    | Deployed/live verified |
+| --------------------------- | ----------- | ------------------------ | ------------------- | ----------------------- | --------------------- | --------------------------------- | ---------------------- |
+| Investment Overview         | Yes         | Yes                      | Passed              | Unit adapter passed     | Fixture + live passed | Fixture + live passed (390 / 320) | Verified 39e43789d     |
+| Portfolio Performance       | Yes         | Yes                      | Passed              | Unit adapter passed     | Fixture + live passed | Fixture + live passed (390 / 320) | Verified 39e43789d     |
+| Value vs. Invested Capital  | Yes         | Yes                      | Passed              | Unit adapter passed     | Fixture + live passed | Fixture + live passed (390 / 320) | Verified 39e43789d     |
+| Benchmark Comparison        | Yes         | Yes                      | Passed              | Unit adapter passed     | Fixture + live passed | Fixture + live passed (390 / 320) | Verified 39e43789d     |
+| Investment Allocation       | Yes         | Yes                      | Passed              | Unit adapter passed     | Fixture + live passed | Fixture + live passed (390 / 320) | Verified 39e43789d     |
+| Portfolio Heatmap / Treemap | Yes         | Yes                      | Passed              | Unit adapter passed     | Fixture + live passed | Fixture + live passed (390 / 320) | Verified 39e43789d     |
+| Combined Holdings           | Yes         | Yes                      | Passed              | Unit adapter passed     | Fixture + live passed | Fixture + live passed (390 / 320) | Verified 39e43789d     |
+| Underlying Company Exposure | Yes         | Yes                      | Passed              | Unit adapter passed     | Fixture + live passed | Fixture + live passed (390 / 320) | Verified 39e43789d     |
+| Sector Allocation           | Yes         | Yes                      | Passed              | Unit adapter passed     | Fixture + live passed | Fixture + live passed (390 / 320) | Verified 39e43789d     |
+| Geographical Allocation     | Yes         | Yes                      | Passed              | Unit adapter passed     | Fixture + live passed | Fixture + live passed (390 / 320) | Verified 39e43789d     |
+| Dividend Income             | Yes         | Yes                      | Passed              | Unit adapter passed     | Fixture + live passed | Fixture + live passed (390 / 320) | Verified 39e43789d     |
+| Dividend Calendar           | Yes         | Yes                      | Passed              | Unit adapter passed     | Fixture + live passed | Fixture + live passed (390 / 320) | Verified 39e43789d     |
+| Best & Worst Performers     | Yes         | Yes                      | Passed              | Unit adapter passed     | Fixture + live passed | Fixture + live passed (390 / 320) | Verified 39e43789d     |
+| Portfolio Concentration     | Yes         | Yes                      | Passed              | Unit adapter passed     | Fixture + live passed | Fixture + live passed (390 / 320) | Verified 39e43789d     |
+| Realized & Unrealized Gains | Yes         | Yes                      | Passed              | Unit adapter passed     | Fixture + live passed | Fixture + live passed (390 / 320) | Verified 39e43789d     |
+| ETF Overlap                 | Yes         | Yes                      | Passed              | Unit adapter passed     | Fixture + live passed | Fixture + live passed (390 / 320) | Verified 39e43789d     |
+| Investment Contributions    | Yes         | Yes                      | Passed              | Unit adapter passed     | Fixture + live passed | Fixture + live passed (390 / 320) | Verified 39e43789d     |
+| Risk & Drawdown             | Yes         | Yes                      | Passed              | Unit adapter passed     | Fixture + live passed | Fixture + live passed (390 / 320) | Verified 39e43789d     |
+| Portfolio Comparison        | Yes         | Yes                      | Passed              | Unit adapter passed     | Fixture + live passed | Fixture + live passed (390 / 320) | Verified 39e43789d     |
+| Market Data Health          | Yes         | Yes                      | Passed              | Unit adapter passed     | Fixture + live passed | Fixture + live passed (390 / 320) | Verified 39e43789d     |
 
 Desktop (1440 pixels, dark theme, actual mouse) and mobile (390 and 320 pixels,
 light theme, actual touch) exercised every row using an explicitly synthetic
@@ -47,7 +47,28 @@ instance retained separate settings. Browser settings writes were intercepted
 in memory; the stored production dashboard fingerprint was unchanged. These
 sixty browser lifecycles produced no browser errors or financial writes.
 The private combined trace is `private/investment-widget-browser/fixture-results.json`.
-Production deployment and real-data widget verification remain separate checks.
+All twenty widgets were then verified against the deployed application at commit
+`39e43789d` using actual imported analytics, with the same full lifecycle at
+1440, 390 and 320 pixels. Real-data GET requests reached the shared service;
+only browser settings writes were simulated. The separate trace is
+`private/investment-widget-browser/live-results.json`. Every viewport retained
+the original production dashboard, reported zero browser errors and financial
+writes, and fit without horizontal page overflow. Missing or partial data remains
+subject to the shared service quality status.
+
+Actual server persistence was also verified on an isolated copy of the restored
+verification database. The existing ARM64 backend ran with its supported test
+mode, offline mode, a separate temporary Redis container and no published ports.
+An explicit database-name guard ran before every write. All twenty widget types
+and twenty-one instances persisted through the authenticated settings API, matched
+direct PostgreSQL readback, and survived a new authenticated session. Changing
+the second Allocation instance preserved its sibling and every other settings
+field. A manual fund snapshot retained 50% partial coverage; repeating it inserted
+no duplicate, and conflicting content, excess weights and duplicate identities
+were rejected with HTTP 422. All twenty-two protected financial tables and the
+original restored database remained unchanged. Temporary test containers were
+removed. The production database received no writes from this verification.
+Evidence: `private/investment-widget-server-verification.json`.
 
 Financial calculation verification belongs to the shared analytics engine. A
 connected widget still reports the engine's partial/unavailable source status;

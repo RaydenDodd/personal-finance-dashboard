@@ -4,6 +4,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/lib/ui/pop
 import { SettingsIcon } from '@lucide/vue';
 import { computed, ref, watch } from 'vue';
 import { cloneDeep } from 'lodash-es';
+import { INVESTMENT_PERFORMER_PERIODS } from '@/components/investment-analytics/performers-model';
 import {
   INVESTMENT_ALLOCATION_MODES,
   INVESTMENT_DATE_RANGES,
@@ -268,6 +269,16 @@ const fieldClass = 'bg-background border-input min-h-9 w-full rounded-md border 
               <option value="dollars">Dollars</option>
               <option value="percent">Percentage return</option>
             </select></label
+          >
+          <label v-if="kind === 'performers'" class="block space-y-1 text-sm"
+            ><span>Rank performers by</span
+            ><select v-model="draft.performerPeriod" :class="fieldClass" aria-label="Widget performer return period">
+              <option v-for="[id, label] in INVESTMENT_PERFORMER_PERIODS" :key="id" :value="id">
+                {{ label }}
+              </option></select
+            ><span class="text-muted-foreground text-xs"
+              >Historical periods rank price-only changes. Missing data remains unavailable.</span
+            ></label
           >
           <label v-if="hasLimit" class="block space-y-1 text-sm"
             ><span>Visible rows</span

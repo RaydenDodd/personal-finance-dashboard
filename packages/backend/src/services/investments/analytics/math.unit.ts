@@ -121,6 +121,202 @@ describe('consolidated financial arithmetic', () => {
     expect(overlap.coverage).toBe('partial');
     expect(overlap.shared[0]?.combinedValue).toBe('46');
   });
+  it('reports unique companies and exact sector and issuer-country overlap on complete compositions', () => {
+    const a = {
+      ...snapshot('A', [
+        { id: 'X', symbol: 'X', name: 'Shared company', weight: '50', sector: 'Technology', country: 'US' },
+        { id: 'L', symbol: 'L', name: 'Left company', weight: '50', sector: 'Healthcare', country: 'CA' },
+      ]),
+      classificationStandard: 'GICS',
+    };
+    const b = {
+      ...snapshot('B', [
+        { id: 'X', symbol: 'X', name: 'Shared company', weight: '50', sector: 'Technology', country: 'USA' },
+        { id: 'R', symbol: 'R', name: 'Right company', weight: '50', sector: 'Financials', country: 'GB' },
+      ]),
+      classificationStandard: 'GICS',
+    };
+    const result = fundOverlap([a, b], [holding('A', '1000', true), holding('B', '2000', true)])[0]!;
+    expect(result.leftUnique).toEqual([{ id: 'L', symbol: 'L', name: 'Left company', weight: '50', value: '500' }]);
+    expect(result.rightUnique).toEqual([{ id: 'R', symbol: 'R', name: 'Right company', weight: '50', value: '1000' }]);
+    expect(result.shared[0]?.combinedValue).toBe('1500');
+    expect(result.sectorOverlap).toMatchObject({
+      weightedOverlap: '50',
+      status: 'verified',
+      leftCoverage: '100',
+      rightCoverage: '100',
+    });
+    expect(result.sectorOverlap.categories.find((row) => row.label === 'GICS · Technology')).toMatchObject({
+      leftWeight: '50',
+      rightWeight: '50',
+      overlapWeight: '50',
+    });
+    expect(result.countryOverlap).toMatchObject({
+      weightedOverlap: '50',
+      status: 'verified',
+      leftCoverage: '100',
+      rightCoverage: '100',
+    });
+    expect(result.countryOverlap.categories.find((row) => row.label === 'US')?.overlapWeight).toBe('50');
+  });
+  it('excludes unknown classifications from category matches and reports partial coverage without normalizing', () => {
+    const a = {
+      ...snapshot('A', [
+        { id: 'X', symbol: 'X', name: 'Unclassified shared', weight: '40', sector: 'Unknown', country: 'Unknown' },
+        { id: 'L', symbol: 'L', name: 'Left', weight: '20', sector: 'Technology', country: 'US' },
+      ]),
+      classificationStandard: 'GICS',
+    };
+    const b = {
+      ...snapshot('B', [
+        { id: 'X', symbol: 'X', name: 'Unclassified shared', weight: '50', sector: 'N/A', country: 'Other' },
+        { id: 'R', symbol: 'R', name: 'Right', weight: '30', sector: 'Technology', country: 'US' },
+      ]),
+      classificationStandard: 'GICS',
+    };
+    const result = fundOverlap([a, b], [holding('A', '100', true), holding('B', '100', true)])[0]!;
+    expect(result.weightedOverlap).toBe('40');
+    expect(result.coverage).toBe('partial');
+    expect(result.sectorOverlap).toMatchObject({
+      weightedOverlap: '20',
+      status: 'partial',
+      leftCoverage: '20',
+      rightCoverage: '30',
+    });
+    expect(result.countryOverlap).toMatchObject({
+      weightedOverlap: '20',
+      status: 'partial',
+      leftCoverage: '20',
+      rightCoverage: '30',
+    });
+    expect(result.sectorOverlap.categories.some((row) => /unknown/i.test(row.label))).toBe(false);
+    expect(result.countryOverlap.categories.some((row) => /unknown/i.test(row.label))).toBe(false);
+  });
+  it('withholds incompatible or unspecified sector taxonomies rather than reporting a false zero overlap', () => {
+    const row = { id: 'X', symbol: 'X', name: 'Shared', weight: '100', sector: 'Technology', country: 'US' };
+    const a = { ...snapshot('A', [row]), classificationStandard: 'GICS' };
+    const b = { ...snapshot('B', [row]), classificationStandard: 'ICB' };
+    const result = fundOverlap([a, b], [holding('A', '100', true), holding('B', '100', true)])[0]!;
+    expect(result.weightedOverlap).toBe('100');
+    expect(result.sectorOverlap).toMatchObject({
+      weightedOverlap: null,
+      status: 'unavailable',
+      leftCoverage: '0',
+      rightCoverage: '0',
+    });
+    expect(result.sectorOverlap.reason).toContain('incompatible');
+    expect(result.countryOverlap.weightedOverlap).toBe('100');
+    const unspecified = fundOverlap(
+      [snapshot('A', [row]), snapshot('B', [row])],
+      [holding('A', '100', true), holding('B', '100', true)],
+    )[0]!;
+    expect(unspecified.sectorOverlap.weightedOverlap).toBeNull();
+    expect(unspecified.sectorOverlap.status).toBe('unavailable');
+  });
+  it('normalizes English issuer-country names to two-letter codes and leaves ambiguous names unclassified', () => {
+    const result = fundOverlap(
+      [
+        snapshot('A', [
+          { id: 'X', symbol: 'X', name: 'German company', weight: '70', country: 'Germany' },
+          { id: 'L', symbol: 'L', name: 'Ambiguous country', weight: '30', country: 'Congo' },
+        ]),
+        snapshot('B', [
+          { id: 'X', symbol: 'X', name: 'German company', weight: '80', country: 'DE' },
+          { id: 'R', symbol: 'R', name: 'Ambiguous country', weight: '20', country: 'Congo' },
+        ]),
+      ],
+      [holding('A', '100', true), holding('B', '100', true)],
+    )[0]!;
+    expect(result.countryOverlap).toMatchObject({
+      weightedOverlap: '70',
+      status: 'partial',
+      leftCoverage: '70',
+      rightCoverage: '80',
+    });
+    expect(result.countryOverlap.categories).toEqual([
+      { label: 'DE', leftWeight: '70', rightWeight: '80', overlapWeight: '70' },
+    ]);
+    const unknown = fundOverlap(
+      [
+        snapshot('A', [{ id: 'X', symbol: 'X', name: 'Ambiguous', weight: '100', country: 'Congo' }]),
+        snapshot('B', [{ id: 'Y', symbol: 'Y', name: 'Ambiguous', weight: '100', country: 'Congo' }]),
+      ],
+      [holding('A', '100', true), holding('B', '100', true)],
+    )[0]!;
+    expect(unknown.countryOverlap.weightedOverlap).toBeNull();
+    expect(unknown.countryOverlap.reason).toContain('ambiguous');
+  });
+  it('compares recursively expanded companies, retains cyclic residuals and excludes incompatible nested classifications', () => {
+    const snapshots = [
+      {
+        ...snapshot('A', [
+          { id: 'CHILD', symbol: 'CHILD', name: 'Child fund', weight: '40', isFund: true },
+          { id: 'X', symbol: 'X', name: 'Company X', weight: '60', sector: 'Technology', country: 'US' },
+        ]),
+        classificationStandard: 'GICS',
+      },
+      {
+        ...snapshot('CHILD', [
+          { id: 'Y', symbol: 'Y', name: 'Company Y', weight: '100', sector: 'Technology', country: 'US' },
+        ]),
+        classificationStandard: 'ICB',
+      },
+      {
+        ...snapshot('B', [
+          { id: 'X', symbol: 'X', name: 'Company X', weight: '100', sector: 'Technology', country: 'US' },
+        ]),
+        classificationStandard: 'GICS',
+      },
+    ];
+    const result = fundOverlap(snapshots, [holding('A', '100', true), holding('B', '200', true)])[0]!;
+    expect(result.weightedOverlap).toBe('60');
+    expect(result.shared.map((row) => row.id)).toEqual(['X']);
+    expect(result.leftUnique.map((row) => row.id)).toEqual(['Y']);
+    expect(result.sectorOverlap).toMatchObject({
+      weightedOverlap: '60',
+      status: 'partial',
+      leftCoverage: '60',
+      rightCoverage: '100',
+    });
+    expect(result.countryOverlap).toMatchObject({ weightedOverlap: '100', status: 'verified' });
+    const cyclic = fundOverlap(
+      [
+        snapshot('A', [{ id: 'A', symbol: 'A', name: 'Cycle', weight: '100', isFund: true }]),
+        snapshot('B', [{ id: 'X', symbol: 'X', name: 'Company', weight: '100' }]),
+      ],
+      [holding('A', '100', true), holding('B', '100', true)],
+    )[0]!;
+    expect(cyclic.sharedCount).toBe(0);
+    expect(cyclic.coverage).toBe('partial');
+    expect(cyclic.leftUnique).toEqual([]);
+    expect(cyclic.sectorOverlap.status).toBe('unavailable');
+  });
+  it('keeps dollar exposures null when a required position valuation is missing, without losing composition weights', () => {
+    const sources = [
+      snapshot('A', [
+        { id: 'X', symbol: 'X', name: 'Shared', weight: '50' },
+        { id: 'L', symbol: 'L', name: 'Unique left', weight: '50' },
+      ]),
+      snapshot('B', [
+        { id: 'X', symbol: 'X', name: 'Shared', weight: '50' },
+        { id: 'R', symbol: 'R', name: 'Unique right', weight: '50' },
+      ]),
+    ];
+    const result = fundOverlap(sources, [
+      { ...holding('A', '100', true), marketValue: null },
+      holding('B', '200', true),
+    ])[0]!;
+    expect(result.shared[0]?.combinedValue).toBeNull();
+    expect(result.weightedOverlap).toBe('50');
+    expect(result.leftUnique[0]?.value).toBeNull();
+    expect(result.rightUnique[0]?.value).toBe('100');
+    const missing = fundOverlap([sources[0]!], [holding('A', '100', true), holding('B', '100', true)])[0]!;
+    expect(missing.leftUnique).toEqual([]);
+    expect(missing.rightUnique).toEqual([]);
+    expect(missing.coverage).toBe('unavailable');
+    expect(missing.sectorOverlap.weightedOverlap).toBeNull();
+    expect(missing.sectorOverlap.reason).toContain('composition is missing');
+  });
   it('retains unknown category allocations and exact category sums', () => {
     const rows = allocation(
       [

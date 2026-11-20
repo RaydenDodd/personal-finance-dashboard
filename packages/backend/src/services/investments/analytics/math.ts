@@ -3,6 +3,7 @@ import type {
   InvestmentExposure,
   InvestmentExposureContribution,
   InvestmentFundOverlap,
+  InvestmentCategoryOverlap,
   InvestmentFundSnapshot,
   InvestmentHolding,
   InvestmentMetric,
@@ -236,6 +237,157 @@ export function lookThrough(holdings: InvestmentHolding[], snapshots: Investment
     .sort((a, b) => new Big(b.totalValue).cmp(a.totalValue));
 }
 
+const isUnknownClassification = (label: string | undefined): boolean =>
+  !label?.trim() ||
+  /^(unknown|unclassified|unspecified|unavailable|n\/?a|not available|not classified|none|undisclosed|unidentified|other)(\b|[ (])/i.test(
+    label.trim(),
+  ) ||
+  /^[-?—–.]+$/.test(label.trim());
+const countryAliases: Record<string, string> = {
+  US: 'US',
+  USA: 'US',
+  'UNITED STATES': 'US',
+  'UNITED STATES OF AMERICA': 'US',
+  'U.S.': 'US',
+  GB: 'GB',
+  GBR: 'GB',
+  UK: 'GB',
+  'UNITED KINGDOM': 'GB',
+  'GREAT BRITAIN': 'GB',
+  CA: 'CA',
+  CAN: 'CA',
+  CANADA: 'CA',
+};
+const issuerCountryLookup = (() => {
+  const names = new Intl.DisplayNames(['en'], { type: 'region', fallback: 'none' });
+  const result = new Map<string, string | null>();
+  const register = (label: string, code: string) => {
+    const key = label.toUpperCase().replace(/\s+/g, ' ').trim();
+    if (!result.has(key)) result.set(key, code);
+    else if (result.get(key) !== code) result.set(key, null);
+  };
+  // Cache the platform's recognized two-letter territory/country catalog once.
+  // Aggregate regions, unknown regions and pseudo locales are not issuer countries.
+  const excluded = new Set(['EU', 'EZ', 'UN', 'ZZ', 'QO', 'XA', 'XB']);
+  for (let first = 65; first <= 90; first++)
+    for (let second = 65; second <= 90; second++) {
+      const code = String.fromCharCode(first, second);
+      if (excluded.has(code)) continue;
+      // ICU canonical aliases identify deprecated codes; do not let historical
+      // territories make a current English country name ambiguous.
+      if (new Intl.Locale(`und-${code}`).region !== code) continue;
+      const label = names.of(code);
+      if (!label || label === code || /unknown region/i.test(label)) continue;
+      register(code, code);
+      register(label, code);
+    }
+  for (const [alias, code] of Object.entries(countryAliases)) register(alias, code);
+  return result;
+})();
+
+/** Compare only disclosed, mutually comparable classifications. Unknown is never a shared category. */
+function categoryOverlap(
+  leftRows: InvestmentExposure[],
+  rightRows: InvestmentExposure[],
+  mode: 'sector' | 'country',
+  compositionsAvailable = true,
+): InvestmentCategoryOverlap {
+  if (!compositionsAvailable)
+    return {
+      weightedOverlap: null,
+      status: 'unavailable',
+      leftCoverage: '0',
+      rightCoverage: '0',
+      categories: [],
+      reason: `A dated fund composition is missing for one or both funds; ${mode} overlap cannot be determined.`,
+    };
+  const classifications = (rows: InvestmentExposure[]) =>
+    rows.flatMap((row) => {
+      const original = row[mode]?.trim();
+      if (row.unknown || isUnknownClassification(original)) return [];
+      if (mode === 'country') {
+        const upper = original!.toUpperCase().replace(/\s+/g, ' ');
+        const country = issuerCountryLookup.get(upper);
+        if (!country) return [];
+        return [
+          {
+            key: country,
+            label: country,
+            taxonomy: 'issuer-country',
+            weight: row.totalValue,
+          },
+        ];
+      }
+      // The shared look-through engine prefixes imported sector labels with their taxonomy.
+      const separator = original!.indexOf(' · ');
+      if (separator < 1) return [];
+      const taxonomy = original!.slice(0, separator).trim().toUpperCase();
+      const category = original!.slice(separator + 3).trim();
+      if (isUnknownClassification(taxonomy) || isUnknownClassification(category)) return [];
+      return [
+        {
+          key: `${taxonomy} · ${category.toLocaleLowerCase('en-US')}`,
+          label: `${taxonomy} · ${category}`,
+          taxonomy,
+          weight: row.totalValue,
+        },
+      ];
+    });
+  const left = classifications(leftRows);
+  const right = classifications(rightRows);
+  const leftTaxonomies = new Set(left.map((row) => row.taxonomy));
+  const rightTaxonomies = new Set(right.map((row) => row.taxonomy));
+  const common = new Set([...leftTaxonomies].filter((taxonomy) => rightTaxonomies.has(taxonomy)));
+  const comparableLeft = left.filter((row) => common.has(row.taxonomy));
+  const comparableRight = right.filter((row) => common.has(row.taxonomy));
+  const leftCoverage = sum(comparableLeft.map((row) => row.weight))!;
+  const rightCoverage = sum(comparableRight.map((row) => row.weight))!;
+  const buckets = new Map<string, { label: string; left: Big; right: Big }>();
+  for (const [side, rows] of [
+    ['left', comparableLeft],
+    ['right', comparableRight],
+  ] as const)
+    for (const row of rows) {
+      const bucket = buckets.get(row.key) ?? { label: row.label, left: new Big(0), right: new Big(0) };
+      bucket[side] = bucket[side].plus(row.weight);
+      buckets.set(row.key, bucket);
+    }
+  const categories = [...buckets.values()]
+    .map((bucket) => ({
+      label: bucket.label,
+      leftWeight: bucket.left.toString(),
+      rightWeight: bucket.right.toString(),
+      overlapWeight: (bucket.left.lt(bucket.right) ? bucket.left : bucket.right).toString(),
+    }))
+    .toSorted((a, b) => new Big(b.overlapWeight).cmp(a.overlapWeight) || a.label.localeCompare(b.label));
+  if (!common.size || new Big(leftCoverage).lte(0) || new Big(rightCoverage).lte(0))
+    return {
+      weightedOverlap: null,
+      status: 'unavailable',
+      leftCoverage,
+      rightCoverage,
+      categories,
+      reason:
+        mode === 'sector' && leftTaxonomies.size && rightTaxonomies.size && !common.size
+          ? 'Sector taxonomies are incompatible; no normalization between standards has been verified.'
+          : mode === 'country'
+            ? 'Comparable issuer countries are unavailable; missing, unrecognized or ambiguous country labels remain unclassified.'
+            : 'Comparable issuer sector classifications are unavailable for one or both reported fund compositions.',
+    };
+  const partial = new Big(leftCoverage).lt(100) || new Big(rightCoverage).lt(100);
+  return {
+    weightedOverlap: sum(categories.map((row) => row.overlapWeight)),
+    status: partial ? 'partial' : 'verified',
+    leftCoverage,
+    rightCoverage,
+    categories,
+    ...(partial && {
+      reason:
+        'Known comparable classification weights only; unknown holdings and incompatible or unspecified taxonomies remain excluded.',
+    }),
+  };
+}
+
 export function fundOverlap(
   snapshots: InvestmentFundSnapshot[],
   holdings: InvestmentHolding[],
@@ -243,42 +395,52 @@ export function fundOverlap(
   const result: InvestmentFundOverlap[] = [];
   const active = holdings.filter((h) => h.isFund);
   const byFund = new Map(snapshots.map((s) => [s.fundId, s]));
+  // Normalize composition to 100 transient units once per fund. No positions,
+  // account records or synthetic financial values are persisted by this calculation.
+  const flattenedByFund = new Map(
+    active.map((fund) => [
+      fund.id,
+      byFund.has(fund.id)
+        ? lookThrough(
+            [
+              {
+                ...fund,
+                marketValue: '100',
+                accounts: [
+                  {
+                    portfolioId: 'composition',
+                    portfolioName: 'Fund composition',
+                    quantity: '0',
+                    costBasis: null,
+                    averageCost: null,
+                    marketValue: '100',
+                    unrealizedGain: null,
+                    source: 'Composition weights',
+                    updatedAt: null,
+                  },
+                ],
+              },
+            ],
+            snapshots,
+            '100',
+          ).filter((row) => !row.unknown)
+        : [],
+    ]),
+  );
   for (let i = 0; i < active.length; i++)
     for (let j = i + 1; j < active.length; j++) {
       const left = active[i]!;
       const right = active[j]!;
       const a = byFund.get(left.id);
       const b = byFund.get(right.id);
-      const flattened = (fund: InvestmentHolding) =>
-        lookThrough(
-          [
-            {
-              ...fund,
-              marketValue: '100',
-              accounts: [
-                {
-                  portfolioId: 'composition',
-                  portfolioName: 'Fund composition',
-                  quantity: '0',
-                  costBasis: null,
-                  averageCost: null,
-                  marketValue: '100',
-                  unrealizedGain: null,
-                  source: 'Composition weights',
-                  updatedAt: null,
-                },
-              ],
-            },
-          ],
-          snapshots,
-          '100',
-        );
-      const leftRows = a ? flattened(left).filter((r) => !r.unknown) : [];
-      const rightRows = b ? flattened(right).filter((r) => !r.unknown) : [];
+      const leftRows = flattenedByFund.get(left.id)!;
+      const rightRows = flattenedByFund.get(right.id)!;
+      const leftById = new Map(leftRows.map((row) => [row.id, row]));
+      const rightById = new Map(rightRows.map((row) => [row.id, row]));
       const shared: InvestmentFundOverlap['shared'] = [];
       let overlap = new Big(0);
       for (const ah of leftRows) {
-        const bh = rightRows.find((h) => h.id === ah.id);
+        const bh = rightById.get(ah.id);
         if (!bh) continue;
         overlap = overlap.plus(new Big(ah.totalValue).lt(bh.totalValue) ? ah.totalValue : bh.totalValue);
         shared.push({
@@ -287,11 +449,14 @@ export function fundOverlap(
           name: ah.name,
           leftWeight: ah.totalValue,
           rightWeight: bh.totalValue,
-          combinedValue: new Big(left.marketValue ?? 0)
-            .times(ah.totalValue)
-            .plus(new Big(right.marketValue ?? 0).times(bh.totalValue))
-            .div(100)
-            .toString(),
+          combinedValue:
+            left.marketValue === null || right.marketValue === null
+              ? null
+              : new Big(left.marketValue)
+                  .times(ah.totalValue)
+                  .plus(new Big(right.marketValue).times(bh.totalValue))
+                  .div(100)
+                  .toString(),
         });
       }
       result.push({
@@ -311,6 +476,49 @@ export function fundOverlap(
         leftDate: a?.asOf ?? null,
         rightDate: b?.asOf ?? null,
         shared,
+        ...(!a || !b
+          ? { reason: 'A dated fund composition is missing for one or both funds.' }
+          : new Big(sum(leftRows.map((r) => r.totalValue))!).lt(100) ||
+              new Big(sum(rightRows.map((r) => r.totalValue))!).lt(100)
+            ? {
+                reason:
+                  'Known reported companies only. Unreported composition may add overlap or change which companies appear unique.',
+              }
+            : left.marketValue === null || right.marketValue === null
+              ? { reason: 'Composition weights are known; dollar exposures require both fund position valuations.' }
+              : {}),
+        leftUnique:
+          a && b
+            ? leftRows
+                .filter((row) => !rightById.has(row.id))
+                .map((row) => ({
+                  id: row.id,
+                  symbol: row.symbol,
+                  name: row.name,
+                  weight: row.totalValue,
+                  value:
+                    left.marketValue === null
+                      ? null
+                      : new Big(left.marketValue).times(row.totalValue).div(100).toString(),
+                }))
+            : [],
+        rightUnique:
+          a && b
+            ? rightRows
+                .filter((row) => !leftById.has(row.id))
+                .map((row) => ({
+                  id: row.id,
+                  symbol: row.symbol,
+                  name: row.name,
+                  weight: row.totalValue,
+                  value:
+                    right.marketValue === null
+                      ? null
+                      : new Big(right.marketValue).times(row.totalValue).div(100).toString(),
+                }))
+            : [],
+        sectorOverlap: categoryOverlap(leftRows, rightRows, 'sector', !!a && !!b),
+        countryOverlap: categoryOverlap(leftRows, rightRows, 'country', !!a && !!b),
       });
     }
   return result;

@@ -166,6 +166,15 @@ export interface InvestmentFundSnapshot {
   coverage: string;
   classificationStandard?: string;
 }
+export interface InvestmentCategoryOverlap {
+  /** All category weights and coverage values are percentages of each fund's unnormalized composition. */
+  weightedOverlap: InvestmentDecimal;
+  status: InvestmentQualityStatus;
+  reason?: string;
+  leftCoverage: string;
+  rightCoverage: string;
+  categories: { label: string; leftWeight: string; rightWeight: string; overlapWeight: string }[];
+}
 export interface InvestmentFundOverlap {
   leftId: string;
   rightId: string;
@@ -174,6 +183,7 @@ export interface InvestmentFundOverlap {
   weightedOverlap: string | null;
   sharedCount: number;
   coverage: InvestmentQualityStatus;
+  reason?: string;
   leftDate: string | null;
   rightDate: string | null;
   shared: {
@@ -182,8 +192,13 @@ export interface InvestmentFundOverlap {
     name: string;
     leftWeight: string;
     rightWeight: string;
-    combinedValue: string;
+    combinedValue: InvestmentDecimal;
   }[];
+  /** Unique among known reported companies; incomplete counterpart coverage may conceal additional overlap. */
+  leftUnique: { id: string; symbol: string; name: string; weight: string; value: InvestmentDecimal }[];
+  rightUnique: { id: string; symbol: string; name: string; weight: string; value: InvestmentDecimal }[];
+  sectorOverlap: InvestmentCategoryOverlap;
+  countryOverlap: InvestmentCategoryOverlap;
 }
 export interface InvestmentBenchmark {
   id: string;

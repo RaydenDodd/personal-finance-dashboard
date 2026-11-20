@@ -85,6 +85,28 @@ describe('shared investment panels', () => {
     const wrapper = panel('value-capital', base(), { unit: 'percent' });
     expect(wrapper.findComponent({ name: 'SeriesChart' }).props('percent')).toBe(false);
   });
+  it('configures the performer period and labels historical ranking as price only', async () => {
+    const analytics = base();
+    analytics.holdings = [
+      {
+        id: 'synthetic',
+        securityId: 'synthetic',
+        symbol: 'SYNTH',
+        name: 'Synthetic',
+        unrealizedPercent: '40',
+        dailyChangePercent: '1',
+        periodReturns: { weekly: '-2' },
+      },
+    ] as InvestmentAnalytics['holdings'];
+    const wrapper = panel('performers', analytics);
+    const selector = wrapper.get('select[aria-label="Performer return period"]');
+    expect((selector.element as HTMLSelectElement).value).toBe('unrealized');
+    await selector.setValue('weekly');
+    expect(wrapper.emitted('settings-change')?.at(-1)).toEqual([{ performerPeriod: 'weekly' }]);
+    await wrapper.setProps({ settings: { dateRange: 'MAX', performerPeriod: 'weekly' } });
+    expect(wrapper.text()).toContain('price-only changes');
+    expect(wrapper.get('[data-testid="investment-performer-row"]').text()).toContain('-2.00%');
+  });
   it('preserves unsupported risk as gaps instead of substituting account balance returns', () => {
     const analytics = base();
     analytics.history = [

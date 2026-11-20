@@ -76,6 +76,23 @@ returns, dividends, classifications or future payments.
 
 ## Live coverage
 
-Pending deployment verification. Interfaces and calculation tests do not prove
-that external fund composition or benchmark history is present for the owner's
-actual holdings. The completion matrix records those separately.
+The deployed price provenance, native holding values, known subtotals and source
+quality gates passed actual-record verification. Existing scheduler startup was
+verified: daily equities at 06:00 America/New_York and cryptocurrency every
+15 minutes UTC. The existing bank synchronization timer remained active.
+
+A bounded, identified request to the public SEC fund registry returned HTTP 403
+with the page title "Request Rate Threshold Exceeded". The probe stopped after
+one request without retry, submissions traversal, bulk downloads or access
+workarounds. The automated SEC adapter remains unimplemented; this access failure
+blocked the initial identity-mapping feasibility check.
+
+The installed Yahoo SDK's top-holdings contract supplies percentages and names
+but does not guarantee composition effective dates or strong identifiers. A
+performance module's date cannot be substituted for a composition date.
+
+Manual composition storage and source preservation passed an isolated actual API
+and database test, including partial coverage, identical repeat and conflicting
+revision rejection. Production compositions remain unavailable until permitted
+dated source files or a verified provider integration are supplied. The
+completion matrix distinguishes this from a fully operational external feed.

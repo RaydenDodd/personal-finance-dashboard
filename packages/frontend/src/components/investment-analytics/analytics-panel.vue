@@ -18,6 +18,8 @@ import { useChartInteraction } from '@/composable/charts/use-chart-interaction';
 import SeriesChart from './series-chart.vue';
 import HoldingsTable from './holdings-table.vue';
 import Treemap from './treemap.vue';
+import OverlapDetails from './overlap-details.vue';
+import { INVESTMENT_PERFORMER_PERIODS, rankInvestmentPerformers } from './performers-model';
 import {
   aggregateInvestmentFlows,
   chartNumber,
@@ -435,18 +437,16 @@ const contributorRows = computed(() =>
   props.analytics.holdings.filter((row) => selectedAllocation.value?.securityIds.includes(row.securityId)),
 );
 const funds = computed(() => props.analytics.holdings.filter((row) => row.isFund));
+const performerPeriod = computed(() =>
+  INVESTMENT_PERFORMER_PERIODS.some(([period]) => period === props.settings.performerPeriod)
+    ? String(props.settings.performerPeriod)
+    : 'unrealized',
+);
 const performers = computed(() =>
-  [...props.analytics.holdings]
-    .filter((row) => row.unrealizedPercent !== null)
-    .sort((a, b) => Number(b.unrealizedPercent) - Number(a.unrealizedPercent)),
+  rankInvestmentPerformers(props.analytics.holdings, performerPeriod.value, String(props.settings.securityId ?? '')),
 );
 const performerGroups = computed(() => {
-  const filtered = performers.value.filter(
-    (row) =>
-      !props.settings.securityId ||
-      row.securityId === props.settings.securityId ||
-      row.symbol === props.settings.securityId,
-  );
+  const filtered = performers.value;
   return [
     { label: 'Best', rows: filtered.slice(0, Number(props.settings.limit ?? 5)) },
     { label: 'Worst', rows: [...filtered].reverse().slice(0, Number(props.settings.limit ?? 5)) },
@@ -870,19 +870,7 @@ const health = computed(() =>
         </table>
       </div>
       <div v-if="overlap" class="bg-muted/40 rounded-md p-3 text-xs">
-        <p class="font-semibold">
-          {{ overlap.leftSymbol }} / {{ overlap.rightSymbol }} · {{ overlap.sharedCount }} shared companies ·
-          {{ overlap.coverage }}
-        </p>
-        <p class="text-muted-foreground mt-1">
-          Effective {{ overlap.leftDate ?? 'unavailable' }} / {{ overlap.rightDate ?? 'unavailable' }}. Partial coverage
-          limits the comparison.
-        </p>
-        <p v-for="row in overlap.shared" :key="row.id" class="mt-2 flex justify-between gap-2">
-          <span>{{ row.symbol }} · {{ row.name }}</span
-          ><span>{{ pct(row.leftWeight) }} / {{ pct(row.rightWeight) }} · {{ money(row.combinedValue) }}</span>
-        </p>
-        <p v-if="!overlap.shared.length" class="mt-2">No comparable shared holdings are available.</p>
+        <OverlapDetails :pair="overlap" :currency-code="analytics.currencyCode" />
         <Button size="sm" variant="ghost" class="mt-2" @click="overlap = null">Close details</Button>
       </div>
       <p v-if="funds.length < 2" class="text-muted-foreground text-sm">
@@ -940,21 +928,41 @@ const health = computed(() =>
       </p></template
     >
     <template v-if="kind === 'performers'"
-      ><p class="text-muted-foreground text-xs">
-        Open-position unrealized return, using reliable remaining cost basis. Other periods require dated prices and
-        complete position history.
+      ><label class="text-muted-foreground flex flex-wrap items-center gap-2 text-xs"
+        >Rank by<select
+          :value="performerPeriod"
+          aria-label="Performer return period"
+          class="bg-background max-w-full rounded-md border px-2 py-1.5"
+          @change="emit('settings-change', { performerPeriod: ($event.target as HTMLSelectElement).value })"
+        >
+          <option v-for="[id, label] in INVESTMENT_PERFORMER_PERIODS" :key="id" :value="id">{{ label }}</option>
+        </select></label
+      >
+      <p class="text-muted-foreground text-xs">
+        {{
+          performerPeriod === 'unrealized'
+            ? 'Open-position unrealized return uses reliable remaining cost basis and valuation.'
+            : 'Security price-only changes use dated recorded prices through the latest supported quote; distributions and cash flows are excluded. These are not total investment returns.'
+        }}
+        Missing or stale observations are excluded from ranking.
       </p>
       <div class="grid grid-cols-2 gap-4">
         <div v-for="group in performerGroups" :key="group.label">
           <p class="mb-2 text-xs font-medium">{{ group.label }}</p>
-          <div v-for="row in group.rows" :key="row.id" class="flex justify-between gap-2 border-b py-2 text-xs">
+          <div
+            v-for="row in group.rows"
+            :key="row.id"
+            class="flex justify-between gap-2 border-b py-2 text-xs"
+            data-testid="investment-performer-row"
+            :data-symbol="row.symbol"
+          >
             <span>{{ row.symbol }}</span
-            ><span :class="signed(row.unrealizedPercent)">{{ pct(row.unrealizedPercent) }}</span>
+            ><span :class="signed(row.returnValue)">{{ pct(row.returnValue) }}</span>
           </div>
         </div>
       </div>
       <p v-if="!performers.length" class="text-muted-foreground text-sm">
-        No positions have a verified cost basis and valuation.
+        No securities have reliable observations for this selected return period.
       </p></template
     >
     <template v-if="kind === 'concentration'"

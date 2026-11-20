@@ -1,3 +1,5 @@
+import { INVESTMENT_PERFORMER_PERIODS } from '@/components/investment-analytics/performers-model';
+
 import type { WidgetDefinition } from './widget-registry';
 
 /** The same panel kinds are used on Investments pages and the main Dashboard. */
@@ -116,6 +118,9 @@ export const investmentWidgetSettings = (
     ? stored.colorBy
     : 'daily',
   aggregation: ['monthly', 'quarterly', 'yearly'].includes(String(stored.aggregation)) ? stored.aggregation : 'monthly',
+  performerPeriod: INVESTMENT_PERFORMER_PERIODS.some(([period]) => period === stored.performerPeriod)
+    ? stored.performerPeriod
+    : 'unrealized',
   unit: stored.unit === 'percent' ? 'percent' : 'dollars',
   limit:
     typeof stored.limit === 'number' && Number.isInteger(stored.limit) && stored.limit >= 5 && stored.limit <= 100
