@@ -477,11 +477,13 @@ const theadLabelStyles = 'block max-w-32 truncate';
                   </td>
                   <td :class="[cellStyles, 'px-3 text-right font-medium tabular-nums']">
                     {{
-                      formatMoneyCell({
-                        holding: row.holding,
-                        native: Number(row.holding.marketValue || 0),
-                        display: row.holding.displayMarketValue,
-                      })
+                      row.holding.marketValueKnown === false
+                        ? 'Unavailable'
+                        : formatMoneyCell({
+                            holding: row.holding,
+                            native: Number(row.holding.marketValue || 0),
+                            display: row.holding.displayMarketValue,
+                          })
                     }}
                   </td>
                   <td :class="[cellStyles, 'px-3 text-right']">

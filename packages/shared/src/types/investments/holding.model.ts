@@ -3,6 +3,7 @@ import { SecurityModel } from './security.model';
 
 export interface HoldingModel {
   costBasisKnown?: boolean;
+  marketValueKnown?: boolean;
   realizedGainKnown?: boolean;
   valuationSource?: string;
   portfolioId: string;

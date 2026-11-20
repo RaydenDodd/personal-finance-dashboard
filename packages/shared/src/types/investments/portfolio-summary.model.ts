@@ -1,5 +1,6 @@
 export interface PortfolioSummaryModel {
   costBasisKnown?: boolean;
+  marketValueKnown?: boolean;
   realizedGainKnown?: boolean;
   cashKnown?: boolean;
   observationDate?: string;

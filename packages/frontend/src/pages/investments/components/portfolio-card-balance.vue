@@ -14,7 +14,11 @@
     </p>
 
     <!-- Unrealized Gain/Loss -->
-    <div v-if="summary && summary.costBasisKnown !== false" class="flex items-center gap-1.5" :class="gainColorClass">
+    <div
+      v-if="summary && summary.costBasisKnown !== false && summary.marketValueKnown !== false"
+      class="flex items-center gap-1.5"
+      :class="gainColorClass"
+    >
       <component :is="gainIcon" class="size-3.5" />
       <span class="text-sm font-medium">
         {{ unrealizedGainFormatted }}
@@ -26,6 +30,9 @@
     <p v-if="summary" class="text-muted-foreground text-xs">
       {{ $t('investments.card.costBasis') }}:
       {{ summary.costBasisKnown === false ? 'Unavailable' : formattedCostBasis }}
+    </p>
+    <p v-if="summary?.marketValueKnown === false" class="text-muted-foreground text-xs">
+      Partial value · missing quotes
     </p>
   </div>
 

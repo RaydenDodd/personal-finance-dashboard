@@ -43,7 +43,11 @@
               {{ formatCurrency(Number(summary.totalPortfolioValue), summary.currencyCode) }}
             </h2>
             <div
-              v-if="summary.costBasisKnown !== false && summary.realizedGainKnown !== false"
+              v-if="
+                summary.costBasisKnown !== false &&
+                summary.marketValueKnown !== false &&
+                summary.realizedGainKnown !== false
+              "
               :class="getGainColorClass({ gainValue: getTotalGainValue() })"
               class="flex items-center gap-1.5"
             >
@@ -72,9 +76,11 @@
           </i18n-t>
           <p class="text-muted-foreground mt-0.5 text-sm">
             {{
-              summary.cashKnown === false
-                ? 'Holdings value · cash unavailable'
-                : $t('portfolioDetail.balance.totalValue')
+              summary.marketValueKnown === false
+                ? 'Priced holdings only · missing quotes'
+                : summary.cashKnown === false
+                  ? 'Holdings value · cash unavailable'
+                  : $t('portfolioDetail.balance.totalValue')
             }}
           </p>
         </div>
@@ -102,7 +108,12 @@
             <p class="text-muted-foreground text-xs font-medium tracking-wide uppercase">
               {{ $t('portfolioDetail.balance.metrics.unrealized') }}
             </p>
-            <p v-if="summary.costBasisKnown === false" class="text-muted-foreground text-sm">Unavailable</p>
+            <p
+              v-if="summary.costBasisKnown === false || summary.marketValueKnown === false"
+              class="text-muted-foreground text-sm"
+            >
+              Unavailable
+            </p>
             <div v-else :class="getGainColorClass({ gainValue: Number(summary.unrealizedGainValue) })">
               <p class="text-base font-semibold">
                 {{ Number(summary.unrealizedGainValue) >= 0 ? '+' : ''
@@ -141,7 +152,11 @@
               {{ $t('portfolioDetail.balance.metrics.totalReturn') }}
             </p>
             <p
-              v-if="summary.realizedGainKnown === false || summary.costBasisKnown === false"
+              v-if="
+                summary.realizedGainKnown === false ||
+                summary.costBasisKnown === false ||
+                summary.marketValueKnown === false
+              "
               class="text-muted-foreground text-sm"
             >
               Incomplete history

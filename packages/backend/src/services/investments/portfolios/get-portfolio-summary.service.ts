@@ -21,6 +21,7 @@ interface GetPortfolioSummaryParams {
 
 interface PortfolioSummaryResult {
   costBasisKnown?: boolean;
+  marketValueKnown?: boolean;
   realizedGainKnown?: boolean;
   cashKnown?: boolean;
   observationDate?: string;
@@ -142,6 +143,8 @@ const getPortfolioSummaryImpl = async ({
   const evidence = broker
     ? {
         costBasisKnown: holdings.every((h) => h.costBasisKnown !== false),
+        marketValueKnown:
+          (!!snapshot?.complete || broker.data.historyComplete) && holdings.every((h) => h.marketValueKnown !== false),
         realizedGainKnown: broker.data.historyComplete,
         cashKnown: snapshot?.cash !== null && snapshot?.cash !== undefined,
         observationDate: snapshot?.asOf,

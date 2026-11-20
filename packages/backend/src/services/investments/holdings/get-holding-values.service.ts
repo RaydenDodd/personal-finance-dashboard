@@ -68,6 +68,7 @@ interface HoldingValue {
   // Internal: holding→base rate already resolved here; not part of the holdings API response
   baseRate?: number;
   costBasisKnown?: boolean;
+  marketValueKnown?: boolean;
   realizedGainKnown?: boolean;
   valuationSource?: string;
 }
@@ -252,7 +253,6 @@ const getHoldingValuesImpl = async ({ portfolioId, date, userId }: GetHoldingVal
     const position = snapshot?.positions.find((p) => p.securityId === holding.securityId);
     const anchored = snapshot && (position || snapshot.complete);
     const allLegs = transactionsBySecurityId[holding.securityId] || [];
-    const basisKnown = !anchored || !position || position.costBasis !== null;
     if (anchored || (broker && date)) {
       const initial = anchored
         ? {
@@ -277,6 +277,8 @@ const getHoldingValuesImpl = async ({ portfolioId, date, userId }: GetHoldingVal
       holding.refCostBasis = Money.fromDecimal(totals.refCostBasis.toString());
     }
     const quantity = holding.quantity.toBig();
+    const basisKnown =
+      !broker || broker.data.historyComplete || (position ? position.costBasis !== null : !!anchored && quantity.eq(0));
 
     let marketValue = '0';
     let refMarketValue = '0';
@@ -335,6 +337,7 @@ const getHoldingValuesImpl = async ({ portfolioId, date, userId }: GetHoldingVal
       excluded: holding.excluded,
       security: holding.security,
       costBasisKnown: basisKnown,
+      marketValueKnown: !broker || !!priceDate || quantity.eq(0),
       realizedGainKnown: !broker || broker.data.historyComplete,
       valuationSource: position ? snapshot?.source : undefined,
       latestPrice,

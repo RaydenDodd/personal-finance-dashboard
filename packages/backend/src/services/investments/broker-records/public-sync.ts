@@ -14,12 +14,15 @@ import { encryptCredentials, decryptCredentials } from '@services/bank-data-prov
 import { withLock } from '@services/common/lock';
 import { isBaseCurrencyChangeLocked } from '@services/currencies/base-currency-lock';
 import { directCashTransaction } from '@services/investments/portfolios/transfers';
+import { upsertSecuritiesFromSearch } from '@services/investments/securities-manage';
+import { rememberSearchResults } from '@services/investments/securities/verified-search-cache';
 import { createInvestmentTransaction } from '@services/investments/transactions/create.service';
 import { Big } from 'big.js';
 import { createHash } from 'crypto';
 import { Op } from 'sequelize';
 import { z } from 'zod';
 
+import { resolveBrokerCryptoIdentity } from './crypto-identity';
 import { PublicReadClient } from './public-client';
 import type { BrokerSnapshot } from './schema';
 import { saveBrokerData } from './service';
@@ -49,6 +52,11 @@ const securityFor = async (symbol: string, type: string, name?: string | null) =
   if (!['CRYPTO', 'EQUITY', 'ETF', 'STOCK'].includes(type)) throw new Error('Unsupported Public security type.');
   const matches = await Securities.findAll({ where: { symbol, currencyCode: 'USD', assetClass } });
   if (matches.length > 1) throw new Error('Ambiguous Public security identity.');
+  if (!matches[0] && assetClass === ASSET_CLASS.crypto) {
+    const verified = await resolveBrokerCryptoIdentity(symbol, name);
+    await rememberSearchResults({ results: [verified] });
+    return (await upsertSecuritiesFromSearch({ securities: [verified] })).securities[0]!;
+  }
   return (
     matches[0] ??
     Securities.create({
