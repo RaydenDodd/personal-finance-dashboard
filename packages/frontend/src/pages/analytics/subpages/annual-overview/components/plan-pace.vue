@@ -8,6 +8,7 @@ import PacePlot from '@/components/widgets/spending-pace-widget/pace-plot.vue';
 import { buildPaceGeometry } from '@/components/widgets/spending-pace-widget/pace-geometry';
 import { ChartTooltip, ChartTooltipHeader, ChartTooltipRow } from '@/components/common/charts/chart-tooltip';
 import { Button } from '@/components/lib/ui/button';
+import SummaryCard from '../../cash-flow/components/summary-card.vue';
 const props = defineProps<{ from: Date; to: Date; metric: 'income' | 'savings' }>();
 const key = computed(() => ({ from: format(props.from, 'yyyy-MM-dd'), through: format(props.to, 'yyyy-MM-dd') }));
 const { data, isLoading, isError, refetch } = useQuery({
@@ -71,7 +72,7 @@ const dateLabel = (date: string) => format(new Date(date + 'T12:00:00'), 'MMM d,
 const detailsOpen = ref(false);
 </script>
 <template>
-  <section class="bg-card border-border space-y-4 rounded-lg border p-5 sm:p-6" :data-testid="metric + '-plan-pace'">
+  <section class="space-y-4" :data-testid="metric + '-plan-pace'">
     <header class="flex flex-wrap items-center justify-between gap-3">
       <h2 class="text-lg font-semibold">{{ metric === 'income' ? 'Income pace' : 'Savings pace' }}</h2>
       <router-link to="/finances/income" class="text-primary text-sm hover:underline">Edit Income plan</router-link>
@@ -82,121 +83,125 @@ const detailsOpen = ref(false);
       <Button variant="ghost" @click="refetch()">Retry</Button>
     </div>
     <template v-else-if="data">
-      <div class="divide-border grid gap-3 sm:grid-cols-3 sm:divide-x">
-        <div>
-          <p class="text-muted-foreground text-xs">
-            {{ metric === 'income' ? 'Received take-home income' : 'Net savings and investment funding' }}
-          </p>
-          <p class="mt-1 text-3xl font-bold tabular-nums">{{ money(last >= 0 ? actual[last] : null) }}</p>
-        </div>
-        <div class="sm:pl-4">
-          <p class="text-muted-foreground text-xs">Income plan - selected period</p>
-          <p class="mt-1 text-xl font-semibold tabular-nums">{{ money(plan.at(-1)) }}</p>
-        </div>
-        <div class="sm:pl-4">
-          <p class="text-muted-foreground text-xs">
-            {{ forecast ? 'At current pace - period end' : 'Actual vs plan - observed dates' }}
-          </p>
-          <p class="mt-1 text-xl font-semibold tabular-nums">
-            {{
-              forecast
-                ? '~' + money(forecast.at(-1))
-                : money(
-                    last >= 0 && plan[last] != null
-                      ? actual[last]! - ((plan[last] ?? 0) - (observedStart > 0 ? (plan[observedStart - 1] ?? 0) : 0))
-                      : null,
-                  )
-            }}
-          </p>
-        </div>
-      </div>
-      <p v-if="!data.planName" class="text-muted-foreground text-sm">
-        Set your salary and allocations in Income to see the planned line.
-      </p>
-      <p v-if="data.coverageFrom && data.coverageFrom > data.from" class="text-muted-foreground text-xs">
-        Connected transaction coverage begins {{ dateLabel(data.coverageFrom) }}. Earlier actual values are unavailable.
-      </p>
-      <div
-        ref="plot"
-        class="relative h-64 touch-pan-y sm:h-80"
-        @pointermove="pointer"
-        @pointerdown="pointer"
-        @pointerleave="
-          (event) => {
-            if (event.pointerType !== 'touch') hoverIndex = null;
-          }
-        "
-      >
-        <PacePlot
-          :geometry="geometry"
-          :width="width"
-          :height="height"
-          :tone="tone"
-          :hover-x="hoverIndex == null ? null : geometry?.x(hoverIndex)"
-          :label="metric === 'income' ? 'Income actual, forecast and plan' : 'Savings actual, forecast and plan'"
+      <div class="grid gap-4 sm:grid-cols-3" data-testid="pace-summary-cards">
+        <SummaryCard
+          :title="metric === 'income' ? 'Received take-home income' : 'Net savings and investment funding'"
+          :value="last >= 0 ? (actual[last] ?? 0) : 0"
+          :value-label="money(last >= 0 ? actual[last] : null)"
+          class="text-app-income-color [&>div:last-child]:text-3xl [&>div:last-child]:font-bold"
         />
-        <ChartTooltip
-          v-if="hover"
-          class="pointer-events-none absolute top-0 z-10"
-          :style="hoverIndex! > points.length / 2 ? { right: '8px' } : { left: '8px' }"
-          data-testid="plan-pace-tooltip"
-        >
-          <ChartTooltipHeader>{{ dateLabel(hover.date) }}</ChartTooltipHeader>
-          <ChartTooltipRow label="Actual" :value="money(actual[hoverIndex!])" /><ChartTooltipRow
-            label="Income plan"
-            :value="money(plan[hoverIndex!])"
-          />
-          <ChartTooltipRow
-            v-if="forecast?.[hoverIndex!] != null"
-            label="Forecast"
-            :value="'~' + money(forecast[hoverIndex!])"
-          />
-        </ChartTooltip>
+        <SummaryCard
+          title="Income plan - selected period"
+          :value="plan.at(-1) ?? 0"
+          :value-label="money(plan.at(-1))"
+          class="text-primary [&>div:last-child]:text-3xl [&>div:last-child]:font-bold"
+        />
+        <SummaryCard
+          :title="forecast ? 'At current pace - period end' : 'Actual vs plan - observed dates'"
+          :value="0"
+          :value-label="
+            forecast
+              ? '~' + money(forecast.at(-1))
+              : money(
+                  last >= 0 && plan[last] != null
+                    ? actual[last]! - ((plan[last] ?? 0) - (observedStart > 0 ? (plan[observedStart - 1] ?? 0) : 0))
+                    : null,
+                )
+          "
+          class="[&>div:last-child]:text-3xl [&>div:last-child]:font-bold"
+          :class="tone.stroke === 'stroke-app-income-color' ? 'text-app-income-color' : 'text-app-expense-color'"
+        />
       </div>
-      <div class="text-muted-foreground relative h-5 text-[10px]">
-        <span
-          v-for="i in ticks"
-          :key="i"
-          class="absolute whitespace-nowrap"
-          :style="{
-            left: (100 * i) / Math.max(1, points.length - 1) + '%',
-            transform: i === 0 ? 'none' : i === points.length - 1 ? 'translateX(-100%)' : 'translateX(-50%)',
-          }"
-          >{{ format(new Date(points[i]!.date + 'T12:00:00'), points.length > 365 ? 'MMM yy' : 'MMM d') }}</span
-        >
-      </div>
-      <div class="text-muted-foreground flex flex-wrap gap-4 text-xs">
-        <span class="flex items-center gap-2"><i class="border-primary w-5 border-t-2" />Actual</span
-        ><span class="flex items-center gap-2"
-          ><i class="border-muted-foreground w-5 border-t-2 opacity-45" />Income plan</span
-        ><span v-if="forecast" class="flex items-center gap-2"
-          ><i class="w-5 border-t-2 border-dotted" :class="tone.border" />Forecast</span
-        >
-      </div>
-      <p class="text-muted-foreground text-xs">
-        {{ data.planBasis
-        }}{{ forecast ? ' Forecast follows observed average progress; real paydays and transfers are uneven.' : '' }}
-      </p>
-      <template v-if="metric === 'savings'"
-        ><p class="text-muted-foreground text-xs">
-          {{ data.savingsBasis }} Cash flow's Saved figure instead measures income minus expenses.
+      <div class="bg-card border-border space-y-4 rounded-lg border p-5 sm:p-6" data-testid="pace-chart-card">
+        <p v-if="!data.planName" class="text-muted-foreground text-sm">
+          Set your salary and allocations in Income to see the planned line.
         </p>
-        <Button variant="ghost" size="sm" :aria-expanded="detailsOpen" @click="detailsOpen = !detailsOpen"
-          >{{ detailsOpen ? 'Hide' : 'View' }} funding transactions ({{ data.funding.length }})</Button
+        <p v-if="data.coverageFrom && data.coverageFrom > data.from" class="text-muted-foreground text-xs">
+          Connected transaction coverage begins {{ dateLabel(data.coverageFrom) }}. Earlier actual values are
+          unavailable.
+        </p>
+        <div
+          ref="plot"
+          class="relative h-64 touch-pan-y sm:h-80"
+          @pointermove="pointer"
+          @pointerdown="pointer"
+          @pointerleave="
+            (event) => {
+              if (event.pointerType !== 'touch') hoverIndex = null;
+            }
+          "
         >
-        <div v-if="detailsOpen" class="divide-border divide-y" data-testid="savings-funding-details">
-          <div v-for="e in data.funding" :key="e.id" class="flex justify-between gap-4 py-3 text-sm">
-            <div>
-              <p>{{ e.description }}</p>
-              <p class="text-muted-foreground text-xs">{{ dateLabel(e.date) }}</p>
-            </div>
-            <span class="shrink-0 tabular-nums">{{ money(e.amount) }}</span>
-          </div>
-          <p v-if="!data.funding.length" class="text-muted-foreground py-4 text-sm">
-            No recorded funding transfers in this period.
+          <PacePlot
+            :geometry="geometry"
+            :width="width"
+            :height="height"
+            :tone="tone"
+            :hover-x="hoverIndex == null ? null : geometry?.x(hoverIndex)"
+            :label="metric === 'income' ? 'Income actual, forecast and plan' : 'Savings actual, forecast and plan'"
+          />
+          <ChartTooltip
+            v-if="hover"
+            class="pointer-events-none absolute top-0 z-10"
+            :style="hoverIndex! > points.length / 2 ? { right: '8px' } : { left: '8px' }"
+            data-testid="plan-pace-tooltip"
+          >
+            <ChartTooltipHeader>{{ dateLabel(hover.date) }}</ChartTooltipHeader>
+            <ChartTooltipRow label="Actual" :value="money(actual[hoverIndex!])" /><ChartTooltipRow
+              label="Income plan"
+              :value="money(plan[hoverIndex!])"
+            />
+            <ChartTooltipRow
+              v-if="forecast?.[hoverIndex!] != null"
+              label="Forecast"
+              :value="'~' + money(forecast[hoverIndex!])"
+            />
+          </ChartTooltip>
+        </div>
+        <div class="text-muted-foreground relative h-5 text-[10px]">
+          <span
+            v-for="i in ticks"
+            :key="i"
+            class="absolute whitespace-nowrap"
+            :style="{
+              left: (100 * i) / Math.max(1, points.length - 1) + '%',
+              transform: i === 0 ? 'none' : i === points.length - 1 ? 'translateX(-100%)' : 'translateX(-50%)',
+            }"
+            >{{ format(new Date(points[i]!.date + 'T12:00:00'), points.length > 365 ? 'MMM yy' : 'MMM d') }}</span
+          >
+        </div>
+        <div class="text-muted-foreground flex flex-wrap gap-4 text-xs">
+          <span class="flex items-center gap-2"><i class="border-primary w-5 border-t-2" />Actual</span
+          ><span class="flex items-center gap-2"
+            ><i class="border-muted-foreground w-5 border-t-2 opacity-45" />Income plan</span
+          ><span v-if="forecast" class="flex items-center gap-2"
+            ><i class="w-5 border-t-2 border-dotted" :class="tone.border" />Forecast</span
+          >
+        </div>
+        <p class="text-muted-foreground text-xs">
+          {{ data.planBasis
+          }}{{ forecast ? ' Forecast follows observed average progress; real paydays and transfers are uneven.' : '' }}
+        </p>
+        <template v-if="metric === 'savings'"
+          ><p class="text-muted-foreground text-xs">
+            {{ data.savingsBasis }} Cash flow's Saved figure instead measures income minus expenses.
           </p>
-        </div></template
-      >
+          <Button variant="ghost" size="sm" :aria-expanded="detailsOpen" @click="detailsOpen = !detailsOpen"
+            >{{ detailsOpen ? 'Hide' : 'View' }} funding transactions ({{ data.funding.length }})</Button
+          >
+          <div v-if="detailsOpen" class="divide-border divide-y" data-testid="savings-funding-details">
+            <div v-for="e in data.funding" :key="e.id" class="flex justify-between gap-4 py-3 text-sm">
+              <div>
+                <p>{{ e.description }}</p>
+                <p class="text-muted-foreground text-xs">{{ dateLabel(e.date) }}</p>
+              </div>
+              <span class="shrink-0 tabular-nums">{{ money(e.amount) }}</span>
+            </div>
+            <p v-if="!data.funding.length" class="text-muted-foreground py-4 text-sm">
+              No recorded funding transfers in this period.
+            </p>
+          </div></template
+        >
+      </div>
     </template>
   </section>
 </template>

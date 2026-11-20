@@ -4,7 +4,6 @@
       <PeriodSelector v-model="selectedPeriod" class="max-xs:mx-auto" />
       <MetricToggle v-model="selectedMetric" />
       <FiltersButton
-        v-if="selectedMetric === 'expenses'"
         :label="t('analytics.trends.filters.button')"
         :active-count="countActiveFilters({ filters })"
         class="ml-auto"
@@ -13,23 +12,7 @@
       </FiltersButton>
     </div>
 
-    <div v-if="selectedMetric !== 'expenses'" class="space-y-4">
-      <div class="flex gap-1">
-        <Button
-          variant="ghost"
-          size="sm"
-          @click="selectedPeriod = { from: startOfMonth(new Date()), to: endOfMonth(new Date()) }"
-          >This month</Button
-        ><Button
-          variant="ghost"
-          size="sm"
-          @click="selectedPeriod = { from: startOfYear(new Date()), to: endOfYear(new Date()) }"
-          >This year</Button
-        >
-      </div>
-      <PlanPace :from="selectedPeriod.from" :to="selectedPeriod.to" :metric="selectedMetric" />
-    </div>
-    <template v-else>
+    <div class="space-y-6" data-testid="original-trends-content">
       <!-- Error state -->
       <div v-if="cumulativeError" class="flex h-80 items-center justify-center">
         <div class="text-destructive-text">{{ t('analytics.trends.loadError') }}</div>
@@ -152,12 +135,30 @@
 
       <!-- Category Breakdown (show for expenses and income, not savings) -->
       <CategoryBreakdown
+        v-if="selectedMetric !== 'savings'"
         :current-period-data="currentPeriodCategories || {}"
         :previous-period-data="previousPeriodCategories || {}"
         :is-loading="isLoadingCategories"
-        :is-income="false"
+        :is-income="selectedMetric === 'income'"
       />
-    </template>
+    </div>
+    <div v-if="selectedMetric !== 'expenses'" class="space-y-4" data-testid="additional-plan-comparison">
+      <div class="flex gap-1">
+        <Button
+          variant="ghost"
+          size="sm"
+          @click="selectedPeriod = { from: startOfMonth(new Date()), to: endOfMonth(new Date()) }"
+          >This month</Button
+        >
+        <Button
+          variant="ghost"
+          size="sm"
+          @click="selectedPeriod = { from: startOfYear(new Date()), to: endOfYear(new Date()) }"
+          >This year</Button
+        >
+      </div>
+      <PlanPace :from="selectedPeriod.from" :to="selectedPeriod.to" :metric="selectedMetric" />
+    </div>
   </div>
 </template>
 
@@ -271,7 +272,6 @@ const {
 } = useQuery({
   queryKey: [...VUE_QUERY_CACHE_KEYS.analyticsCumulative, cumulativeQueryParams],
   queryFn: () => getCumulativeData(cumulativeQueryParams.value),
-  enabled: computed(() => selectedMetric.value === 'expenses'),
   staleTime: QUERY_CACHE_STALE_TIME.ANALYTICS,
   gcTime: QUERY_CACHE_STALE_TIME.ANALYTICS * 2,
 });
@@ -339,7 +339,7 @@ const { data: currentPeriodCategories, isLoading: isLoadingCurrentCategories } =
   queryFn: () => getSpendingsByCategories(currentPeriodDates.value),
   staleTime: QUERY_CACHE_STALE_TIME.ANALYTICS,
   gcTime: QUERY_CACHE_STALE_TIME.ANALYTICS * 2,
-  enabled: computed(() => selectedMetric.value === 'expenses'),
+  enabled: computed(() => selectedMetric.value !== 'savings'),
 });
 
 const { data: previousPeriodCategories, isLoading: isLoadingPreviousCategories } = useQuery({
@@ -347,7 +347,7 @@ const { data: previousPeriodCategories, isLoading: isLoadingPreviousCategories }
   queryFn: () => getSpendingsByCategories(previousPeriodDates.value),
   staleTime: QUERY_CACHE_STALE_TIME.ANALYTICS,
   gcTime: QUERY_CACHE_STALE_TIME.ANALYTICS * 2,
-  enabled: computed(() => selectedMetric.value === 'expenses'),
+  enabled: computed(() => selectedMetric.value !== 'savings'),
 });
 
 const isLoadingCategories = computed(() => isLoadingCurrentCategories.value || isLoadingPreviousCategories.value);
