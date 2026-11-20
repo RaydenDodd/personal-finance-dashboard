@@ -10,6 +10,7 @@ import { Op, WhereOptions } from 'sequelize';
 
 import { dataProviderFactory } from '../data-providers';
 import { BulkPriceData, toProviderSymbol } from '../data-providers/base-provider';
+import { fetchCoinbaseQuotes } from '../data-providers/coinbase-quotes';
 import { bucketByUtcDay, startOfDayUtc } from './pricing-anchor';
 
 /**
@@ -171,15 +172,25 @@ const securitiesPricesSyncImpl = async (options: SyncOptions): Promise<Securitie
       message: `[${label}] Bulk price fetch failed for all securities`,
       error: error as Error,
     });
-    result.failedUpdates = securitiesInputs.length;
-    for (const input of securitiesInputs) {
-      result.errors.push({
-        securityId: input.securityId,
-        symbol: input.symbol,
-        error: errorMessage,
-      });
+    // Crypto can still use the public quote fallback when the optional primary is unavailable.
+    if (label === 'crypto-hourly') fetchedPrices = new Map();
+    else {
+      result.failedUpdates = securitiesInputs.length;
+      for (const input of securitiesInputs) {
+        result.errors.push({
+          securityId: input.securityId,
+          symbol: input.symbol,
+          error: errorMessage,
+        });
+      }
+      return result;
     }
-    return result;
+  }
+
+  if (label === 'crypto-hourly') {
+    const missing = securitiesInputs.filter((s) => !fetchedPrices.get(s.securityId)?.length);
+    const fallback = await fetchCoinbaseQuotes(missing, forDate);
+    for (const [id, bars] of fallback) fetchedPrices.set(id, bars);
   }
 
   const securityPricesToUpsert: {

@@ -2,6 +2,16 @@
   <PageWrapper>
     <div class="mb-6 flex flex-wrap items-center justify-between gap-x-8 gap-y-4">
       <h1 class="text-2xl tracking-wider">{{ $t('investments.title') }}</h1>
+      <UiButton
+        v-if="hiddenCount"
+        variant="ghost"
+        size="sm"
+        :aria-pressed="showHidden"
+        @click="showHidden = !showHidden"
+      >
+        <EyeOffIcon class="size-4" />
+        {{ showHidden ? 'Hide hidden portfolios' : `Show hidden (${hiddenCount})` }}
+      </UiButton>
 
       <DemoRestricted feature="create_portfolio_header" :message="$t('demo.featureNotAvailable')">
         <CreatePortfolioDialog v-if="!isDemo">
@@ -68,7 +78,7 @@
                   class="bg-secondary text-secondary-foreground inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
                 >
                   <EyeOffIcon class="mr-1 size-3" />
-                  {{ $t('investments.card.hidden') }}
+                  {{ isHidden(portfolio.id) ? 'Hidden' : 'Excluded from net worth' }}
                 </div>
               </div>
             </div>
@@ -81,12 +91,18 @@
                     variant="ghost"
                     size="icon"
                     class="size-8 opacity-0 transition-opacity group-hover:opacity-100"
+                    :aria-label="`Actions for ${portfolio.name}`"
                     :class="{ 'opacity-100': !portfolio.isEnabled }"
                   >
                     <MoreVerticalIcon class="size-4" />
                   </UiButton>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
+                  <DropdownMenuItem :disabled="isPatching" @select="setHidden(portfolio.id, !isHidden(portfolio.id))">
+                    <EyeIcon v-if="isHidden(portfolio.id)" class="mr-2 size-4" />
+                    <EyeOffIcon v-else class="mr-2 size-4" />
+                    {{ isHidden(portfolio.id) ? 'Show portfolio' : 'Hide portfolio' }}
+                  </DropdownMenuItem>
                   <DropdownMenuItem>
                     <RouterLink
                       :to="{
@@ -204,6 +220,7 @@ import DeletePortfolioDialog from '@/components/dialogs/delete-portfolio-dialog.
 import UiButton from '@/components/lib/ui/button/Button.vue';
 import { Card, CardContent, CardHeader } from '@/components/lib/ui/card';
 import { usePortfolios } from '@/composable/data-queries/portfolios';
+import { usePortfolioVisibility } from '@/composable/use-portfolio-visibility';
 import { cn } from '@/lib/utils';
 import PortfolioCardBalance from '@/pages/investments/components/portfolio-card-balance.vue';
 import PortfoliosTrash from '@/pages/investments/components/portfolios-trash.vue';
@@ -211,16 +228,23 @@ import { ROUTES_NAMES } from '@/routes/constants';
 import { useCurrenciesStore, useUserStore } from '@/stores';
 import { BriefcaseIcon, EyeIcon, EyeOffIcon, MoreVerticalIcon, PlusIcon, Trash2Icon } from '@lucide/vue';
 import { storeToRefs } from 'pinia';
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 
 const userStore = useUserStore();
 const { isDemo } = storeToRefs(userStore);
 const currenciesStore = useCurrenciesStore();
 const { currencies } = storeToRefs(currenciesStore);
 const portfoliosQuery = usePortfolios();
+const { isHidden, setHidden, isPatching } = usePortfolioVisibility();
+const showHidden = ref(false);
+const hiddenCount = computed(() => (portfoliosQuery.data.value ?? []).filter((p) => isHidden(p.id)).length);
 
 // Copy before sorting: sort() mutates in place, and the source array is the query cache.
-const portfolios = computed(() => [...(portfoliosQuery.data.value ?? [])].sort((a, b) => +b.isEnabled - +a.isEnabled));
+const portfolios = computed(() =>
+  [...(portfoliosQuery.data.value ?? [])]
+    .filter((p) => showHidden.value || !isHidden(p.id))
+    .sort((a, b) => +b.isEnabled - +a.isEnabled),
+);
 
 // Format portfolio type for display (capitalize and replace underscores)
 const formatPortfolioType = (type: string): string => {

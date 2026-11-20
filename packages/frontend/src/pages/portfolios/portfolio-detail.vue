@@ -45,6 +45,16 @@
           </div>
 
           <div v-if="portfolio" class="flex flex-wrap items-center gap-2">
+            <UiButton
+              variant="outline"
+              size="sm"
+              :disabled="isPatching"
+              @click="setHidden(portfolio.id, !isHidden(portfolio.id))"
+            >
+              <EyeIcon v-if="isHidden(portfolio.id)" class="size-4" />
+              <EyeOffIcon v-else class="size-4" />
+              {{ isHidden(portfolio.id) ? 'Show portfolio' : 'Hide portfolio' }}
+            </UiButton>
             <EditPortfolioDialog :portfolio="portfolio" @updated="refetch">
               <UiButton variant="outline" size="sm">
                 <PencilIcon class="size-4" />
@@ -104,10 +114,11 @@ import DeletePortfolioDialog from '@/components/dialogs/delete-portfolio-dialog.
 import EditPortfolioDialog from '@/components/dialogs/edit-portfolio-dialog.vue';
 import UiButton from '@/components/lib/ui/button/Button.vue';
 import { usePortfolio, useUpdatePortfolio } from '@/composable/data-queries/portfolios';
+import { usePortfolioVisibility } from '@/composable/use-portfolio-visibility';
 import { isResourceMissingError } from '@/js/errors';
 import { ROUTES_NAMES } from '@/routes/constants';
 import type { NonImageLogoPayload } from '@bt/shared/types';
-import { AlertCircleIcon, ChevronLeftIcon, PencilIcon, Trash2Icon } from '@lucide/vue';
+import { AlertCircleIcon, ChevronLeftIcon, EyeIcon, EyeOffIcon, PencilIcon, Trash2Icon } from '@lucide/vue';
 import { computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
@@ -118,6 +129,7 @@ import BrokerSourceRecords from './components/broker-source-records.vue';
 
 const route = useRoute();
 const router = useRouter();
+const { isHidden, setHidden, isPatching } = usePortfolioVisibility();
 const portfolioId = computed(() => String(route.params.portfolioId));
 
 const { data: portfolio, isLoading, isError, error, refetch } = usePortfolio(portfolioId, { retry: false });

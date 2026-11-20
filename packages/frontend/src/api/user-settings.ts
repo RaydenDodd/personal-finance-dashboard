@@ -79,6 +79,8 @@ interface InvestmentTransactionsTableSettings {
 }
 
 export interface UiSettings {
+  /** Presentation only; hiding a portfolio never changes its net-worth inclusion. */
+  hiddenPortfolioIds?: string[];
   pageLayouts?: Partial<Record<'income' | 'actualIncome' | 'personalFinance', { widgets: DashboardWidgetConfig[] }>>;
   transactionsTable?: TransactionsTableSettings;
   transactionsList?: TransactionsListSettings;

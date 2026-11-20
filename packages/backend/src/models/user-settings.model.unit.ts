@@ -5,6 +5,17 @@ import { mergeIntoStoredSettings } from '../services/user-settings/service-owned
 import { ZodSettingsPatchSchema, ZodSettingsSchema } from './user-settings.model';
 
 describe('page layout settings', () => {
+  it('keeps reversible portfolio visibility separate from layouts and accepts restoring all', () => {
+    const id = '00000000-0000-4000-8000-000000000001';
+    const stored = ZodSettingsSchema.parse({
+      ui: { hiddenPortfolioIds: [id], pageLayouts: { income: { widgets: [] } } },
+    });
+    const incoming = ZodSettingsPatchSchema.parse({ ui: { hiddenPortfolioIds: [] } });
+    const merged = ZodSettingsSchema.parse(mergeIntoStoredSettings({ stored, incoming }));
+    expect(merged.ui?.hiddenPortfolioIds).toEqual([]);
+    expect(merged.ui?.pageLayouts).toEqual(stored.ui?.pageLayouts);
+    expect(ZodSettingsPatchSchema.safeParse({ ui: { hiddenPortfolioIds: ['invalid'] } }).success).toBe(false);
+  });
   it('accepts independent income and personal layouts using the existing widget schema', () => {
     const settings = ZodSettingsSchema.parse({
       ui: {

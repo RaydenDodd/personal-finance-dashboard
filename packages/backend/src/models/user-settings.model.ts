@@ -227,6 +227,7 @@ const ZodPageLayoutsSchema = z.object({
   personalFinance: z.object({ widgets: z.array(ZodDashboardWidgetSchema).max(100).optional() }).optional(),
 });
 const ZodUiSettingsSchema = z.object({
+  hiddenPortfolioIds: z.array(z.uuid()).max(500).optional(),
   pageLayouts: ZodPageLayoutsSchema.optional(),
   transactionsTable: ZodTransactionsTableSettingsSchema.optional(),
   transactionsList: ZodTransactionsListSettingsSchema.optional(),
@@ -457,6 +458,7 @@ export const ZodSettingsPatchSchema = z.object({
   sidebarNav: ZodSidebarNavSchema.optional(),
   ui: z
     .object({
+      hiddenPortfolioIds: z.array(z.uuid()).max(500).optional(),
       pageLayouts: ZodPageLayoutsSchema.optional(),
       transactionsTable: z
         .object({

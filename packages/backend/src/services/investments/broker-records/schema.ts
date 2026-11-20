@@ -38,7 +38,7 @@ export const brokerSnapshotSchema = z
     }
   });
 export const brokerDataSchema = z.object({
-  broker: z.enum(['m1', 'robinhood', 'fidelity', 'public']),
+  broker: z.enum(['m1', 'robinhood', 'fidelity', 'public', 'vanguard']),
   accountKey: z.string().min(1).max(100),
   snapshots: z.array(brokerSnapshotSchema).max(500).default([]),
   documents: z

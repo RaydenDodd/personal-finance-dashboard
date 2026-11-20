@@ -4,6 +4,7 @@ export enum SECURITY_PROVIDER {
   fmp = 'fmp',
   yahoo = 'yahoo',
   coingecko = 'coingecko',
+  coinbase = 'coinbase',
   // custom provider that uses others for different operations because each provider
   // has limitations on a free plan
   composite = 'composite',

@@ -1,15 +1,17 @@
 <script setup lang="ts">
 import { usePortfolios } from '@/composable/data-queries/portfolios';
+import { usePortfolioVisibility } from '@/composable/use-portfolio-visibility';
 import { PortfolioModel } from '@bt/shared/types/investments';
 import { computed } from 'vue';
 
 import PortfolioItem from './portfolios-item.vue';
 
 const { data: portfolios, isLoading } = usePortfolios();
+const { isHidden } = usePortfolioVisibility();
 
 const visiblePortfolios = computed<PortfolioModel[]>(() =>
   (portfolios.value ?? [])
-    .filter((p) => !p.deletedAt)
+    .filter((p) => !p.deletedAt && !isHidden(p.id))
     .sort((a, b) => +b.isEnabled - +a.isEnabled || a.name.localeCompare(b.name)),
 );
 </script>

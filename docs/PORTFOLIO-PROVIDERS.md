@@ -6,6 +6,18 @@ Broker records use the existing native Portfolios, Holdings, InvestmentTransacti
 
 Imports use stable broker row identifiers and the existing advisory-lock/idempotence infrastructure. Historical disposals with incomplete acquisition coverage may be recorded in excluded mirror portfolios, without creating fictitious opening purchases. Ordinary manual sales retain the existing available-share check. Preserve a database backup and original records before superseding an incomplete earlier import.
 
+## Vanguard statement records and visibility
+
+Vanguard CSV positions and dated statements use the same non-additive broker records and native investment transactions. Reinvested distributions retain both the income and acquisition; settlement-fund sweep entries are not additional contributions. Custody transfers and share-class conversions remain noncash source evidence, with actual position snapshots anchoring quantities. Never infer that a separate legacy account belongs to an IRA without transfer evidence. Preserve missing basis as unknown.
+
+Hide portfolio removes a portfolio from Investments and its sidebar list. Show hidden restores access, and Show portfolio makes it visible again. This user preference is independent of net-worth inclusion: showing a broker mirror does not double-count the corresponding SimpleFIN balance.
+
+## Crypto market-price fallback
+
+The existing 15-minute crypto price scheduler and manual securities refresh use public Coinbase USD tickers when the optional primary quote provider has no result. Only an allowlisted, verified CoinGecko identity plus matching display symbol can select a product. Requests are fixed-origin GETs with timeouts and no redirects, credentials or trading endpoints. Invalid, future or over-one-hour-old quotes are rejected. Prices retain their actual upstream timestamp and Coinbase source; failures preserve existing prices rather than stamping them current. This refreshes market quotes, not broker quantities or missing acquisitions.
+
+Reference: [Coinbase public product ticker](https://docs.cdp.coinbase.com/api-reference/exchange-api/rest-api/products/get-product-ticker).
+
 ## Public provider
 
 The official Public API client has a fixed HTTPS origin, rejects redirects and permits only account, portfolio, history and unrealized-tax-lot GET endpoints. Its only POST exchanges a personal secret for a 15-minute access token. Trading endpoints are absent from the allowlist.
