@@ -61,8 +61,19 @@ export async function collectAdpPayroll({ workerId, pauseMs = 750, timeoutMs = 3
       throw new Error('Unrecognized ADP statement format. Export stopped without guessing.');
     if (raw.statementId !== undefined && raw.statementId !== id)
       throw new Error('ADP statement identity conflict. Export stopped.');
-    // The requested detail URL provides the statement identity if the response omits it.
-    payStatements.push({ ...raw, statementId: id });
+    // MyADP provides adjustment status in history, while its detail JSON may omit it.
+    // Preserve both true and false; never turn an omitted flag into a reversal of history.
+    const summaryAdjustment = rows[index].payAdjustmentIndicator;
+    const detailAdjustment = raw.payAdjustmentIndicator;
+    for (const value of [summaryAdjustment, detailAdjustment])
+      if (value !== undefined && typeof value !== 'boolean')
+        throw new Error('ADP adjustment status is invalid. Export stopped.');
+    if (summaryAdjustment !== undefined && detailAdjustment !== undefined && summaryAdjustment !== detailAdjustment)
+      throw new Error('ADP adjustment status conflict. Export stopped.');
+    const adjustment = detailAdjustment ?? summaryAdjustment;
+    if (adjustment === undefined) throw new Error('ADP adjustment status is missing. Export stopped without guessing.');
+    // The requested detail URL provides identity; history supplies omitted adjustment metadata.
+    payStatements.push({ ...raw, statementId: id, payAdjustmentIndicator: adjustment });
     if (index + 1 < ids.length) await new Promise((resolve) => setTimeout(resolve, pauseMs));
   }
   // Matches the already verified detailed-export schema; do not emit browser/session metadata.

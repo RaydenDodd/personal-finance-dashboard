@@ -97,6 +97,41 @@ test('detail wrapper and URL-bound omitted identity preserve payroll fields', as
   assert.deepEqual(result.payStatements[0].grossPayAmount, row.grossPayAmount);
 });
 
+test('history preserves both adjustment flags when live detail omits them', async (t) => {
+  const rows = history.payStatements.map((row, i) => ({ ...row, payAdjustmentIndicator: i === 1 }));
+  let calls = 0;
+  t.mock.method(globalThis, 'fetch', async () => {
+    if (++calls === 1) return response({ payStatements: rows });
+    const row = detail(`stmt-${calls - 1}`);
+    delete row.payAdjustmentIndicator;
+    return response(row);
+  });
+  const result = await collectAdpPayroll({ workerId, pauseMs: 0 });
+  assert.deepEqual(
+    result.payStatements.map((row) => row.payAdjustmentIndicator),
+    [false, true],
+  );
+  assert.equal(result.payStatements[1].grossPayAmount.amountValue, -10);
+});
+
+test('missing, invalid or conflicting adjustment status cannot silently change a paycheck', async (t) => {
+  for (const [historyFlag, detailFlag] of [
+    [true, false],
+    [undefined, undefined],
+    ['yes', undefined],
+  ]) {
+    let calls = 0;
+    const row = { ...history.payStatements[0], payAdjustmentIndicator: historyFlag };
+    const value = { ...detail('stmt-1'), payAdjustmentIndicator: detailFlag };
+    const mocked = t.mock.method(globalThis, 'fetch', async () =>
+      ++calls === 1 ? response({ payStatements: [row] }) : response(value),
+    );
+    await assert.rejects(collectAdpPayroll({ workerId, pauseMs: 0 }), /adjustment status/);
+    assert.equal(calls, 2);
+    mocked.mock.restore();
+  }
+});
+
 test('detail identity mismatch and interrupted fetch cannot emit a successful export', async (t) => {
   let calls = 0;
   const mocked = t.mock.method(globalThis, 'fetch', async () =>
