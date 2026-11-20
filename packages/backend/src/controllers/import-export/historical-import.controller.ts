@@ -38,6 +38,8 @@ const row = z
       .safe()
       .refine((amount) => amount !== 0),
     description: z.string().min(1).max(1000),
+    merchantName: z.string().min(1).max(1000).optional(),
+    payeeId: recordId().optional(),
     source,
     categoryId: recordId().optional(),
     mcc: z

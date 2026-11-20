@@ -51,6 +51,25 @@ describe('historical imports through the canonical transaction API', () => {
     const preview = await previewHistory({ rows: [], raw: true });
     expect(preview.counts).toEqual({ new: 0, existing: 0, 'source-duplicate': 0, review: 0 });
   });
+  it('retains a normalized merchant and links an existing owner payee', async () => {
+    const accountId = await connectAccount();
+    const payee = await helpers.createPayee({
+      payload: { name: 'Historical River Cafe', defaultCategoryId: global.DEFAULT_CATEGORY_ID },
+      raw: true,
+    });
+    const rows = [
+      sourceRow({
+        accountId,
+        overrides: { merchantName: payee.name, payeeId: payee.id, description: 'TST* Historical River Cafe' },
+      }),
+    ];
+    const preview = await previewHistory({ rows, raw: true });
+    const result = await executeHistory({ rows, previewToken: preview.previewToken, raw: true });
+    const [saved] = await helpers.getTransactionsByIds({ ids: result.createdIds, raw: true });
+    expect(saved!.note).toBe('TST* Historical River Cafe');
+    expect(saved!.merchantName).toBe(payee.name);
+    expect(saved!.payeeId).toBe(payee.id);
+  });
   it('imports 2024 history once while retaining the live balance', async () => {
     const accountId = await connectAccount();
     const before = await helpers.getAccount({ id: accountId, raw: true });

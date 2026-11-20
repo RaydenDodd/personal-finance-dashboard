@@ -43,7 +43,9 @@ export const historicalCandidate = ({ transaction: tx }: { transaction: Transact
 });
 
 const prepareHistoricalImport = async ({ userId, rows }: { userId: number; rows: HistoricalTransactionRow[] }) => {
-  const accountIds = [...new Set(rows.map((row) => row.accountId))].toSorted((left, right) => left.localeCompare(right));
+  const accountIds = [...new Set(rows.map((row) => row.accountId))].toSorted((left, right) =>
+    left.localeCompare(right),
+  );
   const accounts = accountIds.length ? await Accounts.findAll({ where: { userId, id: accountIds } }) : [];
   const allowedCategories = [ACCOUNT_CATEGORIES.cash, ACCOUNT_CATEGORIES.saving, ACCOUNT_CATEGORIES.creditCard];
   if (
@@ -167,6 +169,7 @@ export const executeHistoricalImport = withTransaction(
             transactionType: row.signedAmountCents > 0 ? TRANSACTION_TYPES.income : TRANSACTION_TYPES.expense,
             time: new Date(`${row.date}T12:00:00.000Z`),
             note: row.description,
+            payeeId: row.payeeId,
             originalId: `history:${row.source.key}`,
             categoryId: row.categoryId ?? defaultCategoryId,
             // Existing user/payee/subscription rules keep priority over source suggestions.
@@ -174,7 +177,12 @@ export const executeHistoricalImport = withTransaction(
             transferNature: row.isTransfer
               ? TRANSACTION_TRANSFER_NATURE.transfer_out_wallet
               : TRANSACTION_TRANSFER_NATURE.not_transfer,
-            externalData: { importDetails, historicalSources: [row.source], ...(row.mcc ? { mcc: row.mcc } : {}) },
+            externalData: {
+              importDetails,
+              historicalSources: [row.source],
+              ...(row.mcc ? { mcc: row.mcc } : {}),
+              ...(row.merchantName ? { payee: row.merchantName } : {}),
+            },
             matchPlanned: false,
           });
           resolved.set(decision.transactionId!, transaction);

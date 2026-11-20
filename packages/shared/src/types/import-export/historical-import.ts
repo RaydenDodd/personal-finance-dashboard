@@ -21,6 +21,10 @@ export interface HistoricalTransactionRow {
   postedDate?: string;
   signedAmountCents: number;
   description: string;
+  /** Normalized source merchant; the original description remains unchanged. */
+  merchantName?: string;
+  /** An already matched, existing owner payee. */
+  payeeId?: string;
   source: HistoricalTransactionSource;
   categoryId?: string;
   mcc?: string;

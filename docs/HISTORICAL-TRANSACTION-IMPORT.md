@@ -10,6 +10,8 @@ Keep originals, file hashes, account mappings, inventories, previews, backups, a
 
 Amounts are signed integer cents. `date` is the actual transaction day, with an optional separate `postedDate`. Source evidence includes a SHA-256 file hash, worksheet, row number, source category, reliable bank identifier when available, and a stable transaction key. Keys must represent a transaction or a distinguishable occurrence, rather than the filename. Repeated payment-channel labels are not transaction identifiers.
 
+Optional `merchantName` retains the normalized source merchant separately from the original description. Optional `payeeId` links an already matched owner payee through canonical creation and its existing rules. Uncertain merchant identities are not assigned to a guessed payee.
+
 Each preview accounts for rows as `new`, `existing`, `source-duplicate`, or `review`. Identifier conflicts, ambiguous duplicates, and pending/posted conflicts stay held. `reviewReason` explicitly holds an unresolved source or income classification. Execute requires the returned preview digest, locks accounts in a stable order, and recomputes the preview before writing. A changed preview is rejected.
 
 Reconciliation considers account, signed amount, transaction and posting dates, merchant description, source identifiers, and source occurrence counts. Exact days take priority over nearby dates. Processor labels are normalized while merchant digits are preserved. Substantial statement-name prefixes can match appended city or terminal information. Loose substring/edit-distance guesses do not authorize inserts or merges. One source file cannot consume the same unidentified occurrence repeatedly; overlapping files may cite the same canonical record.
