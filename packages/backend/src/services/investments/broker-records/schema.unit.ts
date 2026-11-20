@@ -33,4 +33,8 @@ describe('Broker evidence', () => {
     expect(latestSnapshot(data, new Date('2023-12-31'))).toBeUndefined();
     expect(latestSnapshot(data, new Date('2024-02-01'))?.id).toBe('example-statement');
   });
+  it('rejects an unreconciled complete account total', () => {
+    expect(() => brokerSnapshotSchema.parse({ ...snapshot, cash: '1', totalValue: '99' })).toThrow('reconcile');
+    expect(brokerSnapshotSchema.parse({ ...snapshot, cash: '1', totalValue: '15.25' }).totalValue).toBe('15.25');
+  });
 });

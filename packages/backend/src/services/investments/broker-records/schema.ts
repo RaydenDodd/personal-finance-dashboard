@@ -1,3 +1,4 @@
+import { Big } from 'big.js';
 import { z } from 'zod';
 
 const decimal = z
@@ -5,28 +6,36 @@ const decimal = z
   .regex(/^-?\d+(\.\d+)?$/)
   .max(70);
 const positive = decimal.refine((v) => Number(v) >= 0 && Number.isFinite(Number(v)));
-export const brokerSnapshotSchema = z.object({
-  id: z.string().min(1).max(200),
-  asOf: z.string().datetime(),
-  source: z.string().min(1).max(300),
-  currencyCode: z.literal('USD'),
-  complete: z.boolean(),
-  cash: decimal.nullable(),
-  totalValue: positive.nullable(),
-  positions: z
-    .array(
-      z.object({
-        securityId: z.string().uuid(),
-        symbol: z.string().min(1).max(50),
-        quantity: positive,
-        costBasis: positive.nullable(),
-        marketValue: positive,
-      }),
-    )
-    .max(500)
-    .refine((ps) => new Set(ps.map((p) => p.securityId)).size === ps.length, 'Duplicate snapshot position'),
-  lots: z.array(z.record(z.string(), z.unknown())).max(5000).default([]),
-});
+export const brokerSnapshotSchema = z
+  .object({
+    id: z.string().min(1).max(200),
+    asOf: z.string().datetime(),
+    source: z.string().min(1).max(300),
+    currencyCode: z.literal('USD'),
+    complete: z.boolean(),
+    cash: decimal.nullable(),
+    totalValue: positive.nullable(),
+    positions: z
+      .array(
+        z.object({
+          securityId: z.string().uuid(),
+          symbol: z.string().min(1).max(50),
+          quantity: positive,
+          costBasis: positive.nullable(),
+          marketValue: positive,
+        }),
+      )
+      .max(500)
+      .refine((ps) => new Set(ps.map((p) => p.securityId)).size === ps.length, 'Duplicate snapshot position'),
+    lots: z.array(z.record(z.string(), z.unknown())).max(5000).default([]),
+  })
+  .superRefine((s, ctx) => {
+    if (s.complete && s.cash !== null && s.totalValue !== null) {
+      const sum = s.positions.reduce((n, p) => n.plus(p.marketValue), new Big(s.cash));
+      if (sum.minus(s.totalValue).abs().gt('0.02'))
+        ctx.addIssue({ code: 'custom', message: 'Reported account total does not reconcile with positions and cash.' });
+    }
+  });
 export const brokerDataSchema = z.object({
   broker: z.enum(['m1', 'robinhood', 'fidelity', 'public']),
   accountKey: z.string().min(1).max(100),

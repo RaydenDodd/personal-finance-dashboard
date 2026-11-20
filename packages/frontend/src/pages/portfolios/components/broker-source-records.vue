@@ -57,15 +57,14 @@ const refresh = async () => {
 };
 const latest = computed(() => [...(data.value?.snapshots ?? [])].sort((a, b) => b.asOf.localeCompare(a.asOf))[0]);
 const taxReports = computed(() => [...(data.value?.taxReports ?? [])].sort((a, b) => b.year - a.year));
-const rows = computed(
-  () =>
-    data.value?.snapshots.map((s) => ({
-      label: s.asOf.slice(0, 10),
-      values: {
-        value:
-          s.totalValue === null ? s.positions.reduce((sum, p) => sum + Number(p.marketValue), 0) : Number(s.totalValue),
-      },
-    })) ?? [],
+const rows = computed(() =>
+  [...new Map((data.value?.snapshots ?? []).map((s) => [s.asOf.slice(0, 10), s])).values()].map((s) => ({
+    label: s.asOf.slice(0, 10),
+    values: {
+      value:
+        s.totalValue === null ? s.positions.reduce((sum, p) => sum + Number(p.marketValue), 0) : Number(s.totalValue),
+    },
+  })),
 );
 const dollars = (v: string | null) =>
   v === null ? 'Unavailable' : new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(v));
