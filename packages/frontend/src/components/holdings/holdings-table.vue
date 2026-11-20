@@ -455,7 +455,11 @@ const theadLabelStyles = 'block max-w-32 truncate';
                     />
                   </td>
                   <td :class="[cellStyles, 'px-3 text-right tabular-nums']">
-                    {{ formatUnitPrice(getPrice(row.holding), row.holding) }}
+                    {{
+                      row.holding.marketValueKnown === false
+                        ? 'Unavailable'
+                        : formatUnitPrice(getPrice(row.holding), row.holding)
+                    }}
                     <DesktopOnlyTooltip
                       v-if="isPriceStale({ holding: row.holding })"
                       content-class-name="max-w-60"
