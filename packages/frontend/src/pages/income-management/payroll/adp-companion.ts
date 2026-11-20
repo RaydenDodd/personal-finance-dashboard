@@ -24,7 +24,7 @@ export class AdpCompanionError extends Error {
 }
 
 /** Uses the browser's pinned extension channel; no localhost listener, public API exception or ADP tokens. */
-export function startAdpCompanion(status: (phase: string) => void) {
+export function startAdpCompanion(status: (phase: string, progress?: { completed: number; total: number }) => void) {
   const runtime = (window as Window & { chrome?: { runtime?: CompanionRuntime } }).chrome?.runtime;
   const nonce = Array.from(crypto.getRandomValues(new Uint8Array(16)), (v) => v.toString(16).padStart(2, '0')).join('');
   let port: CompanionPort | undefined,
@@ -66,7 +66,17 @@ export function startAdpCompanion(status: (phase: string) => void) {
           return;
         }
         if (message.type === 'status') {
-          if (message.phase === 'sign-in' || message.phase === 'collecting') status(message.phase);
+          if (message.phase === 'sign-in' || message.phase === 'collecting') {
+            const progress =
+              Number.isInteger(message.completed) &&
+              Number.isInteger(message.total) &&
+              Number(message.completed) >= 0 &&
+              Number(message.completed) <= Number(message.total) &&
+              Number(message.total) <= 500
+                ? { completed: Number(message.completed), total: Number(message.total) }
+                : undefined;
+            status(message.phase, progress);
+          }
           return;
         }
         if (message.type === 'begin') {

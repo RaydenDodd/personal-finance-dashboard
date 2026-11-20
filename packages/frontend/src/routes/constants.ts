@@ -10,6 +10,7 @@ export const ROUTES_NAMES = Object.freeze({
   incomeManagement: `${ROUTER_LAYOUTS.dashboard}.income-management`,
   actualIncome: `${ROUTER_LAYOUTS.dashboard}.actual-income`,
   projectedIncome: `${ROUTER_LAYOUTS.dashboard}.projected-income`,
+  projectedIncomeEdit: `${ROUTER_LAYOUTS.dashboard}.projected-income-edit`,
   taxPlanning: `${ROUTER_LAYOUTS.dashboard}.tax-planning`,
   incomeReports: `${ROUTER_LAYOUTS.dashboard}.income-reports`,
   taxReports: `${ROUTER_LAYOUTS.dashboard}.tax-reports`,

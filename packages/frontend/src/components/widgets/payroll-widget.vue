@@ -87,7 +87,7 @@ const detail = computed(
           :allocation="allocation"
           :divisor="divisor"
           :period-label="periodLabel"
-          @edit="router.push('/finances/income/projected')"
+          @edit="router.push({ path: '/finances/income/projected/edit', query: { plan: plan.id } })"
         />
         <IncomeAllocationView
           v-else

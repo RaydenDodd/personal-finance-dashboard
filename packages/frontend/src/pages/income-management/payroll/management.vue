@@ -161,11 +161,13 @@ async function syncAdp() {
   adpPhase.value = 'Opening the temporary ADP window';
   const targetEmployment = adpEmploymentId.value;
   try {
-    adpJob = startAdpCompanion((phase) => {
+    adpJob = startAdpCompanion((phase, progress) => {
       adpPhase.value =
         phase === 'sign-in'
           ? 'Sign in and complete MFA at ADP. If needed, open Pay statements.'
-          : 'Retrieving your payroll statements';
+          : progress
+            ? `Retrieving payroll statements: ${progress.completed} of ${progress.total}`
+            : 'Retrieving your payroll statements';
     });
     const records = await adpJob.result;
     if (adpCancelled) return;

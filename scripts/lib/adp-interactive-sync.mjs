@@ -10,6 +10,17 @@ export async function runInteractiveAdpSync({
 }) {
   return withTemporaryAdpBrowser(chromium, process.platform === 'win32' ? 'msedge' : 'chromium', async (context) => {
     if (signal?.aborted) throw new Error('Cancelled');
+    await context.exposeBinding('__moneymatterAdpProgress', (source, progress) => {
+      if (new URL(source.frame.url()).origin !== 'https://my.adp.com') return;
+      if (
+        Number.isInteger(progress?.completed) &&
+        Number.isInteger(progress?.total) &&
+        progress.completed >= 0 &&
+        progress.completed <= progress.total &&
+        progress.total <= 500
+      )
+        status('collecting', { completed: progress.completed, total: progress.total });
+    });
     const page = await context.newPage();
     const cancel = () => {
       void context.close();
@@ -29,9 +40,10 @@ export async function runInteractiveAdpSync({
     void worker.catch(() => {});
     const response = (value) => {
       const url = new URL(value.url());
-      const match = /^\/myadp_prefix\/payroll\/v1\/workers\/([a-zA-Z0-9._~-]{1,250})\/pay-statements\/?$/.exec(
-        url.pathname,
-      );
+      const match =
+        /^\/(?:myadp_prefix\/)?payroll\/v1\/workers\/([a-zA-Z0-9._~-]{1,250})\/pay-statements(?:\/[a-zA-Z0-9._~-]{1,250})?\/?$/.exec(
+          url.pathname,
+        );
       if (
         url.origin === 'https://my.adp.com' &&
         match &&
@@ -48,9 +60,30 @@ export async function runInteractiveAdpSync({
       await page.goto('https://my.adp.com/', { waitUntil: 'domcontentloaded' });
       // Normal Pay navigation only, once available after the owner's login. No guessed route or login-field access.
       navigation = setInterval(async () => {
-        if (probing || payOpened || new URL(page.url()).origin !== 'https://my.adp.com') return;
+        if (probing) return;
         probing = true;
         try {
+          // MyADP can reuse a history response while opening a detail view. Recover only the worker
+          // identity from payroll resource paths; never return query strings, headers or session data.
+          for (const candidate of context.pages()) {
+            if (new URL(candidate.url()).origin !== 'https://my.adp.com') continue;
+            const workerId = await candidate.evaluate(() => {
+              for (const entry of performance.getEntriesByType('resource')) {
+                const url = new URL(entry.name, location.origin);
+                const match =
+                  /^\/(?:myadp_prefix\/)?payroll\/v1\/workers\/([a-zA-Z0-9._~-]{1,250})\/pay-statements(?:\/[a-zA-Z0-9._~-]{1,250})?\/?$/.exec(
+                    url.pathname,
+                  );
+                if (url.origin === 'https://my.adp.com' && match) return match[1];
+              }
+              return null;
+            });
+            if (workerId) {
+              resolveWorker({ workerId, page: candidate });
+              return;
+            }
+          }
+          if (payOpened || new URL(page.url()).origin !== 'https://my.adp.com') return;
           for (const role of ['link', 'button']) {
             for (const pay of await page.getByRole(role, { name: /^(Pay|Pay statements)$/i }).all()) {
               if (await pay.isVisible()) {
@@ -72,7 +105,11 @@ export async function runInteractiveAdpSync({
       clearInterval(navigation);
       if (signal?.aborted) throw new Error('Cancelled');
       status('collecting');
-      return await ready.page.evaluate(collectAdpPayroll, { ...collectionOptions, workerId: ready.workerId });
+      return await ready.page.evaluate(collectAdpPayroll, {
+        ...collectionOptions,
+        workerId: ready.workerId,
+        reportProgress: true,
+      });
     } finally {
       clearTimeout(timer);
       clearInterval(navigation);

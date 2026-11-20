@@ -4,7 +4,7 @@ import test from 'node:test';
 
 import { runInteractiveAdpSync } from './adp-interactive-sync.mjs';
 
-function fakeBrowser({ closeEarly = false, failExport = false } = {}) {
+function fakeBrowser({ closeEarly = false, failExport = false, detailOnly = false, cached = false } = {}) {
   const page = new EventEmitter(),
     calls = [];
   Object.assign(page, {
@@ -13,15 +13,20 @@ function fakeBrowser({ closeEarly = false, failExport = false } = {}) {
       queueMicrotask(() =>
         closeEarly
           ? page.emit('close')
-          : context.emit('response', {
-              url: () => 'https://my.adp.com/myadp_prefix/payroll/v1/workers/synthetic-worker/pay-statements',
-              status: () => 200,
-              headers: () => ({ 'content-type': 'application/json' }),
-              frame: () => ({ page: () => page }),
-            }),
+          : cached
+            ? undefined
+            : context.emit('response', {
+                url: () =>
+                  'https://my.adp.com/myadp_prefix/payroll/v1/workers/synthetic-worker/pay-statements' +
+                  (detailOnly ? '/statement-one' : ''),
+                status: () => 200,
+                headers: () => ({ 'content-type': 'application/json' }),
+                frame: () => ({ page: () => page }),
+              }),
       );
     },
     evaluate: async (fn, options) => {
+      if (!options) return 'synthetic-worker';
       calls.push(options);
       if (failExport) throw Error('ADP returned HTTP 403');
       return { payStatements: [{ statementId: 'synthetic' }] };
@@ -30,6 +35,8 @@ function fakeBrowser({ closeEarly = false, failExport = false } = {}) {
     url: () => 'https://my.adp.com/',
   });
   const context = Object.assign(new EventEmitter(), {
+    exposeBinding: async () => {},
+    pages: () => [page],
     newPage: async () => page,
     close: async () => {
       calls.push('context.close');
@@ -63,6 +70,14 @@ test('login is owner-operated, automatic reads follow the real history response 
   assert.deepEqual(f.calls.slice(-2), ['context.close', 'browser.close']);
   assert.equal(f.calls[0].headless, false);
   assert.equal(f.calls[1].serviceWorkers, 'block');
+});
+test('detail-only activity and cached history both discover payroll without waiting for a fresh list response', async () => {
+  for (const options of [{ detailOnly: true }, { cached: true }]) {
+    const f = fakeBrowser(options);
+    const result = await runInteractiveAdpSync({ chromium: f.chromium, loginTimeoutMs: 3000 });
+    assert.equal(result.payStatements.length, 1);
+    assert.deepEqual(f.calls.slice(-2), ['context.close', 'browser.close']);
+  }
 });
 test('closing the login window or an ADP denial cannot return a successful export', async () => {
   for (const options of [{ closeEarly: true }, { failExport: true }]) {

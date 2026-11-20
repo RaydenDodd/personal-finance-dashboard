@@ -41,6 +41,12 @@ const routes: RouteRecordRaw[] = [
         meta: { navSection: 'income', i18nChunks: ['pages/dashboard'] },
       },
       {
+        path: '/finances/income/projected/edit',
+        name: ROUTES_NAMES.projectedIncomeEdit,
+        component: () => import('@/pages/income-management/projection-editor.vue'),
+        meta: { navSection: 'income', i18nChunks: ['pages/dashboard'] },
+      },
+      {
         path: '/finances/taxes',
         name: ROUTES_NAMES.taxPlanning,
         redirect: { name: ROUTES_NAMES.projectedIncome },

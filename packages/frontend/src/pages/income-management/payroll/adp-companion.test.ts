@@ -26,9 +26,11 @@ describe('user initiated ADP bridge', () => {
       disconnect: vi.fn(),
     };
     vi.stubGlobal('chrome', { runtime: { connect: () => port } });
-    const job = startAdpCompanion(vi.fn());
+    const status = vi.fn();
+    const job = startAdpCompanion(status);
     return {
       job,
+      status,
       port,
       send: (v: Record<string, unknown>) => message({ ...v, nonce }),
       foreign: (v: Record<string, unknown>) => message(v),
@@ -49,6 +51,17 @@ describe('user initiated ADP bridge', () => {
     b.send({ type: 'complete' });
     expect(await b.job.result).toEqual([{ statementId: 'sample', payDate: '2026-01-01' }]);
     expect(b.port.disconnect).toHaveBeenCalledOnce();
+    vi.unstubAllGlobals();
+  });
+  it('reports bounded download counts without accepting partial payroll as a finished import', async () => {
+    const b = bridge();
+    b.send({ type: 'status', phase: 'collecting', completed: 4, total: 72 });
+    expect(b.status).toHaveBeenCalledWith('collecting', { completed: 4, total: 72 });
+    b.send({ type: 'status', phase: 'collecting', completed: 9999, total: 72 });
+    expect(b.status).toHaveBeenLastCalledWith('collecting', undefined);
+    const rejected = expect(b.job.result).rejects.toThrow();
+    b.job.cancel();
+    await rejected;
     vi.unstubAllGlobals();
   });
   it('rejects interrupted, wrong-session and out-of-order exports rather than importing partial data', async () => {

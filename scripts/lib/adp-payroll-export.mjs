@@ -1,5 +1,5 @@
 /** Executes entirely inside the owner's authenticated MyADP page. Do not add closure dependencies. */
-export async function collectAdpPayroll({ workerId, pauseMs = 750, timeoutMs = 30_000 }) {
+export async function collectAdpPayroll({ workerId, pauseMs = 750, timeoutMs = 30_000, reportProgress = false }) {
   if (!/^[a-zA-Z0-9._~-]{1,250}$/.test(workerId)) throw new Error('No valid worker ID supplied. Nothing exported.');
   const base = `/myadp_prefix/payroll/v1/workers/${encodeURIComponent(workerId)}/pay-statements`;
   const get = async (url) => {
@@ -52,6 +52,11 @@ export async function collectAdpPayroll({ workerId, pauseMs = 750, timeoutMs = 3
   if (new Set(ids).size !== ids.length)
     throw new Error('Duplicate statement identities; inspect your downloaded history.');
   const payStatements = [];
+  const progress = async (completed) => {
+    if (reportProgress && typeof globalThis.__moneymatterAdpProgress === 'function')
+      await globalThis.__moneymatterAdpProgress({ completed, total: ids.length });
+  };
+  await progress(0);
   for (const [index, id] of ids.entries()) {
     const detail = await get(base + '/' + encodeURIComponent(id));
     const raw =
@@ -90,6 +95,7 @@ export async function collectAdpPayroll({ workerId, pauseMs = 750, timeoutMs = 3
       statementId: id,
       payAdjustmentIndicator: adjustment,
     });
+    await progress(payStatements.length);
     if (index + 1 < ids.length) await new Promise((resolve) => setTimeout(resolve, pauseMs));
   }
   // Matches the already verified detailed-export schema; do not emit browser/session metadata.

@@ -42,7 +42,7 @@ async function sync(message) {
     const result = await runInteractiveAdpSync({
       chromium,
       signal: controller.signal,
-      status: (phase) => send({ type: 'status', phase }),
+      status: (phase, progress) => send({ type: 'status', phase, ...progress }),
     });
     if (controller.signal.aborted) return;
     // Only payroll JSON crosses the native bridge. No browser session state or files are exported.
