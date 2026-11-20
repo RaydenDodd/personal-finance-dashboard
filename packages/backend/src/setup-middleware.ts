@@ -193,6 +193,9 @@ export function setupMiddleware(app: Express) {
         // YNAB register CSVs are sent inline as JSON-encoded text on both parse and execute.
         `${API_PREFIX}/import/ynab/parse`,
         `${API_PREFIX}/import/ynab/execute`,
+        // Historical preview/execute carry bounded normalized rows and source evidence.
+        `${API_PREFIX}/import/historical/preview`,
+        `${API_PREFIX}/import/historical/execute`,
         // Budget Bakers Wallet sends the whole CSV inline as `fileContent` on
         // every step of the flow.
         `${API_PREFIX}/import/budget-bakers-wallet/parse`,

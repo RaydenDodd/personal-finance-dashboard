@@ -1,4 +1,10 @@
 {
+  "historicalImport": {
+    "invalidAccounts": "Historical imports require your existing SimpleFIN cash, savings, or credit card accounts.",
+    "invalidCategories": "A historical import category does not belong to this account owner.",
+    "stalePreview": "Transactions changed since this preview. Preview the import again before applying it.",
+    "syncConflict": "A bank transaction may match more than one historical record. Review the historical import before retrying synchronization."
+  },
   "common": {
     "processAlreadyLocked": "Sync process for \"{{lockKey}}\" is already locked.",
     "serviceTemporarilyUnavailable": "Service temporarily unavailable. Please try again.",

@@ -2,6 +2,10 @@ import { csvStatusController } from '@controllers/import-export/csv/csv-status.c
 import { detectDuplicatesController } from '@controllers/import-export/detect-duplicates.controller';
 import { executeImportController } from '@controllers/import-export/execute-import.controller';
 import { extractUniqueValuesController } from '@controllers/import-export/extract-unique-values.controller';
+import {
+  executeHistoricalImportController,
+  previewHistoricalImportController,
+} from '@controllers/import-export/historical-import.controller';
 import { parseCsv } from '@controllers/import-export/parse-csv.controller';
 import { authenticateSession } from '@middlewares/better-auth';
 import { checkBaseCurrencyLock } from '@middlewares/check-base-currency-lock';
@@ -9,6 +13,22 @@ import { csvImportRateLimit } from '@middlewares/rate-limit';
 import { Router } from 'express';
 
 const router = Router({});
+
+// Explicit historical workflow for existing SimpleFIN accounts; never reconciles balances.
+router.post(
+  '/historical/preview',
+  authenticateSession,
+  checkBaseCurrencyLock,
+  csvImportRateLimit,
+  previewHistoricalImportController,
+);
+router.post(
+  '/historical/execute',
+  authenticateSession,
+  checkBaseCurrencyLock,
+  csvImportRateLimit,
+  executeHistoricalImportController,
+);
 
 // Parse CSV file and return preview
 router.post('/csv/parse', authenticateSession, checkBaseCurrencyLock, csvImportRateLimit, parseCsv);

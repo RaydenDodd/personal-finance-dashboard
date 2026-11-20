@@ -7,3 +7,4 @@ export * from './ms-money-import';
 export * from './ofx-import';
 export * from './statement-parser';
 export * from './data-export';
+export * from './historical-import';

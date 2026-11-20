@@ -924,7 +924,11 @@ export class SimplefinProvider extends BaseBankDataProvider {
 
       // A merged row is not a new row: it keeps the user's category and payee, which the
       // post-sync listeners on the emitted ids would overwrite.
-      if (createResult.mergedIntoPlanned) {
+      if (createResult.reconciledHistorical) {
+        // Retain the imported row's identity and user classifications. It is not
+        // a newly synced row and must not enter categorization listeners again.
+        continue;
+      } else if (createResult.mergedIntoPlanned) {
         mergedIntoPlannedCount += 1;
       } else {
         createdIds.push(createResult[0].id);

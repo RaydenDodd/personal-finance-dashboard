@@ -64,6 +64,7 @@ export const abortsTransaction = (error: unknown) =>
  */
 type CreateTxResult = [baseTx: Transactions.default, oppositeTx?: Transactions.default] & {
   mergedIntoPlanned?: boolean;
+  reconciledHistorical?: boolean;
 };
 
 /**
@@ -435,6 +436,26 @@ export const createTransaction = withTransaction(
           accountOwnerUserId,
           isPlanned: Boolean(payload.isPlanned),
         }));
+
+      if (accountType === ACCOUNT_TYPES.simplefin && payload.originalId && !payload.externalData?.historicalSources) {
+        const { reconcileHistoricalProviderRow } =
+          await import('@services/import-export/core/duplicates/reconcile-historical-provider-row');
+        const historical = await reconcileHistoricalProviderRow({
+          accountId,
+          userId: accountOwnerUserId,
+          originalId: payload.originalId,
+          amount,
+          transactionType: payload.transactionType,
+          time: payload.time ?? new Date(),
+          description: payload.note ?? '',
+          externalData: payload.externalData,
+        });
+        if (historical) {
+          const result: CreateTxResult = [historical];
+          result.reconciledHistorical = true;
+          return result;
+        }
+      }
 
       if (payload.categoryId !== undefined && payload.categoryId !== null) {
         await findOrThrowNotFound({
