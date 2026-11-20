@@ -52,14 +52,17 @@ const categories = computed(() =>
           </p>
         </div>
       </div>
-      <div class="grid grid-cols-2 gap-3 @3xl:grid-cols-3">
+      <div class="grid grid-cols-1 gap-3 min-[360px]:grid-cols-2 @3xl:grid-cols-3">
         <div
           v-for="item in categories"
           :key="item.label"
-          class="border-border/50 bg-muted/20 min-w-0 rounded-lg border px-3 py-4 sm:px-4"
+          class="border-border/50 bg-muted/20 @container min-w-0 rounded-lg border px-3 py-4 sm:px-4"
         >
           <p class="text-muted-foreground text-xs font-medium">{{ item.label }}</p>
-          <p class="mt-2 text-2xl font-bold tracking-tight tabular-nums @2xl:text-3xl" :style="{ color: item.color }">
+          <p
+            class="mt-2 text-[clamp(1rem,16cqi,1.875rem)] font-bold tracking-tight tabular-nums"
+            :style="{ color: item.color }"
+          >
             {{ money(item.value) }}
           </p>
         </div>
