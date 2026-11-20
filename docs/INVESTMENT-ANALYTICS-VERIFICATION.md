@@ -150,7 +150,7 @@ advanced live calculation is operational; partial coverage remains explicit.
 
 - Backend: 110 distinct targeted checks passed across checkpoints, including
   79 existing native calculation/history checks. The final frontend capability
-  suite passed 52 checks; the dedicated widget/layout/settings suite also passed
+  suite passed 54 checks; the dedicated widget/layout/settings suite also passed
   62 checks across checkpoints (these frontend groups overlap). Both typechecks, production builds
   and lint/i18n checks passed, with lint warnings retained.
 - All five pages passed actual-data browser checks at 1440, 390 and 320 pixels.

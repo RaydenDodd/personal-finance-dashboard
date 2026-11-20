@@ -200,15 +200,44 @@ const distributionTotals = computed(() => {
     year = now.slice(0, 4),
     month = now.slice(0, 7);
   const recorded = selectedIncome.value.filter((row) => row.status === 'recorded');
+  const completeHistory =
+    props.analytics.portfolios.length > 0 && props.analytics.portfolios.every((portfolio) => portfolio.historyComplete);
   return [
-    ['This month', recorded.filter((row) => row.type === 'dividend' && row.date.startsWith(month))],
-    ['YTD dividends', recorded.filter((row) => row.type === 'dividend' && row.date.startsWith(year))],
-    ['Lifetime dividends', recorded.filter((row) => row.type === 'dividend')],
-    ['Interest income', recorded.filter((row) => row.type === 'interest')],
-  ].map(([label, rows]) => ({
-    label: label as string,
-    value: (rows as typeof recorded).reduce((sum, row) => sum + Number(row.amount), 0),
-  }));
+    {
+      key: 'month',
+      label: 'Recorded dividends · month',
+      metric: 'dividends',
+      rows: recorded.filter((row) => row.type === 'dividend' && row.date.startsWith(month)),
+    },
+    {
+      key: 'ytd',
+      label: 'Recorded dividends · YTD',
+      metric: 'dividends',
+      rows: recorded.filter((row) => row.type === 'dividend' && row.date.startsWith(year)),
+    },
+    {
+      key: 'lifetime',
+      label: 'Recorded dividends · lifetime',
+      metric: 'dividends',
+      rows: recorded.filter((row) => row.type === 'dividend'),
+    },
+    {
+      key: 'interest',
+      label: 'Recorded interest',
+      metric: 'interest',
+      rows: recorded.filter((row) => row.type === 'interest'),
+    },
+  ].map((total) => {
+    const metric = props.analytics.metrics[total.metric];
+    const known = metric?.value !== null && metric?.value !== undefined && metric.status !== 'unavailable';
+    return {
+      key: total.key,
+      label: total.label,
+      value: known ? total.rows.reduce((sum, row) => sum + Number(row.amount), 0) : null,
+      status: !known ? 'unavailable' : completeHistory && metric.status === 'verified' ? 'verified' : 'partial',
+      reason: known ? undefined : (metric?.reason ?? 'Income history is unavailable.'),
+    };
+  });
 });
 const upcomingPayments = computed(() =>
   selectedIncome.value
@@ -226,19 +255,25 @@ const dividendGrouping = computed(() => (props.settings.dividendGrouping === 'po
 const incomeBreakdown = computed(() => {
   const groups = new Map<
     string,
-    { id: string; label: string; name: string; dividends: number; interest: number; total: number }
+    { id: string; label: string; name: string; dividends: number | null; interest: number | null; total: number }
   >();
+  const known = (key: string) =>
+    props.analytics.metrics[key]?.value !== null &&
+    props.analytics.metrics[key]?.value !== undefined &&
+    props.analytics.metrics[key]?.status !== 'unavailable';
   for (const row of payments.value.filter((row) => row.status === 'recorded')) {
     const id = dividendGrouping.value === 'portfolio' ? row.portfolioId : row.securityId;
     const item = groups.get(id) ?? {
       id,
       label: dividendGrouping.value === 'portfolio' ? row.portfolioName : row.symbol,
       name: dividendGrouping.value === 'portfolio' ? 'Recorded investment income' : row.name,
-      dividends: 0,
-      interest: 0,
+      dividends: known('dividends') ? 0 : null,
+      interest: known('interest') ? 0 : null,
       total: 0,
     };
-    item[row.type === 'dividend' ? 'dividends' : 'interest'] += Number(row.amount);
+    const field = row.type === 'dividend' ? 'dividends' : 'interest';
+    const current = item[field];
+    if (current !== null) item[field] = current + Number(row.amount);
     item.total += Number(row.amount);
     groups.set(id, item);
   }
@@ -542,9 +577,17 @@ const health = computed(() =>
       </DateRange>
       <template v-if="kind === 'dividends'"
         ><div class="grid grid-cols-2 gap-3 @3xl:grid-cols-4">
-          <div v-for="total in distributionTotals" :key="total.label">
+          <div
+            v-for="total in distributionTotals"
+            :key="total.key"
+            :data-testid="'investment-income-summary-' + total.key"
+          >
             <p class="text-muted-foreground text-xs">{{ total.label }}</p>
             <p class="text-lg font-semibold">{{ money(total.value) }}</p>
+            <p v-if="total.status === 'partial'" class="text-muted-foreground text-[10px]">
+              Recorded subtotal · partial history
+            </p>
+            <p v-if="total.reason" class="text-muted-foreground text-[10px]">{{ total.reason }}</p>
           </div>
         </div>
         <div class="flex flex-wrap gap-2">
@@ -617,6 +660,16 @@ const health = computed(() =>
         Only dated recorded valuations and supported historical prices are used. Gaps indicate unavailable observations.
         Contributions and withdrawals are separate from investment gains.
       </p>
+      <p v-if="kind === 'contributions'" class="text-muted-foreground text-xs">
+        {{
+          analytics.metrics.contributions?.status !== 'verified' ||
+          analytics.metrics.contributions?.value == null ||
+          !analytics.portfolios.length ||
+          analytics.portfolios.some((portfolio) => !portfolio.historyComplete)
+            ? 'Recorded external flows; imported funding history may be incomplete.'
+            : 'Recorded external flows; transfers within the selected portfolio group are excluded.'
+        }}
+      </p>
       <details
         v-if="kind === 'dividends'"
         :open="!compact"
@@ -640,6 +693,9 @@ const health = computed(() =>
             >By portfolio</Button
           >
         </div>
+        <p class="text-muted-foreground mt-2 text-[11px]">
+          Recorded subtotals only; partial imported history may omit earlier dividends or interest.
+        </p>
         <ModuleBody
           ><div
             v-for="row in incomeBreakdown"
@@ -651,8 +707,12 @@ const health = computed(() =>
               ><span class="text-muted-foreground block truncate">{{ row.name }}</span></span
             ><span class="shrink-0 text-right"
               ><strong>{{ money(row.total) }}</strong
+              ><span class="text-muted-foreground block text-[10px]">Recorded subtotal</span
               ><span class="text-muted-foreground block"
-                >Dividends {{ money(row.dividends) }} · interest {{ money(row.interest) }}</span
+                >Dividends {{ money(row.dividends) }} ·
+                <span :data-testid="'investment-income-breakdown-interest-' + row.id"
+                  >interest {{ money(row.interest) }}</span
+                ></span
               ></span
             >
           </div>

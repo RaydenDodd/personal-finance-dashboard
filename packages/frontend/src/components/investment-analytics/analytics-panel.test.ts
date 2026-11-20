@@ -76,6 +76,79 @@ describe('shared investment panels', () => {
     const chart = wrapper.findComponent({ name: 'SeriesChart' });
     expect(chart.props('points')[0].values).toEqual({ cash: 10, reinvested: 10, unknown: 10, interest: 0 });
   });
+  it('keeps unavailable interest unavailable instead of reducing an empty source to verified zero', () => {
+    const analytics = base();
+    analytics.metrics.interest = { value: null, status: 'unavailable', reason: 'No verified interest history.' };
+    analytics.metrics.dividends = { value: '10', status: 'partial' };
+    analytics.dividends = [
+      {
+        id: 'synthetic',
+        date: '2026-11-01',
+        portfolioId: 'p',
+        portfolioName: 'Portfolio',
+        securityId: 'synthetic',
+        symbol: 'SYNTH',
+        name: 'Synthetic',
+        amount: '10',
+        currencyCode: 'USD',
+        status: 'recorded',
+        reinvested: false,
+        type: 'dividend',
+      },
+    ];
+    const wrapper = panel('dividends', analytics);
+    const interest = wrapper.get('[data-testid="investment-income-summary-interest"]');
+    expect(interest.text()).toContain('Unavailable');
+    expect(interest.text()).toContain('No verified interest history.');
+    expect(interest.text()).not.toContain('$0.00');
+    const lifetime = wrapper.get('[data-testid="investment-income-summary-lifetime"]');
+    expect(lifetime.text()).toContain('Recorded dividends');
+    expect(lifetime.text()).toContain('partial history');
+    const breakdownInterest = wrapper.get('[data-testid="investment-income-breakdown-interest-synthetic"]');
+    expect(breakdownInterest.text()).toContain('Unavailable');
+    expect(breakdownInterest.text()).not.toContain('$0.00');
+  });
+  it('keeps recorded income summaries scoped to the selected security', () => {
+    const analytics = base();
+    analytics.metrics.interest = { value: '5', status: 'partial' };
+    analytics.metrics.dividends = { value: '0', status: 'partial' };
+    analytics.dividends = [
+      {
+        id: 'one',
+        date: '2026-11-01',
+        portfolioId: 'p',
+        portfolioName: 'Portfolio',
+        securityId: 'one',
+        symbol: 'SYNTH-A',
+        name: 'Synthetic A',
+        amount: '2',
+        currencyCode: 'USD',
+        status: 'recorded',
+        reinvested: false,
+        type: 'interest',
+      },
+      {
+        id: 'two',
+        date: '2026-11-01',
+        portfolioId: 'p',
+        portfolioName: 'Portfolio',
+        securityId: 'two',
+        symbol: 'SYNTH-B',
+        name: 'Synthetic B',
+        amount: '3',
+        currencyCode: 'USD',
+        status: 'recorded',
+        reinvested: false,
+        type: 'interest',
+      },
+    ];
+    const interest = panel('dividends', analytics, { securityId: 'one' }).get(
+      '[data-testid="investment-income-summary-interest"]',
+    );
+    expect(interest.text()).toContain('$2.00');
+    expect(interest.text()).not.toContain('$5.00');
+    expect(interest.text()).toContain('partial history');
+  });
   it('keeps portfolio comparison in dollars when only balances are recorded', () => {
     const wrapper = panel('portfolio-comparison', base(), { unit: 'percent' });
     expect(wrapper.findComponent({ name: 'SeriesChart' }).props('percent')).toBe(false);
