@@ -11,7 +11,7 @@ import { withTransaction } from '@services/common/with-transaction';
 import { recalculateHolding } from '@services/investments/holdings/recalculation.service';
 import { isDeepStrictEqual } from 'node:util';
 
-import { BrokerData, latestSnapshot } from './schema';
+import { BrokerData, brokerDataSchema, latestSnapshot } from './schema';
 
 export const getBrokerData = async ({ userId, portfolioId }: { userId: number; portfolioId: string }) => {
   await findOrThrowNotFound({
@@ -24,6 +24,7 @@ export const getBrokerData = async ({ userId, portfolioId }: { userId: number; p
 // An observation is not a cash flow or a trade. Keep it in a separate audit record.
 export const saveBrokerData = withTransaction(
   async ({ userId, portfolioId, data }: { userId: number; portfolioId: string; data: BrokerData }) => {
+    data = brokerDataSchema.parse(data);
     const portfolio = await findOrThrowNotFound({
       query: Portfolios.findOne({ where: { id: portfolioId, userId } }),
       message: 'Portfolio not found',
