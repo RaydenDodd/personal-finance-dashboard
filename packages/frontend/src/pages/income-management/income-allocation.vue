@@ -49,7 +49,10 @@ async function openGroup(id: string) {
   )[id] ?? [id];
   expanded.value = [...new Set([...expanded.value, ...ids])];
   await nextTick();
-  document.getElementById('income-group-' + ids[0])?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  document.getElementById('income-group-' + ids[0])?.scrollIntoView({
+    block: 'center',
+    behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+  });
 }
 defineExpose({ openGroup });
 function toggle(id: string) {
