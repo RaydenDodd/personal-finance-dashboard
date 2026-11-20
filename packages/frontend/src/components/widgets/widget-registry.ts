@@ -14,16 +14,21 @@ export interface WidgetConfigOption {
   choices: { value: string; label: string }[];
 }
 
-export interface WidgetDefinition {
+export interface WidgetLayoutDefinition {
   id: string;
   name: string;
   description: string;
   defaultColSpan: number;
   defaultRowSpan: number;
   allowedSizes: WidgetSize[];
+  configOptions?: WidgetConfigOption[];
+  /** Page blocks supply their content through slots rather than the main widget registry. */
+  literalLabels?: boolean;
+}
+
+export interface WidgetDefinition extends WidgetLayoutDefinition {
   component: () => Promise<{ default: Component }>;
   needsPeriod: boolean;
-  configOptions?: WidgetConfigOption[];
 }
 
 export const FIRE_WIDGET_ID = 'fire-progress';

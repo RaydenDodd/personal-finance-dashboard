@@ -8,12 +8,31 @@ import { Dialog, DialogScrollContent, DialogHeader, DialogTitle, DialogDescripti
 import FinanceChart, { type ChartRow } from '@/pages/personal-finance/finance-chart.vue';
 import { calculateIncomePlan, createDefaultIncomePlan } from '@bt/shared/finance-income';
 import type { IncomeDashboard, IncomePlanVersion } from '@bt/shared/types/income-management';
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch, nextTick } from 'vue';
 import IncomeSettings from './taxes.vue';
 import PaycheckManager from './index.vue';
 import PeriodButtons from './period-buttons.vue';
 import IncomeAllocationView from './income-allocation.vue';
 import { incomeAllocation } from './income-allocation';
+import DashboardPageLayout from '@/pages/dashboard/components/dashboard-page-layout.vue';
+import { pageBlock, defaultPageLayout } from '@/pages/dashboard/composables/page-blocks';
+const pageLayout = ref<InstanceType<typeof DashboardPageLayout> | null>(null);
+const breakdown = ref<InstanceType<typeof IncomeAllocationView> | null>(null);
+const allocationView = ref<'donut' | 'flow'>('donut');
+const blocks = Object.fromEntries(
+  [
+    pageBlock('summary', 'Income summary', 'Income, retirement, taxes, savings and spendable money.'),
+    pageBlock('salary-history', 'Salary history', 'Your recorded salary changes over time.'),
+    pageBlock('allocation', 'Income allocation', 'Doughnut and flow diagram.'),
+    pageBlock('breakdown', 'Income breakdown', 'Expandable taxes and contribution details.'),
+  ].map((b) => [b.id, b]),
+);
+const defaultLayout = defaultPageLayout(blocks);
+async function selectIncomeGroup(id: string) {
+  pageLayout.value?.revealWidget('breakdown');
+  await nextTick();
+  breakdown.value?.openGroup(id);
+}
 const data = ref<IncomeDashboard | null>(null),
   error = ref(''),
   busy = ref(false);
@@ -149,68 +168,92 @@ onMounted(load);
         </div>
       </header>
       <Callout v-if="error" variant="destructive">{{ error }}</Callout>
-      <Card class="p-5 sm:p-7" data-testid="income-summary">
-        <div class="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <p class="text-muted-foreground text-sm">{{ periodLabel }} income</p>
-            <p class="mt-2 text-4xl font-semibold tracking-tight">
-              {{ money(result ? result.annual.totalComp / divisor : null) }}
-            </p>
-            <p v-if="result" class="text-muted-foreground mt-2 text-xs">
-              Gross income {{ money(result.annual.gross / divisor)
-              }}<template v-if="result.annual.employerMatch">
-                + Employer 401(k) match {{ money(result.annual.employerMatch / divisor) }}</template
-              ><template v-if="result.annual.employerOtherContribution">
-                + Other employer retirement {{ money(result.annual.employerOtherContribution / divisor) }}</template
-              >
-            </p>
-          </div>
-          <Button @click="editSalary()">Edit salary</Button>
-        </div>
-        <div
-          class="divide-border/60 border-border/60 mt-6 grid divide-y border-t sm:grid-cols-3 sm:divide-x sm:divide-y-0"
-        >
-          <div v-for="item in allocation?.groups" :key="item.id" class="py-4 sm:px-4 sm:first:pl-0">
-            <p class="text-muted-foreground flex items-center gap-2 text-xs font-semibold tracking-wide uppercase">
-              <span class="size-2 rounded-sm" :style="{ background: item.color }" />{{ item.name }}
-            </p>
-            <p class="mt-2 flex flex-wrap items-baseline gap-x-2 text-xl font-semibold tabular-nums">
-              {{ money(item.amount)
-              }}<span v-if="allocation?.flow.income" class="text-muted-foreground text-xs font-medium"
-                >{{ ((item.amount / allocation.flow.income) * 100).toFixed(1) }}%</span
-              >
-            </p>
-          </div>
-        </div>
-      </Card>
-      <Card class="p-5 sm:p-6"
-        ><div class="mb-5 flex flex-wrap items-center justify-between gap-3">
-          <h2 class="text-lg font-semibold">Salary history</h2>
-          <div class="flex flex-wrap gap-2">
-            <Button as-child size="sm" variant="ghost"
-              ><router-link to="/reports/income">Received income</router-link></Button
-            ><Button size="sm" variant="outline" @click="editSalary(true)">Add earlier salary</Button>
-          </div>
-        </div>
-        <FinanceChart
-          :rows="salaryRows"
-          :series="[
-            {
-              id: 'income',
-              name: 'Yearly salary',
-              color: '#7b65c1',
-            },
-          ]"
-          mode="line"
-        />
-        <p
-          v-if="salaryRows.length === 1 && salaryRows[0]?.label === 'Current salary'"
-          class="text-muted-foreground mt-3 text-xs"
-        >
-          Add earlier salaries to see changes over time.
-        </p></Card
-      >
-      <IncomeAllocationView v-if="result" :result="result" :divisor="divisor" :period-label="periodLabel" />
+      <DashboardPageLayout ref="pageLayout" page="income" :registry="blocks" :default-layout="defaultLayout">
+        <template #summary>
+          <Card class="@container p-5 sm:p-7" data-testid="income-summary">
+            <div class="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <p class="text-muted-foreground text-sm">{{ periodLabel }} income</p>
+                <p class="mt-2 text-4xl font-semibold tracking-tight">
+                  {{ money(result ? result.annual.totalComp / divisor : null) }}
+                </p>
+                <p v-if="result" class="text-muted-foreground mt-2 text-xs">
+                  Gross income {{ money(result.annual.gross / divisor)
+                  }}<template v-if="result.annual.employerMatch">
+                    + Employer 401(k) match {{ money(result.annual.employerMatch / divisor) }}</template
+                  ><template v-if="result.annual.employerOtherContribution">
+                    + Other employer retirement {{ money(result.annual.employerOtherContribution / divisor) }}</template
+                  >
+                </p>
+              </div>
+              <Button @click="editSalary()">Edit salary</Button>
+            </div>
+            <div
+              class="divide-border/60 border-border/60 mt-6 grid divide-y border-t @2xl:grid-cols-2 @2xl:divide-x @2xl:divide-y-0 @4xl:grid-cols-4"
+            >
+              <div v-for="item in allocation?.groups" :key="item.id" class="py-4 @2xl:px-4 @2xl:first:pl-0">
+                <p class="text-muted-foreground flex items-center gap-2 text-xs font-semibold tracking-wide uppercase">
+                  <span class="size-2 rounded-sm" :style="{ background: item.color }" />{{ item.name }}
+                </p>
+                <p class="mt-2 flex flex-wrap items-baseline gap-x-2 text-xl font-semibold tabular-nums">
+                  {{ money(item.amount)
+                  }}<span v-if="allocation?.flow.income" class="text-muted-foreground text-xs font-medium"
+                    >{{ ((item.amount / allocation.flow.income) * 100).toFixed(1) }}%</span
+                  >
+                </p>
+              </div>
+            </div>
+          </Card> </template
+        ><template #salary-history>
+          <Card class="p-5 sm:p-6"
+            ><div class="mb-5 flex flex-wrap items-center justify-between gap-3">
+              <h2 class="text-lg font-semibold">Salary history</h2>
+              <div class="flex flex-wrap gap-2">
+                <Button as-child size="sm" variant="ghost"
+                  ><router-link to="/reports/income">Received income</router-link></Button
+                ><Button size="sm" variant="outline" @click="editSalary(true)">Add earlier salary</Button>
+              </div>
+            </div>
+            <FinanceChart
+              :rows="salaryRows"
+              :series="[
+                {
+                  id: 'income',
+                  name: 'Yearly salary',
+                  color: '#7b65c1',
+                },
+              ]"
+              mode="line"
+            />
+            <p
+              v-if="salaryRows.length === 1 && salaryRows[0]?.label === 'Current salary'"
+              class="text-muted-foreground mt-3 text-xs"
+            >
+              Add earlier salaries to see changes over time.
+            </p></Card
+          > </template
+        ><template #allocation
+          ><IncomeAllocationView
+            v-if="result"
+            v-model:view="allocationView"
+            :result="result"
+            :input="current!.input"
+            :divisor="divisor"
+            :period-label="periodLabel"
+            part="chart"
+            @select="selectIncomeGroup"
+        /></template>
+        <template #breakdown
+          ><IncomeAllocationView
+            v-if="result"
+            ref="breakdown"
+            :result="result"
+            :input="current!.input"
+            :divisor="divisor"
+            :period-label="periodLabel"
+            part="breakdown"
+        /></template>
+      </DashboardPageLayout>
       <div class="flex justify-end">
         <Button variant="outline" @click="settingsOpen = true">Edit contributions and taxes</Button>
       </div>

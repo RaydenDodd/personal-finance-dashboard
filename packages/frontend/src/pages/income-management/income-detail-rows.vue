@@ -25,6 +25,7 @@ function toggle(id: string) {
         <span class="text-muted-foreground">{{ row.name }}</span
         ><span class="shrink-0 tabular-nums">{{ money(row.amount) }}</span>
       </div>
+      <p v-if="row.note" class="text-muted-foreground px-4 pb-3 text-xs">{{ row.note }}</p>
       <IncomeDetailRows v-if="expanded.includes(row.id)" :rows="row.children" class="border-border/50 ml-4 border-l" />
     </div>
   </div>

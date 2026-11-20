@@ -4,6 +4,7 @@ import { SettingsIcon } from '@lucide/vue';
 
 defineProps<{
   isEditMode: boolean;
+  isSaving?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -16,8 +17,10 @@ const emit = defineEmits<{
 <template>
   <div class="flex items-center gap-2">
     <template v-if="isEditMode">
-      <Button variant="outline" size="sm" @click="emit('cancel')"> {{ $t('common.actions.cancel') }} </Button>
-      <Button size="sm" @click="emit('save')"> {{ $t('common.actions.done') }} </Button>
+      <Button variant="outline" size="sm" :disabled="isSaving" @click="emit('cancel')">
+        {{ $t('common.actions.cancel') }}
+      </Button>
+      <Button size="sm" :disabled="isSaving" @click="emit('save')"> {{ $t('common.actions.done') }} </Button>
     </template>
     <template v-else>
       <Button variant="outline" size="sm" @click="emit('enter')">

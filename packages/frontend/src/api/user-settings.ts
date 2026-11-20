@@ -77,6 +77,7 @@ interface InvestmentTransactionsTableSettings {
 }
 
 export interface UiSettings {
+  pageLayouts?: Partial<Record<'income' | 'personalFinance', { widgets: DashboardWidgetConfig[] }>>;
   transactionsTable?: TransactionsTableSettings;
   transactionsList?: TransactionsListSettings;
   transactionForm?: TransactionFormSettings;

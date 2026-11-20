@@ -27,6 +27,7 @@ const routes: RouteRecordRaw[] = [
         path: '/finances/income',
         name: ROUTES_NAMES.incomeManagement,
         component: () => import('@/pages/income-management/overview.vue'),
+        meta: { i18nChunks: ['pages/dashboard'] },
       },
       {
         path: '/finances/taxes',
@@ -37,6 +38,7 @@ const routes: RouteRecordRaw[] = [
         path: '/personal-finance',
         name: ROUTES_NAMES.personalFinance,
         component: () => import('@/pages/personal-finance/index.vue'),
+        meta: { i18nChunks: ['pages/dashboard'] },
       },
       {
         path: '/dashboard',

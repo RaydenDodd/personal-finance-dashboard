@@ -14,7 +14,7 @@ import type { IncomeDocument, IncomePlanVersion } from '@bt/shared/types/income-
 import { computed, onMounted, ref } from 'vue';
 import AmountInput from './amount-input.vue';
 const emit = defineEmits<{ saved: []; cancel: [] }>();
-const settingsSection = ref<'retirement' | 'savings' | 'taxes' | 'deductions'>('retirement');
+const settingsSection = ref<'income' | 'retirement' | 'savings' | 'taxes' | 'deductions'>('retirement');
 
 const document = ref<IncomeDocument>({ revision: 0, employers: [], paychecks: [], plans: [] });
 const input = ref<IncomePlanInput>(createDefaultIncomePlan());
@@ -87,6 +87,7 @@ const money = (amount: number | null | undefined) =>
   amount == null
     ? 'Unavailable'
     : new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' }).format(amount);
+const percent = (value: number | null | undefined) => (value == null ? 'Unavailable' : value.toFixed(2) + '%');
 function choose() {
   const plan = document.value.plans.find((p) => p.id === selected.value);
   if (!plan) {
@@ -193,6 +194,7 @@ onMounted(load);
     <div class="flex flex-wrap gap-1" role="group" aria-label="Income settings section">
       <Button
         v-for="[key, label] in [
+          ['income', 'Income and compensation'],
           ['retirement', 'Retirement'],
           ['savings', 'Savings'],
           ['taxes', 'Tax settings'],
@@ -215,6 +217,43 @@ onMounted(load);
     <p v-if="loading" class="text-muted-foreground">Loading income planning…</p>
     <template v-else>
       <div :class="['grid gap-5', settingsSection === 'retirement' && 'lg:grid-cols-2']">
+        <Card v-if="settingsSection === 'income'" class="space-y-4 p-5">
+          <h2 class="font-semibold">Income and compensation</h2>
+          <div class="grid gap-4 sm:grid-cols-2">
+            <label class="space-y-1 text-sm"
+              >Gross Yearly Salary<input
+                v-model.number="input.annualSalary"
+                type="number"
+                min="0"
+                step="0.01"
+                :class="field"
+            /></label>
+            <label class="space-y-1 text-sm"
+              >Projected Yearly Bonus<input
+                v-model.number="input.annualBonus"
+                type="number"
+                min="0"
+                step="0.01"
+                :class="field"
+            /></label>
+            <label class="space-y-1 text-sm"
+              >Pay frequency<select v-model="input.payFrequency" :class="field" aria-label="Pay frequency">
+                <option value="weekly">Weekly</option>
+                <option value="biweekly">Biweekly</option>
+                <option value="semimonthly">Twice monthly</option>
+                <option value="monthly">Monthly</option>
+                <option value="annual">Yearly</option>
+              </select></label
+            >
+            <label class="space-y-1 text-sm"
+              >Other ordinary income<input
+                v-model.number="input.otherOrdinaryIncome"
+                type="number"
+                min="0"
+                :class="field"
+            /></label>
+          </div>
+        </Card>
         <Card v-if="settingsSection === 'retirement'" class="space-y-4 p-5"
           ><h2 class="font-semibold">Employer 401(k) match</h2>
           <div
@@ -246,7 +285,7 @@ onMounted(load);
               min="0"
               :class="field"
           /></label>
-          <label v-if="input.employerOtherContributionPercent" class="block space-y-1 text-sm"
+          <label class="block space-y-1 text-sm"
             >Other employer retirement contribution %<input
               v-model.number="input.employerOtherContributionPercent"
               type="number"
@@ -333,6 +372,40 @@ onMounted(load);
             ><input v-model="input.coveredByWorkplacePlan" type="checkbox" /> Covered by a workplace retirement
             plan</label
           >
+          <dl v-if="result" class="divide-border/50 divide-y text-sm">
+            <div class="flex justify-between gap-4 py-2">
+              <dt>Effective Tax Rate %</dt>
+              <dd>{{ percent(result.rates.totalEffective) }}</dd>
+            </div>
+            <div class="flex justify-between gap-4 py-2">
+              <dt>Total Federal Tax $</dt>
+              <dd>{{ money(result.annual.federalTax) }}</dd>
+            </div>
+            <div class="flex justify-between gap-4 py-2">
+              <dt>State Income Tax % (marginal)</dt>
+              <dd>{{ percent(result.rates.stateMarginal === null ? null : result.rates.stateMarginal * 100) }}</dd>
+            </div>
+            <div class="flex justify-between gap-4 py-2">
+              <dt>State Income Tax $</dt>
+              <dd>{{ money(result.annual.stateTax) }}</dd>
+            </div>
+            <div class="flex justify-between gap-4 py-2">
+              <dt>Local Income Tax</dt>
+              <dd>{{ money(result.annual.localTax) }}</dd>
+            </div>
+            <div class="flex justify-between gap-4 py-2">
+              <dt>Social Security $</dt>
+              <dd>{{ money(result.annual.socialSecurity) }}</dd>
+            </div>
+            <div class="flex justify-between gap-4 py-2">
+              <dt>Medicare $</dt>
+              <dd>{{ money(result.annual.medicare) }}</dd>
+            </div>
+            <div class="flex justify-between gap-4 py-2 font-semibold">
+              <dt>Net / Yearly Salary After Taxes</dt>
+              <dd>{{ money(result.annual.net) }}</dd>
+            </div>
+          </dl>
         </Card>
         <Card v-if="settingsSection === 'retirement'" class="space-y-5 p-5"
           ><h2 class="font-semibold">Your retirement contributions</h2>
@@ -416,20 +489,6 @@ onMounted(load);
       </div>
       <Card v-if="settingsSection === 'deductions'" class="space-y-4 p-5"
         ><h2 class="font-semibold">HSA and payroll deductions</h2>
-        <div class="grid gap-4 sm:grid-cols-2">
-          <label class="space-y-1 text-sm"
-            >Pay frequency<select v-model="input.payFrequency" :class="field">
-              <option value="weekly">Weekly</option>
-              <option value="biweekly">Biweekly</option>
-              <option value="semimonthly">Twice monthly</option>
-              <option value="monthly">Monthly</option>
-              <option value="annual">Yearly</option>
-            </select></label
-          >
-          <label class="space-y-1 text-sm"
-            >Other yearly income<input v-model.number="input.otherOrdinaryIncome" type="number" min="0" :class="field"
-          /></label>
-        </div>
         <div class="grid gap-4 sm:grid-cols-3">
           <label class="space-y-1 text-sm"
             >Annual HSA contribution<input

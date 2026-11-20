@@ -1,7 +1,48 @@
 import { SUPPORTED_LOCALES } from '@bt/shared/i18n/locales';
 import { describe, expect, it } from '@jest/globals';
 
+import { mergeIntoStoredSettings } from '../services/user-settings/service-owned-slices';
 import { ZodSettingsPatchSchema, ZodSettingsSchema } from './user-settings.model';
+
+describe('page layout settings', () => {
+  it('accepts independent income and personal layouts using the existing widget schema', () => {
+    const settings = ZodSettingsSchema.parse({
+      ui: {
+        pageLayouts: {
+          income: { widgets: [{ widgetId: 'allocation', colSpan: 3 }] },
+          personalFinance: { widgets: [{ widgetId: 'history', colSpan: 2 }] },
+        },
+      },
+    });
+    expect(settings.ui?.pageLayouts?.income?.widgets?.[0]?.widgetId).toBe('allocation');
+    expect(settings.ui?.pageLayouts?.personalFinance?.widgets?.[0]?.colSpan).toBe(2);
+  });
+  it('patches one page without replacing other layouts or unrelated presentation settings', () => {
+    const stored = ZodSettingsSchema.parse({
+      dashboard: { widgets: [{ widgetId: 'balance-trend', colSpan: 2 }] },
+      ui: {
+        transactionsTable: { visibleColumns: ['date'], columnOrder: ['date'] },
+        pageLayouts: { income: { widgets: [{ widgetId: 'summary', colSpan: 3 }] } },
+      },
+    });
+    const patch = ZodSettingsPatchSchema.parse({
+      ui: { pageLayouts: { personalFinance: { widgets: [{ widgetId: 'history', colSpan: 3 }] } } },
+    });
+    const merged = ZodSettingsSchema.parse(mergeIntoStoredSettings({ stored, incoming: patch }));
+    expect(merged.dashboard).toEqual(stored.dashboard);
+    expect(merged.ui?.transactionsTable).toEqual(stored.ui?.transactionsTable);
+    expect(merged.ui?.pageLayouts?.income).toEqual(stored.ui?.pageLayouts?.income);
+    expect(merged.ui?.pageLayouts?.personalFinance?.widgets?.[0]?.widgetId).toBe('history');
+    expect(ZodSettingsPatchSchema.parse({ ui: {} }).ui).toEqual({});
+  });
+  it('rejects invalid block sizes before they can reach the stored preferences', () => {
+    expect(
+      ZodSettingsPatchSchema.safeParse({
+        ui: { pageLayouts: { income: { widgets: [{ widgetId: 'allocation', colSpan: 9 }] } } },
+      }).success,
+    ).toBe(false);
+  });
+});
 
 describe('ZodSettingsSchema – locale field', () => {
   it('accepts English locale', () => {

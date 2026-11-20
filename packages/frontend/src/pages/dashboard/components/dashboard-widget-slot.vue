@@ -3,10 +3,11 @@ import type { DashboardWidgetConfig } from '@/api/user-settings';
 import { Button } from '@/components/lib/ui/button';
 import { DesktopOnlyTooltip } from '@/components/lib/ui/tooltip';
 import WidgetSkeleton from '@/components/widgets/components/widget-skeleton.vue';
-import type { WidgetConfigOption, WidgetSize } from '@/components/widgets/widget-registry';
+import type { WidgetConfigOption, WidgetSize, WidgetLayoutDefinition } from '@/components/widgets/widget-registry';
 import { WIDGET_REGISTRY } from '@/components/widgets/widget-registry';
 import { cn } from '@/lib/utils';
-import { GripVerticalIcon, XIcon } from '@lucide/vue';
+import { GripVerticalIcon, XIcon, ArrowUpIcon, ArrowDownIcon } from '@lucide/vue';
+import { useI18n } from 'vue-i18n';
 import { computed, defineAsyncComponent, provide, toRef } from 'vue';
 
 import type { Period } from '../types';
@@ -15,24 +16,33 @@ const props = defineProps<{
   widgetConfig: DashboardWidgetConfig;
   isEditMode: boolean;
   canRemove: boolean;
-  currentPeriod: Period;
+  currentPeriod?: Period;
+  definition?: WidgetLayoutDefinition;
+  naturalHeight?: boolean;
+  columns?: 3 | 4;
+  canMoveUp?: boolean;
+  canMoveDown?: boolean;
 }>();
 
 const emit = defineEmits<{
   remove: [widgetId: string];
   resize: [widgetId: string, colSpan: number, rowSpan: number];
   'config-change': [widgetId: string, key: string, value: unknown];
+  move: [widgetId: string, direction: -1 | 1];
 }>();
 
 provide('dashboard-widget-stretch', true);
 provide('dashboard-widget-config', toRef(props, 'widgetConfig'));
 
-const def = computed(() => WIDGET_REGISTRY[props.widgetConfig.widgetId]);
+const { t } = useI18n();
+const def = computed(() => props.definition ?? WIDGET_REGISTRY[props.widgetConfig.widgetId]);
+const title = computed(() => (def.value?.literalLabels ? def.value.name : t(def.value?.name ?? '')));
 
 const asyncComponent = computed(() => {
-  if (!def.value) return null;
+  const builtin = WIDGET_REGISTRY[props.widgetConfig.widgetId];
+  if (props.definition || !builtin) return null;
   return defineAsyncComponent({
-    loader: def.value.component,
+    loader: builtin.component,
     loadingComponent: WidgetSkeleton,
   });
 });
@@ -48,12 +58,18 @@ const ROW_SPAN_CLASSES: Record<number, string> = {
   2: 'row-span-2',
 };
 
-const colSpanClass = computed(() => COL_SPAN_CLASSES[props.widgetConfig.colSpan] ?? COL_SPAN_CLASSES[1]);
+const colSpanClass = computed(() =>
+  props.columns === 4
+    ? ({ 1: 'md:col-span-1 xl:col-span-1', 2: 'md:col-span-1 xl:col-span-2', 3: 'md:col-span-2 xl:col-span-4' }[
+        props.widgetConfig.colSpan
+      ] ?? '')
+    : (COL_SPAN_CLASSES[props.widgetConfig.colSpan] ?? COL_SPAN_CLASSES[1]),
+);
 const rowSpanClass = computed(() => ROW_SPAN_CLASSES[props.widgetConfig.rowSpan ?? 1] ?? '');
 
 const componentProps = computed(() => {
-  if (!def.value) return {};
-  return def.value.needsPeriod ? { selectedPeriod: props.currentPeriod } : {};
+  const builtin = WIDGET_REGISTRY[props.widgetConfig.widgetId];
+  return !props.definition && builtin?.needsPeriod ? { selectedPeriod: props.currentPeriod } : {};
 });
 
 const isSizeActive = (size: WidgetSize) =>
@@ -67,8 +83,17 @@ const isConfigChoiceActive = ({ option, value }: { option: WidgetConfigOption; v
   <div v-if="def" :data-widget-id="widgetConfig.widgetId" :class="['relative h-full', colSpanClass, rowSpanClass]">
     <!-- Edit-mode only: always-on isolation would trap widgets' fixed z-50 panels
          (spike-transactions-panel, balance-trend tooltip) under the header. -->
-    <div :class="cn('h-full', isEditMode && 'relative isolate')" :inert="isEditMode">
-      <component :is="asyncComponent" v-bind="componentProps" />
+    <div
+      :class="
+        cn(
+          naturalHeight ? 'min-w-0' : 'h-full',
+          isEditMode && 'relative isolate',
+          naturalHeight && isEditMode && 'pb-24',
+        )
+      "
+      :inert="isEditMode"
+    >
+      <slot><component :is="asyncComponent" v-if="asyncComponent" v-bind="componentProps" /></slot>
     </div>
 
     <!-- Edit overlay -->
@@ -78,14 +103,37 @@ const isConfigChoiceActive = ({ option, value }: { option: WidgetConfigOption; v
     >
       <!-- Bottom toolbar -->
       <div
-        class="bg-background/80 pointer-events-auto absolute right-0 bottom-0 left-0 flex items-center justify-between rounded-b-lg border-t px-2 py-1.5 backdrop-blur-sm"
+        class="bg-background/80 pointer-events-auto absolute right-0 bottom-0 left-0 flex flex-wrap items-center justify-between gap-1 rounded-b-lg border-t px-2 py-1.5 backdrop-blur-sm"
       >
         <!-- Drag handle -->
-        <div class="drag-handle cursor-grab p-1 active:cursor-grabbing">
+        <button
+          type="button"
+          class="drag-handle cursor-grab touch-none p-1 active:cursor-grabbing"
+          :aria-label="`Drag ${title} to reorder`"
+          @keydown.up.prevent="canMoveUp && emit('move', widgetConfig.widgetId, -1)"
+          @keydown.down.prevent="canMoveDown && emit('move', widgetConfig.widgetId, 1)"
+        >
           <GripVerticalIcon class="text-muted-foreground size-6" />
-        </div>
+        </button>
 
-        <div class="flex items-center gap-2">
+        <div class="flex flex-wrap items-center gap-1">
+          <div class="flex gap-0.5">
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              :disabled="!canMoveUp"
+              :aria-label="`Move ${title} up`"
+              @click="emit('move', widgetConfig.widgetId, -1)"
+              ><ArrowUpIcon class="size-3.5" /></Button
+            ><Button
+              variant="ghost"
+              size="icon-sm"
+              :disabled="!canMoveDown"
+              :aria-label="`Move ${title} down`"
+              @click="emit('move', widgetConfig.widgetId, 1)"
+              ><ArrowDownIcon class="size-3.5"
+            /></Button>
+          </div>
           <!-- Size buttons -->
           <div v-if="def.allowedSizes.length > 1" class="flex items-center gap-0.5 rounded-md border p-0.5">
             <button

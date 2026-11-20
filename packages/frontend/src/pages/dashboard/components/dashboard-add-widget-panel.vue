@@ -1,9 +1,9 @@
 <script lang="ts" setup>
-import type { WidgetDefinition } from '@/components/widgets/widget-registry';
+import type { WidgetLayoutDefinition } from '@/components/widgets/widget-registry';
 import { PlusIcon } from '@lucide/vue';
 
 defineProps<{
-  availableWidgets: WidgetDefinition[];
+  availableWidgets: WidgetLayoutDefinition[];
 }>();
 
 const emit = defineEmits<{
@@ -23,8 +23,10 @@ const emit = defineEmits<{
       >
         <PlusIcon class="text-muted-foreground size-4 shrink-0" />
         <div class="min-w-0">
-          <p class="text-sm font-medium">{{ $t(widget.name) }}</p>
-          <p class="text-muted-foreground line-clamp-2 text-xs">{{ $t(widget.description) }}</p>
+          <p class="text-sm font-medium">{{ widget.literalLabels ? widget.name : $t(widget.name) }}</p>
+          <p class="text-muted-foreground line-clamp-2 text-xs">
+            {{ widget.literalLabels ? widget.description : $t(widget.description) }}
+          </p>
         </div>
       </button>
     </div>
