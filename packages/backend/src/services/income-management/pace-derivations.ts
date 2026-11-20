@@ -155,7 +155,8 @@ export function buildPlanPace(
   for (let day = Date.parse(from); day <= Date.parse(through); day += 86400000) {
     const date = new Date(day).toISOString().slice(0, 10),
       year = Number(date.slice(0, 4));
-    const days = (Date.UTC(year + 1, 0, 1) - Date.UTC(year, 0, 1)) / 86400000;
+    // Match the Income page's annual / 12 monthly budget, including February and leap years.
+    const days = 12 * new Date(Date.UTC(year, Number(date.slice(5, 7)), 0)).getUTCDate();
     const result = benchmark?.available ? benchmark : null;
     if (result) {
       plannedIncome += result.annual.takeHome! / days;
@@ -185,7 +186,7 @@ export function buildPlanPace(
     coverageFrom: coverage,
     planName: current?.name ?? null,
     planBasis:
-      'Current Income plan, spread evenly over calendar days; income is paycheck take-home, savings is outside-payroll funding. This benchmark is not historical salary or a payday prediction.',
+      'Current Income plan: monthly allocations spread evenly over each month. Income is paycheck take-home; savings is outside-payroll funding. This is a budget benchmark, not historical salary or a payday prediction.',
     points,
     funding: funding.filter((e) => e.date >= from && e.date <= through && e.date <= today),
     savingsBasis:

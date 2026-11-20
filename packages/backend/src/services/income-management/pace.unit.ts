@@ -148,8 +148,10 @@ describe('planned vs actual funding boundary', () => {
     expect(series.points[0]!.income).toBeNull();
     expect(series.points[1]!.income).toBe(1000);
     expect(series.points[2]!.income).toBeNull();
-    expect(series.points[2]!.plannedIncome).toBeCloseTo((result.annual.takeHome! * 3) / 365, 1);
-    expect(series.points[2]!.plannedSavings).toBeCloseTo((result.annual.savings! * 3) / 365, 1);
+    expect(series.points[2]!.plannedIncome).toBeCloseTo((result.annual.takeHome! * 3) / (12 * 31), 1);
+    expect(series.points[2]!.plannedSavings).toBeCloseTo((result.annual.savings! * 3) / (12 * 31), 1);
+    const february = buildPlanPace(doc, [], [], '2024-02-01', '2024-02-29', '2026-01-02', null);
+    expect(february.points.at(-1)!.plannedIncome).toBe(Math.round((result.annual.takeHome! / 12) * 100) / 100);
   });
   it('never draws a salary target without a saved plan', () => {
     const data = buildPlanPace(emptyIncomeDocument(), [], [], '2026-01-01', '2026-01-01', '2026-01-01', null);
