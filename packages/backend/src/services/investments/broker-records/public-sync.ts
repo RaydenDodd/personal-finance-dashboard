@@ -137,6 +137,12 @@ export const syncPublic = (userId: number) =>
                 : e.side === 'BUY'
                   ? INVESTMENT_TRANSACTION_CATEGORY.buy
                   : INVESTMENT_TRANSACTION_CATEGORY.sell;
+              const brokerFees = new Big(e.fees ?? '0').abs();
+              const gross =
+                category === INVESTMENT_TRANSACTION_CATEGORY.buy
+                  ? amount.abs().minus(brokerFees)
+                  : amount.abs().plus(brokerFees);
+              if (gross.lt(0)) throw new Error('Public fee exceeds the evidenced settlement.');
               // Exact settlement cash is authoritative. A net per-unit amount is derived, not a market quote.
               await createInvestmentTransaction({
                 userId,
@@ -145,15 +151,14 @@ export const syncPublic = (userId: number) =>
                 date: e.timestamp,
                 category,
                 quantity: quantity.toString(),
-                price: amount
-                  .abs()
+                price: gross
                   .div(quantity)
                   .toFixed(10, category === INVESTMENT_TRANSACTION_CATEGORY.sell ? Big.roundUp : Big.roundDown),
-                fees: '0',
+                fees: brokerFees.toString(),
                 settlementCurrencyCode: 'USD',
                 settlementAmount: amount.abs().toFixed(10),
                 sourceRowId,
-                name: `Public ${e.description}; net cash/unit derived from verified settlement.`,
+                name: `Public ${e.description}; unit amount derived from verified settlement and broker fee ${brokerFees.toString()}.`,
               });
             } else if (e.type === 'MONEY_MOVEMENT' && !amount.eq(0)) {
               await directCashTransaction({
