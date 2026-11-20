@@ -1,7 +1,7 @@
 import { payrollRange, shiftPayrollRange } from '@/pages/income-management/payroll/date-range';
 import { describe, expect, it } from 'vitest';
 
-import { chartNumber, withinRange } from './chart-model';
+import { aggregateInvestmentFlows, chartNumber, withinRange } from './chart-model';
 import { investmentRange, investmentRangeSettings } from './date-range';
 
 describe('investment chart selection', () => {
@@ -35,5 +35,37 @@ describe('investment chart selection', () => {
       { date: '2024-03-01', value: 1 },
     ];
     expect(withinRange(points, '2024-01-01', '2024-02-01')).toEqual(points.slice(0, 2));
+  });
+  it('aggregates external flows independently of the selected date window with signed withdrawals', () => {
+    const observations = [
+      { date: '2024-01-05', contributions: '100.25', withdrawals: '0' },
+      { date: '2024-01-25', contributions: '40.75', withdrawals: '25' },
+      { date: '2024-02-01', contributions: '10', withdrawals: '0' },
+      { date: '2024-04-01', contributions: '5', withdrawals: '2' },
+    ];
+    expect(aggregateInvestmentFlows(observations, 'monthly').map((row) => [row.date, row.values])).toEqual([
+      ['2024-01-01', { contributions: 141, withdrawals: -25 }],
+      ['2024-02-01', { contributions: 10, withdrawals: 0 }],
+      ['2024-04-01', { contributions: 5, withdrawals: -2 }],
+    ]);
+    expect(aggregateInvestmentFlows(observations, 'quarterly').map((row) => [row.date, row.values])).toEqual([
+      ['2024-01-01', { contributions: 151, withdrawals: -25 }],
+      ['2024-04-01', { contributions: 5, withdrawals: -2 }],
+    ]);
+    expect(aggregateInvestmentFlows(observations, 'yearly')[0]?.values).toEqual({
+      contributions: 156,
+      withdrawals: -27,
+    });
+  });
+  it('does not replace an unavailable flow with zero inside an aggregate', () => {
+    expect(
+      aggregateInvestmentFlows(
+        [
+          { date: '2024-01-05', contributions: null, withdrawals: '3' },
+          { date: '2024-01-10', contributions: '10', withdrawals: '2' },
+        ],
+        'monthly',
+      )[0]?.values,
+    ).toEqual({ contributions: null, withdrawals: -5 });
   });
 });

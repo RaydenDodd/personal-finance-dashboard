@@ -242,9 +242,13 @@ const fieldClass = 'bg-background border-input min-h-9 w-full rounded-md border 
               ></label
             >
           </fieldset>
-          <label v-if="isDividend" class="block space-y-1 text-sm"
+          <label v-if="isDividend || kind === 'contributions'" class="block space-y-1 text-sm"
             ><span>Aggregation</span
-            ><select v-model="draft.aggregation" :class="fieldClass" aria-label="Dividend aggregation">
+            ><select
+              v-model="draft.aggregation"
+              :class="fieldClass"
+              :aria-label="kind === 'contributions' ? 'Contribution aggregation' : 'Dividend aggregation'"
+            >
               <option value="monthly">Monthly</option>
               <option value="quarterly">Quarterly</option>
               <option value="yearly">Yearly</option>

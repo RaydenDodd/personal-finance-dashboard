@@ -24,13 +24,13 @@ export function withinRange<T extends { date: string }>(points: T[], from: strin
   return points.filter((point) => point.date.slice(0, 10) >= from && point.date.slice(0, 10) <= through);
 }
 
-export function aggregateIncome(
-  payments: { date: string; amount: string | number; reinvested?: boolean }[],
+export function aggregateInvestmentFlows(
+  observations: { date: string; contributions: string | null; withdrawals: string | null }[],
   aggregation: string,
 ): InvestmentChartPoint[] {
   const buckets = new Map<string, InvestmentChartPoint>();
-  for (const payment of payments) {
-    const date = payment.date.slice(0, 10);
+  for (const observation of observations) {
+    const date = observation.date.slice(0, 10);
     const month = Number(date.slice(5, 7));
     const key =
       aggregation === 'yearly'
@@ -38,9 +38,16 @@ export function aggregateIncome(
         : aggregation === 'quarterly'
           ? `${date.slice(0, 4)}-${String(Math.floor((month - 1) / 3) * 3 + 1).padStart(2, '0')}-01`
           : `${date.slice(0, 7)}-01`;
-    const point = buckets.get(key) ?? { date: key, values: { cash: 0, reinvested: 0 } };
-    const series = payment.reinvested ? 'reinvested' : 'cash';
-    point.values[series] = (point.values[series] ?? 0) + Number(payment.amount);
+    const point = buckets.get(key) ?? {
+      date: key,
+      values: { contributions: 0, withdrawals: 0 },
+      note: 'Recorded external flows. Withdrawals are negative; internal selected-account transfers are excluded.',
+    };
+    for (const series of ['contributions', 'withdrawals'] as const) {
+      const value = chartNumber(observation[series]);
+      if (value === null || point.values[series] === null) point.values[series] = null;
+      else point.values[series] = (point.values[series] ?? 0) + (series === 'withdrawals' ? -Math.abs(value) : value);
+    }
     buckets.set(key, point);
   }
   return [...buckets.values()].sort((a, b) => a.date.localeCompare(b.date));

@@ -38,6 +38,17 @@ checks preservation of an existing Balance Trend widget.
 | Portfolio Comparison        | Yes         | Yes                      | Passed              | Unit adapter passed     | Fixture passed  | Pending        | Pending                |
 | Market Data Health          | Yes         | Yes                      | Passed              | Unit adapter passed     | Fixture passed  | Pending        | Pending                |
 
+Desktop (1440 pixels, dark theme, actual mouse) and mobile (390 and 320 pixels,
+light theme, actual touch) exercised every row using an explicitly synthetic
+analytics fixture. Each run added all twenty through the native Add Widget UI,
+configured a portfolio and date range in every gear, moved and resized every
+widget, reloaded, and removed every investment widget. A second Allocation
+instance retained separate settings. Browser settings writes were intercepted
+in memory; the stored production dashboard fingerprint was unchanged. These
+sixty browser lifecycles produced no browser errors or financial writes.
+The private combined trace is `private/investment-widget-browser/fixture-results.json`.
+Production deployment and real-data widget verification remain separate checks.
+
 Financial calculation verification belongs to the shared analytics engine. A
 connected widget still reports the engine's partial/unavailable source status;
 registration or a passing UI adapter test does not establish live fund data,

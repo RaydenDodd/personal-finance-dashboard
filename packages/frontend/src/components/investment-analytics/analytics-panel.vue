@@ -18,7 +18,13 @@ import { useChartInteraction } from '@/composable/charts/use-chart-interaction';
 import SeriesChart from './series-chart.vue';
 import HoldingsTable from './holdings-table.vue';
 import Treemap from './treemap.vue';
-import { chartNumber, withinRange, type InvestmentChartPoint, type InvestmentChartSeries } from './chart-model';
+import {
+  aggregateInvestmentFlows,
+  chartNumber,
+  withinRange,
+  type InvestmentChartPoint,
+  type InvestmentChartSeries,
+} from './chart-model';
 import { investmentRange, investmentRangeSettings } from './date-range';
 
 const props = withDefaults(
@@ -296,6 +302,8 @@ const chartSeries = computed<InvestmentChartSeries[]>(() => {
   }));
 });
 const chartPoints = computed<InvestmentChartPoint[]>(() => {
+  if (props.kind === 'contributions')
+    return aggregateInvestmentFlows(allHistory.value, String(props.settings.aggregation ?? 'monthly'));
   if (props.kind === 'dividends') {
     const buckets = new Map<string, InvestmentChartPoint>();
     for (const payment of payments.value.filter((row) => row.status === 'recorded')) {
@@ -566,12 +574,25 @@ const health = computed(() =>
           >
         </div></template
       >
+      <label v-if="kind === 'contributions'" class="text-muted-foreground flex flex-wrap items-center gap-2 text-xs"
+        >Aggregation<select
+          :value="settings.aggregation ?? 'monthly'"
+          aria-label="Contribution aggregation"
+          class="bg-background rounded-md border px-2 py-1.5"
+          @change="emit('settings-change', { aggregation: ($event.target as HTMLSelectElement).value })"
+        >
+          <option value="monthly">Monthly</option>
+          <option value="quarterly">Quarterly</option>
+          <option value="yearly">Yearly</option>
+        </select></label
+      >
       <SeriesChart
         :points="chartPoints"
         :series="chartSeries"
         :compact="compact"
         :percent="percent && kind !== 'portfolio-comparison'"
         :bars="kind === 'dividends' || kind === 'contributions'"
+        :share-label="kind === 'contributions' ? 'absolute period flows' : 'period income'"
         :events="
           withinRange(analytics.events, range.from, range.through).map((row) => ({ date: row.date, label: row.label }))
         "
