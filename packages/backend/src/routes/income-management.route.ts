@@ -5,11 +5,11 @@ import { checkBaseCurrencyLock } from '@middlewares/check-base-currency-lock';
 import { extractTextFromFile } from '@services/import-export/statement-parser/text-extractor';
 import { calculatePlan, getIncomeDashboard, importPaychecks, saveIncomeDocument } from '@services/income-management';
 import { parseIncomeCsv, parsePaystubText } from '@services/income-management/import';
+import { getPlanPace } from '@services/income-management/pace';
 import { incomeDate, incomeDocumentSchema, incomePlanSchema, paycheckSchema } from '@services/income-management/schema';
 import { getTaxData, refreshTaxSources } from '@services/income-management/tax-data';
 import { Router } from 'express';
 import { z } from 'zod';
-
 const router = Router();
 router.use(authenticateSession);
 const dateNow = () => new Date().toISOString().slice(0, 10);
@@ -33,6 +33,20 @@ router.get(
         query.granularity,
       ),
     }),
+  ),
+);
+router.get(
+  '/pace',
+  createController(
+    z.object({
+      query: z
+        .object({ from: incomeDate, through: incomeDate })
+        .refine(
+          (q) => q.from <= q.through && Date.parse(q.through) - Date.parse(q.from) <= 3660 * 86400000,
+          'Select a period of up to ten years',
+        ),
+    }),
+    async ({ user, query }) => ({ data: await getPlanPace(user.id, query.from, query.through) }),
   ),
 );
 router.put(

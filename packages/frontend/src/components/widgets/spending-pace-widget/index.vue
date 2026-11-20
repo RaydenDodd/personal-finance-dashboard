@@ -23,7 +23,8 @@ import { SORT_DIRECTIONS, TRANSACTION_SORT_FIELD, TRANSACTION_TYPES } from '@bt/
 import { GaugeIcon } from '@lucide/vue';
 import { useQuery } from '@tanstack/vue-query';
 import { useElementSize } from '@vueuse/core';
-import { area, line, scaleLinear } from 'd3';
+import PacePlot from './pace-plot.vue';
+import { buildPaceGeometry } from './pace-geometry';
 import { addDays, format, subMonths } from 'date-fns';
 import { storeToRefs } from 'pinia';
 import { type Ref, computed, inject, ref, useTemplateRef, watch } from 'vue';
@@ -54,9 +55,6 @@ import SpendingPaceSettingsPopover from './spending-pace-settings-popover.vue';
 defineOptions({ name: 'spending-pace-widget' });
 
 const SENTRY_SCOPE = 'spending-pace-widget';
-const Y_HEADROOM = 1.08;
-const PLOT_TOP_PX = 4;
-const Y_TICK_COUNT = 3;
 const AXIS_DAYS = [1, 8, 15, 22, 29];
 const AXIS_TODAY_GAP_DAYS = 2;
 const TOOLTIP_OFFSET_PX = 10;
@@ -86,7 +84,7 @@ const TONES: Record<PaceTone, { stroke: string; fill: string; border: string; pi
 const { t } = useI18n();
 const { addErrorNotification, addSuccessNotification } = useNotificationCenter();
 const { format: formatLocal } = useDateLocale();
-const { formatBaseCurrency, formatWholeBaseCurrency, formatCompactBaseCurrency } = useFormatCurrency();
+const { formatBaseCurrency, formatWholeBaseCurrency } = useFormatCurrency();
 const { isAppInitialized } = storeToRefs(useRootStore());
 const { categoriesMap } = storeToRefs(useCategoriesStore());
 const { byId: payeesById } = usePayeeLookup();
@@ -255,43 +253,18 @@ const footHint = computed(() => {
 const plotRef = useTemplateRef<HTMLElement>('plotRef');
 const { width, height } = useElementSize(plotRef);
 
-const geometry = computed(() => {
-  if (width.value <= 0 || height.value <= PLOT_TOP_PX) return null;
-  const { spent, spentCumulative } = pace.value;
-  const { daysInMonth, todayIndex } = payMonth.value;
-  const cmp = comparison.value;
-  const top = Math.max(spent, cmp?.forecast ?? 0, cmp?.total ?? 0) * Y_HEADROOM || 1;
-  const x = scaleLinear()
-    .domain([0, daysInMonth - 1])
-    .range([0, width.value]);
-  const y = scaleLinear().domain([0, top]).range([height.value, PLOT_TOP_PX]);
-  const toLine = line<number | null>()
-    .defined((value) => value !== null)
-    .x((_, day) => x(day))
-    .y((value) => y(value ?? 0));
-
-  return {
-    x,
-    ticks: y
-      .ticks(Y_TICK_COUNT)
-      .filter((value) => value > 0 && value < top)
-      .map((value) => ({ value, y: y(value) })),
-    spentArea: area<number>()
-      .x((_, day) => x(day))
-      .y0(y(0))
-      .y1((value) => y(value))(spentCumulative),
-    spentLine: toLine(spentCumulative),
-    comparisonLine: cmp ? toLine(cmp.cumulative) : null,
-    forecastLine: cmp && hasForecast.value ? toLine(cmp.forecastCumulative) : null,
-    todayDot: { x: x(todayIndex), y: y(spent) },
-    forecastDot: cmp && hasForecast.value ? { x: width.value, y: y(cmp.forecast) } : null,
-    spikeMarks: forecastSpikeDays.value.map((day) => ({
-      day,
-      x: x(day),
-      y: y(cmp?.forecastCumulative[day] ?? 0),
-    })),
-  };
-});
+const geometry = computed(() =>
+  buildPaceGeometry({
+    width: width.value,
+    height: height.value,
+    actual: pace.value.spentCumulative,
+    comparison: comparison.value?.cumulative ?? null,
+    forecast: hasForecast.value ? (comparison.value?.forecastCumulative ?? null) : null,
+    todayIndex: payMonth.value.todayIndex,
+    days: payMonth.value.daysInMonth,
+    spikeDays: forecastSpikeDays.value,
+  }),
+);
 
 const axisTicks = computed(() => {
   const { start, daysInMonth, todayIndex } = payMonth.value;
@@ -475,72 +448,14 @@ const isEmpty = computed(() => !hasHistory.value && pace.value.spent === 0);
           @pointerdown="onPointer"
           @pointerleave="hoverIndex = null"
         >
-          <svg
-            v-if="geometry"
+          <PacePlot
+            :geometry="geometry"
             :width="width"
             :height="height"
-            class="absolute inset-0 overflow-visible"
-            role="img"
-            :aria-label="$t('dashboard.widgets.spendingPace.chart.ariaLabel')"
-          >
-            <g v-for="tick in geometry.ticks" :key="tick.value">
-              <line x1="0" :x2="width" :y1="tick.y" :y2="tick.y" class="stroke-border" stroke-dasharray="2 4" />
-              <text x="0" :y="tick.y - 3" class="fill-muted-foreground text-[9px]">
-                {{ formatCompactBaseCurrency({ amount: tick.value }) }}
-              </text>
-            </g>
-            <path
-              v-if="geometry.comparisonLine"
-              :d="geometry.comparisonLine"
-              fill="none"
-              class="stroke-muted-foreground"
-              stroke-opacity="0.4"
-              stroke-width="1.5"
-            />
-            <path v-if="geometry.spentArea" :d="geometry.spentArea" class="fill-primary" fill-opacity="0.08" />
-            <path
-              v-if="geometry.spentLine"
-              :d="geometry.spentLine"
-              fill="none"
-              class="stroke-primary"
-              stroke-width="2.25"
-              stroke-linejoin="round"
-            />
-            <path
-              v-if="geometry.forecastLine"
-              :d="geometry.forecastLine"
-              fill="none"
-              :class="tone.stroke"
-              stroke-width="2.25"
-              stroke-dasharray="0.5 5"
-              stroke-linecap="round"
-            />
-            <line v-if="hover" :x1="hover.x" :x2="hover.x" y1="0" :y2="height" class="stroke-muted-foreground" />
-            <circle
-              v-for="mark in geometry.spikeMarks"
-              :key="mark.day"
-              :cx="mark.x"
-              :cy="mark.y"
-              r="3.5"
-              :class="cn(tone.stroke, 'fill-card')"
-              stroke-width="2"
-            />
-            <circle
-              :cx="geometry.todayDot.x"
-              :cy="geometry.todayDot.y"
-              r="4.5"
-              class="fill-primary stroke-card"
-              stroke-width="2"
-            />
-            <circle
-              v-if="geometry.forecastDot"
-              :cx="geometry.forecastDot.x"
-              :cy="geometry.forecastDot.y"
-              r="4.5"
-              :class="cn(tone.fill, 'stroke-card')"
-              stroke-width="2"
-            />
-          </svg>
+            :tone="tone"
+            :hover-x="hover?.x"
+            :label="$t('dashboard.widgets.spendingPace.chart.ariaLabel')"
+          />
 
           <ChartTooltip
             v-if="hover"

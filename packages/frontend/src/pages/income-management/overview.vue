@@ -210,7 +210,7 @@ onMounted(load);
               <h2 class="text-lg font-semibold">Salary history</h2>
               <div class="flex flex-wrap gap-2">
                 <Button as-child size="sm" variant="ghost"
-                  ><router-link to="/reports/income">Received income</router-link></Button
+                  ><router-link to="/finances/income/history">Received income</router-link></Button
                 ><Button size="sm" variant="outline" @click="editSalary(true)">Add earlier salary</Button>
               </div>
             </div>

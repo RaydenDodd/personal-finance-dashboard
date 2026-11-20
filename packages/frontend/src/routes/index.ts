@@ -138,6 +138,12 @@ const routes: RouteRecordRaw[] = [
         meta: { navSection: 'accounts', i18nChunks: ['pages/venture', 'pages/transactions'] },
       },
       {
+        path: '/finances/income/history',
+        name: 'income-history',
+        component: () => import('@/pages/income-management/income-report.vue'),
+        meta: { i18nChunks: ['pages/dashboard'] },
+      },
+      {
         path: '/analytics',
         name: ROUTES_NAMES.analytics,
         component: () => import('@/pages/analytics/index.vue'),
@@ -146,7 +152,7 @@ const routes: RouteRecordRaw[] = [
           {
             path: '/reports/income',
             name: ROUTES_NAMES.incomeReports,
-            component: () => import('@/pages/income-management/income-report.vue'),
+            redirect: '/finances/income/history',
           },
           {
             path: '/reports/taxes',

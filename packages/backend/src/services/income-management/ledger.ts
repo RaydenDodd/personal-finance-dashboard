@@ -8,7 +8,7 @@ export function reconcileIncome(
   bankIncome: BankIncomeRow[],
   from: string,
   through: string,
-  granularity: 'biweekly' | 'monthly' | 'yearly' = 'monthly',
+  granularity: 'biweekly' | 'monthly' | 'yearly' | 'daily' = 'monthly',
 ) {
   const effectiveDate = (p: IncomePaycheck) =>
     bankIncome.find((bank) => bank.id === p.nativeTransactionId)?.date ?? p.date;
@@ -32,16 +32,18 @@ export function reconcileIncome(
   const periods = new Map<string, IncomePeriod>();
   const period = (date: string) => {
     const key =
-      granularity === 'yearly'
-        ? date.slice(0, 4) + '-01-01'
-        : granularity === 'monthly'
-          ? date.slice(0, 7) + '-01'
-          : new Date(
-              Date.UTC(1970, 0, 5) +
-                Math.floor((Date.parse(date) - Date.UTC(1970, 0, 5)) / (14 * 86_400_000)) * 14 * 86_400_000,
-            )
-              .toISOString()
-              .slice(0, 10);
+      granularity === 'daily'
+        ? date
+        : granularity === 'yearly'
+          ? date.slice(0, 4) + '-01-01'
+          : granularity === 'monthly'
+            ? date.slice(0, 7) + '-01'
+            : new Date(
+                Date.UTC(1970, 0, 5) +
+                  Math.floor((Date.parse(date) - Date.UTC(1970, 0, 5)) / (14 * 86_400_000)) * 14 * 86_400_000,
+              )
+                .toISOString()
+                .slice(0, 10);
     if (!periods.has(key))
       periods.set(key, {
         date: key,

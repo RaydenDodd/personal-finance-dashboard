@@ -89,3 +89,21 @@ export interface IncomeDashboard {
   };
   calculations: { plan: IncomePlanVersion; result: IncomePlanResult }[];
 }
+
+export interface IncomePlanPace {
+  from: string;
+  through: string;
+  today: string;
+  coverageFrom: string | null;
+  planName: string | null;
+  planBasis: string;
+  savingsBasis: string;
+  points: {
+    date: string;
+    income: number | null;
+    savings: number | null;
+    plannedIncome: number | null;
+    plannedSavings: number | null;
+  }[];
+  funding: { id: string; date: string; amount: number; accountId: string; description: string }[];
+}

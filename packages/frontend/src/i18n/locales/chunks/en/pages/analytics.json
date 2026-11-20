@@ -89,7 +89,7 @@
       }
     },
     "trends": {
-      "subtitle": "Compare spending, income and savings with the previous period.",
+      "subtitle": "Compare spending over time and income and savings against your Income plan.",
       "metrics": {
         "expenses": "Expenses",
         "income": "Income",

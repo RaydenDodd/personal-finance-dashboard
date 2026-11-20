@@ -205,13 +205,6 @@ const sections = computed<NavSection[]>(() => [
     key: 'general',
     tabs: [
       {
-        name: 'income',
-        label: 'Income',
-        description: 'Received income, taxes and projections',
-        to: { name: ROUTES_NAMES.incomeReports },
-        icon: DollarSignIcon,
-      },
-      {
         name: 'trends-comparison',
         label: t('analytics.navigation.trendsComparison'),
         description: t('analytics.trends.subtitle'),

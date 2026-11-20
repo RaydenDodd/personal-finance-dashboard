@@ -40,3 +40,8 @@ export const getIncomeTaxData = (): Promise<{
   policy: string;
 }> => api.get(base + '/tax-data');
 export const refreshIncomeTaxData = (): Promise<unknown> => api.post(base + '/tax-data/refresh');
+
+export const getIncomePlanPace = (
+  from: string,
+  through: string,
+): Promise<import('@bt/shared/types/income-management').IncomePlanPace> => api.get(base + '/pace', { from, through });

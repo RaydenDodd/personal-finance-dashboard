@@ -4,6 +4,7 @@
       <PeriodSelector v-model="selectedPeriod" class="max-xs:mx-auto" />
       <MetricToggle v-model="selectedMetric" />
       <FiltersButton
+        v-if="selectedMetric === 'expenses'"
         :label="t('analytics.trends.filters.button')"
         :active-count="countActiveFilters({ filters })"
         class="ml-auto"
@@ -12,134 +13,151 @@
       </FiltersButton>
     </div>
 
-    <!-- Error state -->
-    <div v-if="cumulativeError" class="flex h-80 items-center justify-center">
-      <div class="text-destructive-text">{{ t('analytics.trends.loadError') }}</div>
-    </div>
-
-    <!-- Content (with skeleton fallback) -->
-    <template v-else>
-      <!-- Summary rows (narrow) -->
-      <SummaryRows :items="summaryRows" :loading="isLoadingCumulative" class="@md/trends:hidden">
-        <template #divider>
-          <div v-if="cumulativeData" class="flex items-center gap-2">
-            <span class="bg-border h-px min-w-0 flex-1" />
-            <span
-              :class="
-                cn(
-                  'bg-muted/60 flex items-center gap-1 rounded-full px-2.5 py-0.5 text-center text-xs font-semibold tabular-nums',
-                  changeClass,
-                )
-              "
-            >
-              <component :is="changeIcon" class="size-3 shrink-0" />
-              {{ Math.abs(cumulativeData.percentChange) }}%
-              <span class="text-muted-foreground font-medium">{{ t('analytics.trends.vsPreviousPeriod') }}</span>
-            </span>
-            <span class="bg-border h-px min-w-0 flex-1" />
-          </div>
-        </template>
-      </SummaryRows>
-
-      <!-- Summary Cards (wide) -->
-      <div class="hidden grid-cols-3 gap-4 @md/trends:grid">
-        <!-- Card 1: Current period -->
-        <SummaryCardSkeleton v-if="isLoadingCumulative" title-width="w-20" value-width="w-28" />
-        <SummaryCard
-          v-else-if="cumulativeData"
-          :title="metricLabel"
-          :value="cumulativeData.currentPeriod.total"
-          :change="cumulativeData.percentChange"
-          :comparison-period-label="t('analytics.trends.vsPreviousPeriod')"
-          :invert-colors="selectedMetric === 'expenses'"
-        />
-
-        <!-- Card 2: Previous period -->
-        <SummaryCardSkeleton v-if="isLoadingCumulative" title-width="w-24" value-width="w-28" />
-        <SummaryCard
-          v-else-if="cumulativeData"
-          :title="`${t('analytics.trends.chart.comparisonPeriod')}`"
-          :value="cumulativeData.previousPeriod.total"
-        />
-
-        <!-- Card 3: Percent change -->
-        <SummaryCardSkeleton
-          v-if="isLoadingCumulative"
-          container-class="flex items-center justify-center"
-          inner-class="text-center"
-          title-width="w-24 mx-auto"
-          value-width="w-16 mx-auto"
-        />
-        <div
-          v-else-if="cumulativeData"
-          class="border-border bg-card flex items-center justify-center rounded-lg border p-4"
+    <div v-if="selectedMetric !== 'expenses'" class="space-y-4">
+      <div class="flex gap-1">
+        <Button
+          variant="ghost"
+          size="sm"
+          @click="selectedPeriod = { from: startOfMonth(new Date()), to: endOfMonth(new Date()) }"
+          >This month</Button
+        ><Button
+          variant="ghost"
+          size="sm"
+          @click="selectedPeriod = { from: startOfYear(new Date()), to: endOfYear(new Date()) }"
+          >This year</Button
         >
-          <div class="text-center">
-            <div class="text-muted-foreground mb-1 text-sm">{{ t('analytics.trends.vsPreviousPeriod') }}</div>
-            <div
-              :class="[
-                'text-2xl font-semibold',
-                cumulativeData.percentChange > 0
-                  ? selectedMetric === 'expenses'
-                    ? 'text-red-500'
-                    : 'text-green-500'
-                  : cumulativeData.percentChange < 0
+      </div>
+      <PlanPace :from="selectedPeriod.from" :to="selectedPeriod.to" :metric="selectedMetric" />
+    </div>
+    <template v-else>
+      <!-- Error state -->
+      <div v-if="cumulativeError" class="flex h-80 items-center justify-center">
+        <div class="text-destructive-text">{{ t('analytics.trends.loadError') }}</div>
+      </div>
+
+      <!-- Content (with skeleton fallback) -->
+      <template v-else>
+        <!-- Summary rows (narrow) -->
+        <SummaryRows :items="summaryRows" :loading="isLoadingCumulative" class="@md/trends:hidden">
+          <template #divider>
+            <div v-if="cumulativeData" class="flex items-center gap-2">
+              <span class="bg-border h-px min-w-0 flex-1" />
+              <span
+                :class="
+                  cn(
+                    'bg-muted/60 flex items-center gap-1 rounded-full px-2.5 py-0.5 text-center text-xs font-semibold tabular-nums',
+                    changeClass,
+                  )
+                "
+              >
+                <component :is="changeIcon" class="size-3 shrink-0" />
+                {{ Math.abs(cumulativeData.percentChange) }}%
+                <span class="text-muted-foreground font-medium">{{ t('analytics.trends.vsPreviousPeriod') }}</span>
+              </span>
+              <span class="bg-border h-px min-w-0 flex-1" />
+            </div>
+          </template>
+        </SummaryRows>
+
+        <!-- Summary Cards (wide) -->
+        <div class="hidden grid-cols-3 gap-4 @md/trends:grid">
+          <!-- Card 1: Current period -->
+          <SummaryCardSkeleton v-if="isLoadingCumulative" title-width="w-20" value-width="w-28" />
+          <SummaryCard
+            v-else-if="cumulativeData"
+            :title="metricLabel"
+            :value="cumulativeData.currentPeriod.total"
+            :change="cumulativeData.percentChange"
+            :comparison-period-label="t('analytics.trends.vsPreviousPeriod')"
+            :invert-colors="selectedMetric === 'expenses'"
+          />
+
+          <!-- Card 2: Previous period -->
+          <SummaryCardSkeleton v-if="isLoadingCumulative" title-width="w-24" value-width="w-28" />
+          <SummaryCard
+            v-else-if="cumulativeData"
+            :title="`${t('analytics.trends.chart.comparisonPeriod')}`"
+            :value="cumulativeData.previousPeriod.total"
+          />
+
+          <!-- Card 3: Percent change -->
+          <SummaryCardSkeleton
+            v-if="isLoadingCumulative"
+            container-class="flex items-center justify-center"
+            inner-class="text-center"
+            title-width="w-24 mx-auto"
+            value-width="w-16 mx-auto"
+          />
+          <div
+            v-else-if="cumulativeData"
+            class="border-border bg-card flex items-center justify-center rounded-lg border p-4"
+          >
+            <div class="text-center">
+              <div class="text-muted-foreground mb-1 text-sm">{{ t('analytics.trends.vsPreviousPeriod') }}</div>
+              <div
+                :class="[
+                  'text-2xl font-semibold',
+                  cumulativeData.percentChange > 0
                     ? selectedMetric === 'expenses'
-                      ? 'text-green-500'
-                      : 'text-red-500'
-                    : 'text-muted-foreground',
-              ]"
-            >
-              {{ cumulativeData.percentChange > 0 ? '+' : '' }}{{ cumulativeData.percentChange }}%
+                      ? 'text-red-500'
+                      : 'text-green-500'
+                    : cumulativeData.percentChange < 0
+                      ? selectedMetric === 'expenses'
+                        ? 'text-green-500'
+                        : 'text-red-500'
+                      : 'text-muted-foreground',
+                ]"
+              >
+                {{ cumulativeData.percentChange > 0 ? '+' : '' }}{{ cumulativeData.percentChange }}%
+              </div>
             </div>
           </div>
         </div>
-      </div>
 
-      <!-- Monthly Comparison Chart -->
-      <MonthlyComparisonChart
-        :from="selectedPeriod.from"
-        :to="selectedPeriod.to"
-        :metric="selectedMetric"
-        :filters="filters"
-        @hide-category="filters = hideCategory({ filters, categoryId: $event.categoryId })"
-        @show-category="filters = showCategory({ filters, categoryId: $event.categoryId })"
-      />
+        <!-- Monthly Comparison Chart -->
+        <MonthlyComparisonChart
+          :from="selectedPeriod.from"
+          :to="selectedPeriod.to"
+          :metric="selectedMetric"
+          :filters="filters"
+          @hide-category="filters = hideCategory({ filters, categoryId: $event.categoryId })"
+          @show-category="filters = showCategory({ filters, categoryId: $event.categoryId })"
+        />
 
-      <!-- Cumulative Chart Skeleton -->
-      <ChartSkeleton v-if="isLoadingCumulative" />
+        <!-- Cumulative Chart Skeleton -->
+        <ChartSkeleton v-if="isLoadingCumulative" />
 
-      <!-- Cumulative Chart -->
-      <template v-else-if="cumulativeData">
-        <div
-          v-if="cumulativeData.currentPeriod.data.length > 0 || cumulativeData.previousPeriod.data.length > 0"
-          class="border-border bg-card rounded-lg border p-4 max-sm:px-0"
-        >
-          <CumulativeChart
-            :current-period-data="cumulativeData.currentPeriod.data"
-            :previous-period-data="cumulativeData.previousPeriod.data"
-            :metric="selectedMetric"
-          />
-        </div>
-
-        <!-- Empty state for chart -->
-        <div v-else class="border-border bg-card flex h-80 items-center justify-center rounded-lg border p-4">
-          <div class="text-center">
-            <div class="text-muted-foreground">{{ t('analytics.trends.noData') }}</div>
-            <div class="text-muted-foreground mt-1 text-sm">{{ t('analytics.trends.noDataHint') }}</div>
+        <!-- Cumulative Chart -->
+        <template v-else-if="cumulativeData">
+          <div
+            v-if="cumulativeData.currentPeriod.data.length > 0 || cumulativeData.previousPeriod.data.length > 0"
+            class="border-border bg-card rounded-lg border p-4 max-sm:px-0"
+          >
+            <CumulativeChart
+              :current-period-data="cumulativeData.currentPeriod.data"
+              :previous-period-data="cumulativeData.previousPeriod.data"
+              :metric="selectedMetric"
+            />
           </div>
-        </div>
-      </template>
-    </template>
 
-    <!-- Category Breakdown (show for expenses and income, not savings) -->
-    <CategoryBreakdown
-      v-if="selectedMetric !== 'savings'"
-      :current-period-data="currentPeriodCategories || {}"
-      :previous-period-data="previousPeriodCategories || {}"
-      :is-loading="isLoadingCategories"
-      :is-income="selectedMetric === 'income'"
-    />
+          <!-- Empty state for chart -->
+          <div v-else class="border-border bg-card flex h-80 items-center justify-center rounded-lg border p-4">
+            <div class="text-center">
+              <div class="text-muted-foreground">{{ t('analytics.trends.noData') }}</div>
+              <div class="text-muted-foreground mt-1 text-sm">{{ t('analytics.trends.noDataHint') }}</div>
+            </div>
+          </div>
+        </template>
+      </template>
+
+      <!-- Category Breakdown (show for expenses and income, not savings) -->
+      <CategoryBreakdown
+        :current-period-data="currentPeriodCategories || {}"
+        :previous-period-data="previousPeriodCategories || {}"
+        :is-loading="isLoadingCategories"
+        :is-income="false"
+      />
+    </template>
   </div>
 </template>
 
@@ -153,8 +171,10 @@ import { TRANSACTION_TYPES } from '@bt/shared/types';
 import { ArrowDownIcon, ArrowUpIcon, MinusIcon } from '@lucide/vue';
 import { useQuery } from '@tanstack/vue-query';
 import { useSessionStorage } from '@vueuse/core';
-import { differenceInMonths, startOfMonth, subMonths } from 'date-fns';
+import { differenceInMonths, startOfMonth, endOfMonth, startOfYear, endOfYear, subMonths } from 'date-fns';
 import { computed, onMounted } from 'vue';
+import { Button } from '@/components/lib/ui/button';
+import PlanPace from './components/plan-pace.vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 
@@ -251,6 +271,7 @@ const {
 } = useQuery({
   queryKey: [...VUE_QUERY_CACHE_KEYS.analyticsCumulative, cumulativeQueryParams],
   queryFn: () => getCumulativeData(cumulativeQueryParams.value),
+  enabled: computed(() => selectedMetric.value === 'expenses'),
   staleTime: QUERY_CACHE_STALE_TIME.ANALYTICS,
   gcTime: QUERY_CACHE_STALE_TIME.ANALYTICS * 2,
 });
@@ -318,7 +339,7 @@ const { data: currentPeriodCategories, isLoading: isLoadingCurrentCategories } =
   queryFn: () => getSpendingsByCategories(currentPeriodDates.value),
   staleTime: QUERY_CACHE_STALE_TIME.ANALYTICS,
   gcTime: QUERY_CACHE_STALE_TIME.ANALYTICS * 2,
-  enabled: computed(() => selectedMetric.value !== 'savings'),
+  enabled: computed(() => selectedMetric.value === 'expenses'),
 });
 
 const { data: previousPeriodCategories, isLoading: isLoadingPreviousCategories } = useQuery({
@@ -326,7 +347,7 @@ const { data: previousPeriodCategories, isLoading: isLoadingPreviousCategories }
   queryFn: () => getSpendingsByCategories(previousPeriodDates.value),
   staleTime: QUERY_CACHE_STALE_TIME.ANALYTICS,
   gcTime: QUERY_CACHE_STALE_TIME.ANALYTICS * 2,
-  enabled: computed(() => selectedMetric.value !== 'savings'),
+  enabled: computed(() => selectedMetric.value === 'expenses'),
 });
 
 const isLoadingCategories = computed(() => isLoadingCurrentCategories.value || isLoadingPreviousCategories.value);

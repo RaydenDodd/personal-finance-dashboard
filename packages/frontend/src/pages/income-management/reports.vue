@@ -151,7 +151,7 @@ async function load() {
     data.value = response;
     selected.value ||= data.value.calculations.at(-1)?.plan.id ?? '';
   } catch {
-    error.value = 'Income reports could not be loaded. Stored financial records were not changed.';
+    error.value = 'Income history could not be loaded. Stored financial records were not changed.';
   } finally {
     if (request === reportRequest) busy.value = false;
   }
@@ -219,7 +219,8 @@ onMounted(load);
   <div class="mx-auto w-full max-w-7xl space-y-6 p-4 md:p-6">
     <div class="flex flex-wrap items-end justify-between gap-3">
       <div>
-        <h1 class="text-2xl font-semibold">Income reports</h1>
+        <router-link to="/finances/income" class="text-primary text-sm hover:underline">Back to Income</router-link>
+        <h1 class="text-2xl font-semibold">Income history</h1>
       </div>
       <div v-if="activeTab !== 'projections'" class="flex items-center gap-2" aria-label="Report year">
         <Button variant="ghost" aria-label="Previous year" :disabled="busy || year <= 1900" @click="shiftYear(-1)"
