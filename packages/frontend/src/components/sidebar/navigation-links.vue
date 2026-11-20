@@ -89,17 +89,20 @@ watch(
   </router-link>
 
   <Collapsible v-if="!bottomNav" v-model:open="isIncomeOpen">
-    <div class="flex w-full items-center">
-      <router-link :to="{ name: ROUTES_NAMES.actualIncome }" class="min-w-0 flex-1"
-        ><ui-button variant="ghost" as="span" :class="[navItemBase, 'justify-start', isIncomeRoute && navItemActive]"
-          ><BanknoteIcon :class="[navIconBase, isIncomeRoute && navIconActive]" /><span>Income</span></ui-button
-        ></router-link
+    <CollapsibleTrigger class="w-full">
+      <ui-button
+        variant="ghost"
+        as="div"
+        :class="['w-full justify-start gap-2 px-3', isIncomeRoute && 'bg-primary/10']"
+        size="default"
       >
-      <CollapsibleTrigger as-child
-        ><ui-button variant="ghost" size="icon" aria-label="Expand Income navigation"
-          ><ChevronRightIcon :class="['size-4 transition-transform', { 'rotate-90': isIncomeOpen }]" /></ui-button
-      ></CollapsibleTrigger>
-    </div>
+        <BanknoteIcon :class="[navIconBase, isIncomeRoute && navIconActive]" />
+        <span>Income</span>
+        <ChevronRightIcon
+          :class="['ml-auto size-4 shrink-0 transition-transform duration-200', { 'rotate-90': isIncomeOpen }]"
+        />
+      </ui-button>
+    </CollapsibleTrigger>
     <CollapsibleContent
       ><div class="border-border/40 mt-1 ml-2 grid gap-0.5 border-l pl-2">
         <router-link
