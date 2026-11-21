@@ -10,6 +10,7 @@ export interface InvestmentTreemapRow {
   value: number | null;
   size: number;
   change: number | null;
+  gain?: number | null;
   group: string;
   weight: number | null;
   description: string;
@@ -88,6 +89,7 @@ export function investmentTreemapRows(
             unrealizedGain: row.unrealizedGain,
             marketValue: row.marketValue,
             averageCost: row.averageCost,
+            dailyChange: row.dailyChange,
           },
         ];
     return positions.map((position) => {
@@ -105,6 +107,18 @@ export function investmentTreemapRows(
         value,
         size: size ?? 0,
         change: securityReturn(row, position.costBasis, position.unrealizedGain),
+        gain:
+          !settings.colorBy || ['unrealized', 'all'].includes(String(settings.colorBy))
+            ? chartNumber(position.unrealizedGain)
+            : settings.colorBy === 'daily'
+              ? chartNumber(position.dailyChange)
+              : split
+                ? null
+                : chartNumber(
+                    row.personalGains?.[
+                      usesCustomPositionPeriod(settings, String(settings.colorBy)) ? 'custom' : String(settings.colorBy)
+                    ],
+                  ),
         group: split
           ? portfolioGroup(position.portfolioId)
           : String((row as unknown as Record<string, unknown>)[String(settings.grouping)] ?? 'Unknown'),

@@ -731,6 +731,9 @@ async function getAnalyticsImpl({
   for (const h of holdings)
     h.personalReturns = positionPeriodReturns({
       holding: h,
+      onGain: (period, gain) => {
+        (h.personalGains ??= {})[period] = gain;
+      },
       dates: periodDates,
       through: performanceThrough && performanceThrough < today ? performanceThrough : undefined,
       shareUnitFactor,

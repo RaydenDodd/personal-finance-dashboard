@@ -31,6 +31,7 @@ export function positionPeriodDates(today: string) {
 export function positionPeriodReturns(input: {
   holding: InvestmentHolding;
   dates: Record<string, string>;
+  onGain?: (period: string, gain: string) => void;
   through?: string;
   openingValue: (portfolioId: string, securityId: string, date: string) => string | null;
   positionQuantity?: (portfolioId: string, securityId: string, date: string) => string | null;
@@ -104,10 +105,9 @@ export function positionPeriodReturns(input: {
       else if (t.category === 'dividend') income = income.plus(t.amount);
       else if (t.category === 'fee') income = income.minus(t.amount);
     }
-    result[key] = percent(
-      new Big(ending).minus(opening).minus(net).plus(income).toString(),
-      opening.plus(buys).toString(),
-    );
+    const gain = new Big(ending).minus(opening).minus(net).plus(income).toString();
+    result[key] = percent(gain, opening.plus(buys).toString());
+    if (result[key] !== null) input.onGain?.(period, gain);
   }
   return result;
 }

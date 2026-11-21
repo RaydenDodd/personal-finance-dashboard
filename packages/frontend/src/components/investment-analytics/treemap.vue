@@ -17,6 +17,20 @@ const group = ref<string | null>(null),
 const money = (value: number | null, currency = props.analytics.currencyCode) =>
   value == null ? 'Unavailable' : new Intl.NumberFormat(undefined, { style: 'currency', currency }).format(value);
 const rows = computed(() => investmentTreemapRows(props.analytics, props.settings));
+const chartWidth = ref(0);
+const height = computed(() =>
+  Math.max(props.compact ? 300 : 380, Math.min(900, chartWidth.value * 0.8), chartHeight?.value ?? 0),
+);
+const averages = computed(() => {
+  const eligible = visible.value.filter((row) => row.change !== null);
+  const gains = eligible.filter((row) => row.gain != null);
+  return {
+    percent: eligible.length ? eligible.reduce((n, row) => n + row.change!, 0) / eligible.length : null,
+    money: gains.length ? gains.reduce((n, row) => n + row.gain!, 0) / gains.length : null,
+    count: eligible.length,
+  };
+});
+const signedMoney = (value: number | null) => (value == null ? '—' : (value >= 0 ? '+' : '') + money(value));
 watch(
   () => [props.settings.grouping, props.settings.holdingsMode],
   () => {
@@ -30,6 +44,7 @@ const { updateTooltipPosition, isChartScrolling } = useChartTooltipPosition({
   containerRef,
   tooltipRef,
   tooltip,
+  strategy: 'fixed',
   onDismiss: () => {
     selected.value = null;
     d3.select(svgRef.value).selectAll('rect').attr('opacity', 1);
@@ -154,41 +169,77 @@ function inspect(event: PointerEvent, row: (typeof rows.value)[number]) {
   tooltip.visible = true;
   updateTooltipPosition(event);
 }
-useResizeObserver(containerRef, render);
+useResizeObserver(containerRef, ([entry]) => {
+  chartWidth.value = entry?.contentRect.width ?? 0;
+  nextTick(render);
+});
 watch([visible, () => props.settings], () => nextTick(render), { deep: true });
 </script>
 <template>
   <div class="min-w-0">
+    <div
+      class="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs tabular-nums"
+      data-testid="treemap-range-summary"
+    >
+      <span class="text-muted-foreground">Avg holding</span>
+      <strong
+        :class="
+          averages.money == null
+            ? 'text-muted-foreground'
+            : averages.money >= 0
+              ? 'text-app-income-color'
+              : 'text-app-expense-color'
+        "
+        >{{ signedMoney(averages.money) }}</strong
+      >
+      <strong
+        :class="
+          averages.percent == null
+            ? 'text-muted-foreground'
+            : averages.percent >= 0
+              ? 'text-app-income-color'
+              : 'text-app-expense-color'
+        "
+        >{{
+          averages.percent == null ? '—' : (averages.percent >= 0 ? '+' : '') + averages.percent.toFixed(2) + '%'
+        }}</strong
+      >
+      <span class="text-muted-foreground ml-auto inline-flex items-center gap-1"
+        ><i class="bg-app-income-color size-2 rounded-sm" />Gain
+        <i class="bg-app-expense-color ml-2 size-2 rounded-sm" />Loss
+        <span v-if="averages.count < visible.length"> · {{ averages.count }}/{{ visible.length }}</span></span
+      >
+    </div>
     <button v-if="group" type="button" class="text-primary-text mb-2 text-xs underline" @click="group = null">
       All holdings / {{ group }} ×
     </button>
-    <div
-      ref="containerRef"
-      class="relative w-full"
-      :class="compact ? 'h-56' : 'h-80'"
-      :style="chartHeight ? { height: chartHeight + 'px' } : undefined"
-    >
+    <div ref="containerRef" class="relative w-full" :style="{ height: height + 'px' }">
       <svg ref="svgRef" class="h-full w-full" aria-label="Personal portfolio holdings treemap" />
-      <div
-        v-show="tooltip.visible"
-        ref="tooltipRef"
-        class="pointer-events-none absolute z-20"
-        :style="{ left: tooltip.x + 'px', top: tooltip.y + 'px' }"
-      >
-        <ChartTooltip
-          ><ChartTooltipHeader>{{ tooltip.row?.symbol }} · {{ tooltip.row?.name }}</ChartTooltipHeader
-          ><ChartTooltipRow label="Market value" :value="money(tooltip.row?.value ?? null)" /><ChartTooltipRow
-            label="Portfolio weight"
-            :value="tooltip.row?.weight == null ? 'Unknown' : tooltip.row.weight.toFixed(2) + '%'"
-          /><ChartTooltipRow
-            label="Selected return"
-            :value="tooltip.row?.change == null ? 'Unavailable' : tooltip.row.change.toFixed(2) + '%'"
-          />
-          <p class="text-card-tooltip-muted mt-2 max-w-64 text-xs">
-            {{ tooltip.row?.description }}<br />{{ tooltip.row?.asOf ?? 'Source date unavailable' }}
-          </p></ChartTooltip
+      <Teleport to="body"
+        ><div
+          v-show="tooltip.visible"
+          ref="tooltipRef"
+          class="pointer-events-none fixed z-(--z-dialog) max-w-[calc(100vw-1rem)]"
+          :style="{ left: tooltip.x + 'px', top: tooltip.y + 'px' }"
         >
-      </div>
+          <ChartTooltip
+            ><ChartTooltipHeader>{{ tooltip.row?.symbol }} · {{ tooltip.row?.name }}</ChartTooltipHeader
+            ><ChartTooltipRow label="Market value" :value="money(tooltip.row?.value ?? null)" /><ChartTooltipRow
+              label="Portfolio weight"
+              :value="tooltip.row?.weight == null ? 'Unknown' : tooltip.row.weight.toFixed(2) + '%'"
+            /><ChartTooltipRow
+              label="Selected gain / loss"
+              :value="signedMoney(tooltip.row?.gain ?? null)"
+            /><ChartTooltipRow
+              label="Selected return"
+              :value="tooltip.row?.change == null ? 'Unavailable' : tooltip.row.change.toFixed(2) + '%'"
+            />
+            <p class="text-card-tooltip-muted mt-2 max-w-64 text-xs">
+              {{ tooltip.row?.description }}<br />{{ tooltip.row?.asOf ?? 'Source date unavailable' }}
+            </p></ChartTooltip
+          >
+        </div></Teleport
+      >
       <p
         v-if="!visible.length"
         class="text-muted-foreground absolute inset-0 flex items-center justify-center px-6 text-center text-sm"
@@ -196,15 +247,6 @@ watch([visible, () => props.settings], () => nextTick(render), { deep: true });
         No valued positions support this sizing mode.
       </p>
     </div>
-    <p class="text-muted-foreground mt-2 text-xs">
-      Size: {{ settings.sizeBy ?? 'marketValue' }} · color: {{ settings.colorBy ?? 'unrealized' }}. Neutral means
-      unavailable.
-      {{
-        settings.holdingsMode === 'underlying'
-          ? 'Indirect exposure is economic exposure; it does not represent owned shares or tax lots.'
-          : 'Select a group to drill down.'
-      }}
-    </p>
     <p v-if="settings.holdingsMode === 'underlying'" class="text-muted-foreground mt-1 text-xs">
       Fund composition coverage {{ Number(analytics.coverage.lookThroughPercent).toFixed(2) }}% · effective dates
       {{ analytics.coverage.compositionDates?.join(', ') || 'unavailable' }}. Area represents positive exposures; signed

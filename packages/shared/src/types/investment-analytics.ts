@@ -59,6 +59,7 @@ export interface InvestmentHoldingAccount {
   updatedAt: string | null;
 }
 export interface InvestmentHolding extends InvestmentClassification {
+  personalGains?: Record<string, InvestmentDecimal>;
   /** Position gains from native opening values and recorded trade/distribution cash. */
   personalReturns?: Partial<
     Record<'weekly' | 'monthly' | '3m' | '6m' | 'ytd' | '1y' | '2y' | '5y' | 'custom', InvestmentDecimal>

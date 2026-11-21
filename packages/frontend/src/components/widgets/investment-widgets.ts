@@ -46,7 +46,7 @@ export const INVESTMENT_WIDGET_DEFINITIONS: Record<string, WidgetDefinition> = O
         defaultColSpan: ['performance', 'value-capital', 'benchmark', 'holdings', 'portfolio-comparison'].includes(kind)
           ? 2
           : 1,
-        defaultRowSpan: 1,
+        defaultRowSpan: kind === 'heatmap' ? 2 : 1,
         allowedSizes: [
           { colSpan: 1, rowSpan: 1, label: '1×1' },
           { colSpan: 2, rowSpan: 1, label: '2×1' },

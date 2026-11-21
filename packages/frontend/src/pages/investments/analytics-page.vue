@@ -112,7 +112,7 @@ const defaultLayout = computed(() =>
   kinds.value.map((kind) => ({
     widgetId: 'investment-' + kind,
     colSpan: 3,
-    rowSpan: 1,
+    rowSpan: kind === 'heatmap' ? 2 : 1,
     config: {
       ...panelSettings.value[kind],
       ...(kind === 'heatmap' ? { colorBy: props.page === 'holdings' ? 'unrealized' : 'daily' } : {}),

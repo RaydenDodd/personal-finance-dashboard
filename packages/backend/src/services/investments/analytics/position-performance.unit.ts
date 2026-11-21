@@ -32,8 +32,12 @@ describe('native position period attribution', () => {
     accounts: [{ portfolioId: 'account' }],
   } as InvestmentHolding;
   it('uses net recorded trade cash and distributions with the native opening valuation', () => {
+    const gains: Record<string, string> = {};
     const result = positionPeriodReturns({
       holding,
+      onGain: (period, gain) => {
+        gains[period] = gain;
+      },
       dates: positionPeriodDates('2026-11-20'),
       openingValue: () => '1000',
       trades: [
@@ -42,6 +46,7 @@ describe('native position period attribution', () => {
       ],
     });
     expect(result.weekly).toBe('9.165979');
+    expect(gains.weekly).toBe('111');
   });
   it('does not substitute security price appreciation when opening positions are absent', () => {
     const result = positionPeriodReturns({
