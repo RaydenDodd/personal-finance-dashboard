@@ -1,5 +1,5 @@
 import { ASSET_CLASS, SECURITY_PROVIDER } from '@bt/shared/types';
-import { usEquityMarketOpen, easternDate, investmentPriceDate } from '@bt/shared/types/investment-market';
+import { usEquityMarketOpen } from '@bt/shared/types/investment-market';
 import { logger } from '@js/utils';
 import Holdings from '@models/investments/holdings.model';
 import Portfolios from '@models/investments/portfolios.model';
@@ -249,10 +249,7 @@ const securitiesPricesSyncImpl = async (options: SyncOptions): Promise<Securitie
         priceClose: priceData.priceClose.toString(),
         unadjustedClose:
           priceData.unadjustedClose?.toString() ??
-          (label === 'crypto-hourly' ||
-          (currentQuotes && investmentPriceDate(priceData.priceAsOf, false) === easternDate())
-            ? priceData.priceClose.toString()
-            : null),
+          (label === 'crypto-hourly' || currentQuotes ? priceData.priceClose.toString() : null),
         previousClose: priceData.previousClose
           ? { date: priceData.previousClose.date.toISOString(), price: priceData.previousClose.price.toString() }
           : null,

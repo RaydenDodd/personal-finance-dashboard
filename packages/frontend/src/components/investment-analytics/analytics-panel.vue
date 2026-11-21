@@ -21,6 +21,7 @@ import HoldingsTable from './holdings-table.vue';
 import Treemap from './treemap.vue';
 import OverlapDetails from './overlap-details.vue';
 import CompositionHealth from './composition-health.vue';
+import MetricBreakdown from './metric-breakdown.vue';
 import { INVESTMENT_PERFORMER_PERIODS, rankInvestmentPerformers, usesCustomPositionPeriod } from './performers-model';
 import {
   aggregateInvestmentFlows,
@@ -46,7 +47,7 @@ const emit = defineEmits<{
 const containerRef = ref<HTMLElement | null>(null);
 const inlineInformation = !inject('investment-full-page', false);
 const showInformation = ref(false);
-const metricInformation = ref<Record<string, boolean>>({});
+const activeMetric = ref<string | null>(null);
 const earliest = computed(() =>
   props.kind.startsWith('dividend')
     ? ([...props.analytics.dividends].map((row) => row.date.slice(0, 10)).sort()[0] ??
@@ -85,6 +86,7 @@ const metricLabels: Record<string, string> = {
   cash: 'Investment cash',
   costBasis: 'Open-position cost basis',
   unrealizedGain: 'Unrealized gain / loss',
+  accountGain: 'Total account gain',
   unrealizedPercent: 'Unrealized return',
   realizedGain: 'Realized gain / loss',
   combinedGain: 'Combined investment gains',
@@ -128,7 +130,7 @@ const metricKeys = computed(() =>
       ? ['volatility', 'maxDrawdown', 'twr', 'annualizedReturn']
       : props.kind === 'concentration'
         ? ['topFiveConcentration', 'topTenConcentration']
-        : ['marketValue', 'unrealizedGain', 'netInvested', 'dailyChange'],
+        : ['marketValue', 'accountGain', 'unrealizedGain', 'dailyChange'],
 );
 function displayedMetric(key: string) {
   const full = props.analytics.metrics[key];
@@ -168,6 +170,7 @@ function displayedMetric(key: string) {
   return { ...full, label: metricLabels[key] };
 }
 const secondary = [
+  'netInvested',
   'securitiesValue',
   'cash',
   'costBasis',
@@ -739,8 +742,8 @@ const health = computed(() =>
             type="button"
             class="mt-1 text-sm font-semibold tracking-tight break-words tabular-nums @md:text-xl"
             :aria-label="displayedMetric(key).label + (displayedMetric(key).reason ? ' · data details' : '')"
-            :aria-expanded="metricInformation[key] ?? false"
-            @click="metricInformation[key] = !metricInformation[key]"
+            aria-haspopup="dialog"
+            @click="activeMetric = key"
             :class="
               key.toLowerCase().includes('gain') || key === 'dailyChange' ? signed(displayedMetric(key).value) : ''
             "
@@ -754,19 +757,6 @@ const health = computed(() =>
           >
             {{ pct(analytics.metrics.dailyChangePercent.value) }} · covered positions
           </p>
-          <details
-            v-if="displayedMetric(key).reason"
-            :open="metricInformation[key]"
-            class="text-muted-foreground mt-1 text-[11px]"
-          >
-            <summary class="cursor-pointer" @click.prevent="metricInformation[key] = !metricInformation[key]">
-              {{ displayedMetric(key).value == null ? 'ⓘ' : 'Partial · ⓘ' }}
-            </summary>
-            <p class="mt-1">{{ displayedMetric(key).reason }}</p>
-          </details>
-          <span v-else-if="analytics.metrics[key]?.status !== 'verified'" class="text-muted-foreground text-[10px]">{{
-            analytics.metrics[key]?.status ?? 'unavailable'
-          }}</span>
         </div>
       </div>
       <details v-if="kind === 'overview'" class="border-t pt-3">
@@ -779,17 +769,29 @@ const health = computed(() =>
             <dd
               class="font-medium tabular-nums"
               :class="key.toLowerCase().includes('gain') ? signed(displayedMetric(key).value) : ''"
-              :title="analytics.metrics[key]?.reason"
             >
-              {{ percentMetrics.has(key) ? pct(displayedMetric(key).value) : money(displayedMetric(key).value) }}
+              <button type="button" class="text-left" aria-haspopup="dialog" @click="activeMetric = key">
+                {{ percentMetrics.has(key) ? pct(displayedMetric(key).value) : money(displayedMetric(key).value) }}
+              </button>
             </dd>
-            <p v-if="analytics.metrics[key]?.reason" class="text-muted-foreground text-[10px]">
-              {{ analytics.metrics[key].reason }}
-            </p>
           </div>
         </dl>
       </details>
     </template>
+    <MetricBreakdown
+      v-if="activeMetric"
+      :open="true"
+      @update:open="
+        (value) => {
+          if (!value) activeMetric = null;
+        }
+      "
+      :analytics="analytics"
+      :metric="activeMetric"
+      :label="displayedMetric(activeMetric).label ?? activeMetric"
+      :value="displayedMetric(activeMetric).value"
+      :reason="displayedMetric(activeMetric).reason"
+    />
     <p
       v-show="inlineInformation && showInformation"
       v-if="kind === 'concentration'"

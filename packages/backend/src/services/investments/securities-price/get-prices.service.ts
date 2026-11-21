@@ -40,6 +40,7 @@ const getPricesImpl = async (options: PriceQueryOptions) => {
     (p) =>
       p.source !== 'yahoo' ||
       !p.priceAsOf ||
+      !!p.previousClose ||
       !usSessionIds.has(p.securityId) ||
       usEquityObservationAllowed(p.priceAsOf),
   );

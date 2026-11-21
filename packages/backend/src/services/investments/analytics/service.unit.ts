@@ -161,6 +161,39 @@ describe('owner-scoped native portfolio analytics adapter', () => {
     expect(result.metrics.unknownCashCount?.value).toBe('1');
     expect(result.holdings[0]?.weight).toBe('95.238095');
   });
+  it('separates remaining-holding gains from account gains and reconciles drilldown contributions', async () => {
+    jest.mocked(PortfolioTransfers.findAll).mockResolvedValue([
+      { toPortfolioId: 'a', fromPortfolioId: null, refAmount: '8', toCurrencyCode: null, isAdjustment: false },
+      { toPortfolioId: 'b', fromPortfolioId: null, refAmount: '50', toCurrencyCode: null, isAdjustment: false },
+    ] as never);
+    const result = await getInvestmentAnalytics({ userId: 1 });
+    expect(result.portfolios[0]?.calculation).toMatchObject({
+      gainValue: '25',
+      gainBasis: '10',
+      unrealizedGain: '15',
+      recordedFunding: '8',
+      holdingsLessRecordedFunding: '17',
+      accountGain: '22',
+    });
+    expect(result.portfolios[1]?.calculation?.accountGain).toBe('25');
+    expect(result.metrics.accountGain?.value).toBe('47');
+    expect(result.metrics.knownUnrealizedGain?.value).toBe('30');
+    expect(result.metrics.knownUnrealizedGain?.value).toBe(
+      String(result.portfolios.reduce((n, p) => n + Number(p.calculation?.unrealizedGain), 0)),
+    );
+  });
+  it('never equates incomplete recorded funding with a broker lifetime gain', async () => {
+    jest
+      .mocked(BrokerPortfolioData.findAll)
+      .mockResolvedValue([
+        { portfolioId: 'a', data: { broker: 'm1', snapshots: [], historyComplete: false, review: [], taxReports: [] } },
+      ] as never);
+    const result = await getInvestmentAnalytics({ userId: 1 });
+    expect(result.metrics.accountGain?.value).toBeNull();
+    expect(result.portfolios[0]?.calculation?.accountGain).toBeNull();
+    expect(result.portfolios[0]?.calculation?.missing.join(' ')).toContain('Lifetime funding');
+    expect(result.portfolios[0]?.calculation?.unrealizedGain).toBe('15');
+  });
   it('rejects foreign portfolio selections before fetching holdings or financial data', async () => {
     await expect(getInvestmentAnalytics({ userId: 1, portfolioIds: ['foreign'] })).rejects.toThrow('unavailable');
     expect(getPortfolioSummary).not.toHaveBeenCalled();

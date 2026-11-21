@@ -26,10 +26,11 @@ export function originalShareClose(
   }
   return value.toNumber();
 }
-/** Completed 5-minute candle closes, including the terminal US closing quote. */
+/** Completed candles only. A candle starting at the close belongs to the extended session. */
 export function candleCloseTime(start: Date, usSession: boolean, now = Date.now()) {
   if (usSession && !usEquityObservationAllowed(start)) return null;
   const sessionClose = usSession ? usEquityCloseInstant(investmentPriceDate(start)) : Infinity;
+  if (usSession && start.getTime() >= sessionClose) return null;
   const end = new Date(Math.max(start.getTime(), Math.min(start.getTime() + 300000, sessionClose)));
   return end.getTime() <= now ? end : null;
 }

@@ -5,7 +5,8 @@ describe('published price representations', () => {
   it('retains one actual terminal quote and excludes extended-session bars', () => {
     const now = new Date('2026-11-21T07:00:00Z').getTime();
     const candle = candleCloseTime(new Date('2026-11-20T20:55:00Z'), true, now)!;
-    const quote = candleCloseTime(new Date('2026-11-20T21:00:00Z'), true, now)!;
+    const quote = new Date('2026-11-20T21:00:00Z');
+    expect(candleCloseTime(quote, true, now)).toBeNull();
     expect(
       uniquePriceObservations([
         { date: candle, price: 342.68 },

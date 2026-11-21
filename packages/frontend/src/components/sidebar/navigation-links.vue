@@ -138,7 +138,7 @@ watch(
       <ui-button
         variant="ghost"
         as="div"
-        :class="['w-full justify-start gap-2 px-3', isIncomeRoute && 'bg-primary/10']"
+        :class="[navItemBase, 'justify-start', navItemState({ active: isIncomeRoute, expanded: isIncomeOpen })]"
         size="default"
       >
         <BanknoteIcon :class="[navIconBase, isIncomeRoute && navIconActive]" />
@@ -155,11 +155,7 @@ watch(
           :key="child.routeName"
           v-slot="{ isActive }"
           :to="{ name: child.routeName }"
-          ><ui-button
-            variant="ghost"
-            as="span"
-            size="sm"
-            :class="[navItemBase, 'justify-start', isActive && navItemActive]"
+          ><ui-button variant="ghost" as="span" size="sm" :class="[navChildBase, navItemState({ active: isActive })]"
             ><component :is="child.icon" :class="[navIconBase, isActive && navIconActive]" /><span>{{
               $t(child.labelKey)
             }}</span></ui-button
@@ -174,7 +170,11 @@ watch(
       <ui-button
         variant="ghost"
         as="div"
-        :class="['w-full justify-start gap-2 px-3', isInvestmentsRoute && 'bg-primary/10']"
+        :class="[
+          navItemBase,
+          'justify-start',
+          navItemState({ active: isInvestmentsRoute, expanded: isInvestmentsOpen }),
+        ]"
         size="default"
       >
         <TrendingUpIcon :class="[navIconBase, isInvestmentsRoute && navIconActive]" />
@@ -191,11 +191,7 @@ watch(
           :key="child.routeName"
           v-slot="{ isActive }"
           :to="{ name: child.routeName }"
-          ><ui-button
-            variant="ghost"
-            as="span"
-            size="sm"
-            :class="[navItemBase, 'justify-start', isActive && navItemActive]"
+          ><ui-button variant="ghost" as="span" size="sm" :class="[navChildBase, navItemState({ active: isActive })]"
             ><component :is="child.icon" :class="[navIconBase, isActive && navIconActive]" /><span>{{
               child.label
             }}</span></ui-button

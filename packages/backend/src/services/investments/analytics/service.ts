@@ -171,6 +171,7 @@ async function getAnalyticsImpl({
     (p) =>
       p.source !== 'yahoo' ||
       !p.priceAsOf ||
+      !!p.previousClose ||
       !usSessionIds.has(p.securityId) ||
       usEquityObservationAllowed(p.priceAsOf),
   );
@@ -268,7 +269,53 @@ async function getAnalyticsImpl({
           ? summary.totalCashInBaseCurrency
           : sum(balances.filter((b) => b.portfolioId === p.id).map((b) => decimal(b.refTotalCash)));
     const securitiesValue = sum(positions.map((a) => a.marketValue));
+    const priced = positions.filter((a) => a.marketValue !== null);
+    const knownBasis = priced.filter((a) => a.costBasis !== null);
+    const pricedValue = sum(priced.map((a) => a.marketValue))!;
+    const gainValue = sum(knownBasis.map((a) => a.marketValue))!;
+    const gainBasis = sum(knownBasis.map((a) => a.costBasis))!;
+    const accountTransfers = transfers.filter((t) => t.toPortfolioId === p.id || t.fromPortfolioId === p.id);
+    const recordedFunding = accountTransfers.length
+      ? sum(accountTransfers.map((t) => nativeExternalFlow(t, new Set([p.id]))))
+      : positions.length
+        ? null
+        : '0';
+    const missing = holdings.flatMap((h) =>
+      h.accounts
+        .filter((a) => a.portfolioId === p.id)
+        .flatMap((a) => [
+          ...(a.marketValue === null ? [`${h.symbol}: price missing`] : []),
+          ...(a.costBasis === null ? [`${h.symbol}: cost basis missing`] : []),
+        ]),
+    );
+    if (cash === null) missing.push('Cash balance: import a current account statement.');
+    if (recordedFunding === null || (broker && !broker.data.historyComplete))
+      missing.push('Lifetime funding: reconcile deposits, withdrawals and opening balance with broker history.');
     return {
+      calculation: {
+        securitiesValue,
+        pricedValue,
+        gainValue,
+        gainBasis,
+        unrealizedGain: knownBasis.length
+          ? sum(knownBasis.map((a) => a.unrealizedGain))
+          : positions.length
+            ? null
+            : '0',
+        recordedFunding,
+        holdingsLessRecordedFunding:
+          securitiesValue !== null && recordedFunding !== null
+            ? new Big(securitiesValue).minus(recordedFunding).toString()
+            : null,
+        accountGain:
+          securitiesValue !== null &&
+          cash !== null &&
+          recordedFunding !== null &&
+          (!broker || broker.data.historyComplete)
+            ? new Big(securitiesValue).plus(cash).minus(recordedFunding).toString()
+            : null,
+        missing,
+      },
       id: p.id,
       name: p.name,
       broker: broker?.data.broker ?? 'Other',
@@ -316,6 +363,13 @@ async function getAnalyticsImpl({
     securitiesValue !== null && costBasis !== null ? new Big(securitiesValue).minus(costBasis).toString() : null;
   const realizedGain = completeHistory ? sum(portfolios.map((p) => p.realizedGain)) : null;
   const metrics: Record<string, InvestmentMetric> = {
+    accountGain: metric(
+      sum(portfolios.map((p) => p.calculation!.accountGain)),
+      portfolios
+        .filter((p) => p.calculation!.accountGain === null)
+        .map((p) => `${p.name}: ${p.calculation!.missing.filter((m) => !m.includes('cost basis')).join(' ')}`)
+        .join('\n') || undefined,
+    ),
     marketValue: metric(
       marketValue,
       marketValue === null ? 'One or more positions or cash balances are unavailable.' : undefined,
@@ -504,6 +558,19 @@ async function getAnalyticsImpl({
               })),
             });
       h.dailyChange = daily?.change ?? null;
+      for (const a of h.accounts) {
+        a.dailyChange =
+          a.marketValue === null
+            ? null
+            : (dailyPositionChange({
+                quantity: a.quantity,
+                marketValue: a.marketValue,
+                previousClose: reference.price.toString(),
+                trades: dayTrades
+                  .filter((t) => t.portfolioId === a.portfolioId)
+                  .map((t) => ({ category: t.category, quantity: decimal(t.quantity), amount: decimal(t.refAmount) })),
+              })?.change ?? null);
+      }
       h.dailyChangePercent = daily?.percent ?? null;
       if (daily) dailyCapital.set(h.id, daily.capital);
       h.previousCloseDate = dateString(reference.date);
@@ -1010,6 +1077,12 @@ async function getAnalyticsImpl({
     .map((s) => dateString(s.pricingLastSyncedAt))
     .filter((s): s is string => !!s)
     .sort();
+  for (const p of portfolios) {
+    const knownDaily = holdings.flatMap((h) =>
+      h.accounts.filter((a) => a.portfolioId === p.id && a.dailyChange != null),
+    );
+    p.calculation!.dailyChange = knownDaily.length ? sum(knownDaily.map((a) => a.dailyChange!)) : null;
+  }
   const result: InvestmentAnalytics = {
     generatedAt: new Date().toISOString(),
     priceRisk,

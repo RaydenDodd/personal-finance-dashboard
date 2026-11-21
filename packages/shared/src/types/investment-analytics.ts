@@ -18,6 +18,18 @@ export interface InvestmentClassification {
   assetClass?: string;
 }
 export interface InvestmentPortfolio {
+  calculation?: {
+    securitiesValue: InvestmentDecimal;
+    pricedValue: string;
+    gainValue: string;
+    gainBasis: string;
+    unrealizedGain: InvestmentDecimal;
+    recordedFunding: InvestmentDecimal;
+    holdingsLessRecordedFunding: InvestmentDecimal;
+    dailyChange?: InvestmentDecimal;
+    accountGain: InvestmentDecimal;
+    missing: string[];
+  };
   id: string;
   name: string;
   broker: string;
@@ -34,6 +46,7 @@ export interface InvestmentPortfolio {
   review: string[];
 }
 export interface InvestmentHoldingAccount {
+  dailyChange?: InvestmentDecimal;
   reportedAverageCost?: InvestmentDecimal;
   portfolioId: string;
   portfolioName: string;

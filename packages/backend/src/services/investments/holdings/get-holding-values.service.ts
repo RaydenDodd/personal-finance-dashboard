@@ -184,7 +184,11 @@ const getHoldingValuesImpl = async ({ portfolioId, date, userId }: GetHoldingVal
   );
   const extended = prices.filter(
     (p) =>
-      p.source === 'yahoo' && p.priceAsOf && usSessionIds.has(p.securityId) && !usEquityObservationAllowed(p.priceAsOf),
+      p.source === 'yahoo' &&
+      !p.previousClose &&
+      p.priceAsOf &&
+      usSessionIds.has(p.securityId) &&
+      !usEquityObservationAllowed(p.priceAsOf),
   );
   if (extended.length) {
     const closingDates = (await SecurityPricing.findAll({

@@ -117,13 +117,13 @@ const syncHistoricalPricesImpl = async (securityId: string, intraday = false): P
 
   const existing = await SecurityPricing.findAll({
     where: { securityId, date: { [Op.in]: pricesToCreate.map((p) => p.date) } },
-    attributes: ['date', 'source', 'priceAsOf'],
+    attributes: ['date', 'source', 'priceAsOf', 'previousClose'],
     raw: true,
   });
   const existingByDate = new Map(existing.map((p) => [new Date(p.date).toISOString(), p]));
   const editable = pricesToCreate.filter((p) => {
     const prior = existingByDate.get(p.date.toISOString());
-    return !prior || (prior.source === p.source && (p.priceAsOf !== null || !prior.priceAsOf));
+    return !prior || (!prior.previousClose && prior.source === p.source && (p.priceAsOf !== null || !prior.priceAsOf));
   });
   await SecurityPricing.bulkCreate(editable, {
     updateOnDuplicate: ['priceClose', 'unadjustedClose', 'priceAsOf', 'source'],
