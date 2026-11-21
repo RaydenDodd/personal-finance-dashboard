@@ -24,7 +24,7 @@ export function positionEvidence(
       (t) =>
         t.securityId === id &&
         ['buy', 'sell', 'transfer'].includes(t.category) &&
-        (Number(t.quantity) !== 0 || t.quantityUnknown),
+        (Number(t.quantity) !== 0 || t.quantityUnknown || t.cashInLieu),
     );
     const first = txs[0];
     if (
@@ -42,7 +42,7 @@ export function positionEvidence(
     let opening = new Big(position?.quantity ?? '0').times(factor(id, investmentPriceDate(anchor.asOf)));
     let valid = true;
     for (const t of txs.filter((t) => new Date(t.date) <= new Date(anchor.asOf))) {
-      if (t.quantityUnknown || (t.category === 'transfer' && !t.transactionType)) {
+      if (t.quantityUnknown || t.cashInLieu || (t.category === 'transfer' && !t.transactionType)) {
         valid = false;
         break;
       }
