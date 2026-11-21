@@ -3,8 +3,10 @@ import type { FundHoldingInput, InvestmentFundSnapshot } from '@bt/shared/types/
 const issuerName = (name: string) =>
   name
     .toUpperCase()
-    .replace(/\b(CLASS\s+[A-Z]|COMMON STOCK|CORPORATION|CORP|INCORPORATED|INC|PLC|LTD|LIMITED|CO|COMPANY)\b/g, '')
+    .replace(/\b(COMMON STOCK|CORPORATION|CORP|INCORPORATED|INC|PLC|LTD|LIMITED|CO|COMPANY)\b/g, '')
     .replace(/[^A-Z0-9]/g, '');
+const tickerKey = (symbol: string | null | undefined) => (symbol ?? '').toUpperCase().replace(/[.\- ]/g, '');
+const baseIssuerName = (name: string) => issuerName(name.replace(/\bCLASS\s+[A-Z]\b/gi, ''));
 const usVenue = (venue: string | null | undefined) =>
   /^(XNAS|XNYS|ARCX|NASDAQ|NYSE|NMS|NAS|NGM|NCM|NYQ|PCX|ARCA|NYSEARCA|ASE|AMEX|XASE)$/i.test(venue ?? '');
 const strongId = (row: FundHoldingInput) => {
@@ -30,6 +32,8 @@ type NativeIdentity = {
   currencyCode: string;
   exchangeMic?: string | null;
   exchangeAcronym?: string | null;
+  isin?: string | null;
+  cusip?: string | null;
 };
 
 /**
@@ -72,18 +76,27 @@ export function bridgeCompositionIdentities(snapshots: InvestmentFundSnapshot[],
       candidates.set(key, ids);
     }
   const nativeAliases = new Map<string, string>();
+  const candidatesByNative = new Map<string, string[]>();
   for (const [id, h] of metadata) {
     if (!displayTicker(h) || h.currencyCode !== 'USD') continue;
     const matches = securities.filter(
       (s) =>
-        s.symbol === h.symbol &&
+        tickerKey(s.symbol) === tickerKey(h.symbol) &&
         s.currencyCode === 'USD' &&
+        !s.isin &&
+        !s.cusip &&
         !!s.name &&
-        issuerName(s.name) === issuerName(h.name) &&
+        (/\bCLASS\s+[A-Z]\b/i.test(s.name)
+          ? issuerName(s.name) === issuerName(h.name)
+          : baseIssuerName(s.name) === baseIssuerName(h.name)) &&
         (usVenue(s.exchangeMic) || usVenue(s.exchangeAcronym)),
     );
-    if (matches.length === 1) nativeAliases.set(id, matches[0]!.id);
+    if (matches.length === 1) {
+      const nativeId = matches[0]!.id;
+      candidatesByNative.set(nativeId, [...(candidatesByNative.get(nativeId) ?? []), id]);
+    }
   }
+  for (const [nativeId, ids] of candidatesByNative) if (ids.length === 1) nativeAliases.set(ids[0]!, nativeId);
   const resolved = snapshots.map((snapshot) =>
     !snapshot.provenance
       ? snapshot
@@ -95,7 +108,7 @@ export function bridgeCompositionIdentities(snapshots: InvestmentFundSnapshot[],
             if (!id && h.exchange && h.currencyCode && displayTicker(h)) {
               const ids = [...(candidates.get(`${issuerName(h.name)}:${h.currencyCode}`) ?? [])].filter((key) => {
                 const source = metadata.get(key)!;
-                return !displayTicker(source) || source.symbol === h.symbol;
+                return !displayTicker(source) || tickerKey(source.symbol) === tickerKey(h.symbol);
               });
               if (ids.length === 1) id = ids[0];
             }

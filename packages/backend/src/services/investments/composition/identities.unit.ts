@@ -41,6 +41,54 @@ const snapshot = (name = 'Microsoft Corp'): InvestmentFundSnapshot => ({
   },
 });
 describe('verified source identifier bridges', () => {
+  it('keeps HEICO common and Class A securities distinct across issuer ticker punctuation', () => {
+    const base = snapshot();
+    const common = {
+      id: 'cusip:422806109',
+      cusip: '422806109',
+      symbol: '422806109',
+      name: 'HEICO CORP',
+      weight: '1',
+      assetClass: 'Equity',
+      currencyCode: 'USD',
+    };
+    const classA = {
+      ...common,
+      id: 'cusip:422806208',
+      cusip: '422806208',
+      symbol: 'HEI.A',
+      name: 'HEICO CORP CLASS A',
+    };
+    const issuer = {
+      ...base,
+      fundId: 'issuer',
+      holdings: [
+        {
+          id: 'listing:NYSE:USD:HEI',
+          symbol: 'HEI',
+          name: 'HEICO CORP',
+          weight: '0.46',
+          assetClass: 'Equity',
+          currencyCode: 'USD',
+          exchange: 'NYSE',
+        },
+        {
+          id: 'listing:NYSE:USD:HEI A',
+          symbol: 'HEI A',
+          name: 'HEICO CLASS A',
+          weight: '0.61',
+          assetClass: 'Equity',
+          currencyCode: 'USD',
+          exchange: 'NYSE',
+        },
+      ],
+    };
+    const result = bridgeCompositionIdentities([{ ...base, holdings: [common, classA] }, issuer], [])[1]!;
+    expect(result.holdings.map((h) => [h.id, h.weight])).toEqual([
+      ['cusip:422806109', '0.46'],
+      ['cusip:422806208', '0.61'],
+    ]);
+  });
   const native = {
     id: 'native-microsoft',
     symbol: 'MSFT',
