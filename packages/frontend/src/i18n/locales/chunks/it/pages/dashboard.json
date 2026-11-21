@@ -17,8 +17,8 @@
         "balanceTypes": {
           "total": "Totale",
           "accounts": "Conti",
-          "portfolios": "Portafoglio",
-          "ventures": "Investimenti",
+          "portfolios": "Portafogli",
+          "ventures": "Venture capital",
           "vehicles": "Veicoli",
           "loans": "Prestiti & Finanziamenti"
         },
@@ -34,7 +34,7 @@
         "vsPreviousPeriod": "rispetto al periodo precedente",
         "spikePanel": {
           "accounts": "Conti",
-          "portfolios": "Portafoglio",
+          "portfolios": "Portafogli",
           "priceDrivenChange": "Variazione dovuta ai prezzi: dettagli delle transazioni in arrivo",
           "noSignificantTransactions": "Nessuna transazione significativa per questa data.",
           "seeAllTransactions": "Vedi tutte le transazioni"
@@ -69,7 +69,7 @@
         "componentsSettings": {
           "description": "Scegliere quali componenti contano nella linea del saldo totale.",
           "vehicles": "Veicoli",
-          "ventures": "Investimenti",
+          "ventures": "Venture capital",
           "loans": "Prestiti & Finanziamenti",
           "loansTooltip": "Se attivo, i debiti residui dei prestiti vengono sottratti dal totale (patrimonio netto reale). Se disattivo, i prestiti vengono ignorati e il totale mostra solo gli asset.",
           "allIncluded": "Tutti i componenti",
@@ -81,9 +81,17 @@
       },
       "expensesStructure": {
         "title": "Struttura delle uscite",
+        "incomeTitle": "Struttura delle entrate",
         "today": "Oggi",
         "vsPreviousPeriod": "rispetto al periodo precedente",
-        "viewButton": "Visualizza"
+        "viewButton": "Visualizza",
+        "back": "Indietro",
+        "openInAnalytics": "Apri in Dati analitici",
+        "metric": {
+          "expenses": "Spese",
+          "income": "Entrate"
+        },
+        "seeTransactions": "Vedi transazioni"
       },
       "latestTransactions": {
         "title": "Ultime transazioni",
@@ -156,7 +164,7 @@
         "viewHistory": "Vedi storico",
         "loadFailed": "Impossibile caricare i dati del patrimonio netto.",
         "components": {
-          "ventures": "Investimenti",
+          "ventures": "Venture capital",
           "vehicles": "Veicoli",
           "loans": "Prestiti & Finanziamenti"
         },
@@ -164,7 +172,7 @@
           "title": "Includi nel patrimonio netto",
           "loans": "Prestiti & Finanziamenti",
           "vehicles": "Veicoli",
-          "ventures": "Investimenti"
+          "ventures": "Venture capital"
         },
         "trendTooltip": {
           "change": "Variazione",
@@ -200,7 +208,7 @@
         "buckets": {
           "cash": "Contanti",
           "investments": "Investimenti",
-          "ventures": "Investimenti",
+          "ventures": "Venture capital",
           "vehicles": "Veicoli",
           "loans": "Prestiti & Finanziamenti",
           "creditAndOverdrafts": "Credito e scoperti"
@@ -238,7 +246,7 @@
         },
         "hints": {
           "noHistory": "Il confronto compare dopo il primo mese completo.",
-          "plannedFailed": "Couldn't load planned transactions. The forecast may not include them.",
+          "plannedFailed": "Impossibile caricare le transazioni pianificate. La previsione potrebbe non includerle.",
           "fewMonths": "Media del {n} mese completo disponibile finora. | Media dei {n} mesi completi disponibili finora."
         },
         "loadFailed": "Impossibile caricare le spese.",
@@ -253,7 +261,7 @@
         }
       },
       "plannedOverview": {
-        "title": "Transazioni pianificate",
+        "title": "Pianificati",
         "projectedBy": "Previsto al {date}",
         "upcoming": "In scadenza · {count}",
         "loadFailed": "Impossibile caricare le transazioni pianificate"
@@ -315,6 +323,28 @@
         "ended": "Terminato",
         "create": "Crea un tracker"
       },
+      "tagAnalysis": {
+        "title": "Analisi etichette",
+        "noTagsTitle": "Nessuna etichetta selezionata",
+        "noTagsDescription": "Scegliere le etichette da confrontare nelle impostazioni del widget.",
+        "ofIncome": "delle entrate",
+        "remaining": "Non assegnato",
+        "targetTooltip": "Obiettivo: {value}%",
+        "settings": {
+          "tagsLabel": "Etichette",
+          "tagsPlaceholder": "Selezionare le etichette",
+          "targetsLabel": "Obiettivi, %",
+          "targetsNoneSet": "Nessuno impostato",
+          "targetsSetCount": "{set} di {total} impostati",
+          "targetsEmpty": "Aggiungere prima le etichette per impostarne gli obiettivi",
+          "targetPlaceholder": "Nessuno",
+          "percentBaseLabel": "Percentuale di",
+          "percentBaseTags": "Etichette selezionate",
+          "percentBaseIncome": "Entrate",
+          "includeTransfersLabel": "Includere i trasferimenti",
+          "includeTransfersDescription": "Conteggiare come spesa i trasferimenti verso i propri conti e portafogli"
+        }
+      },
       "emptyState": "Nessun dato nell'intervallo di tempo selezionato.",
       "registry": {
         "balanceTrend": {
@@ -374,7 +404,7 @@
           "description": "Quota delle entrate pagata in imposte, con andamento a 12 mesi"
         },
         "budget": {
-          "name": "Tracker",
+          "name": "Budget",
           "description": "Quanto resta nel periodo di budget corrente, voce per voce"
         },
         "trackers": {
@@ -399,6 +429,10 @@
             "showReached": "Mostra obiettivi raggiunti"
           },
           "reachedSection": "Raggiunti"
+        },
+        "tagAnalysis": {
+          "name": "Analisi etichette",
+          "description": "Vedere come si distribuisce la spesa tra le etichette scelte, ad esempio necessità, desideri e risparmi"
         }
       }
     },
@@ -418,6 +452,8 @@
       "payAction": "Segna come pagato",
       "listTitle": "In scadenza",
       "dueCount": "{count} in scadenza",
+      "daysLate": "{count} gg di ritardo",
+      "overdueCount": "{count} scaduti",
       "nothingDue": "Nessuna scadenza nei prossimi 3 giorni",
       "overdueHint": "Scaduto dal {date}",
       "dueSoonHint": "In scadenza nei prossimi 3 giorni",

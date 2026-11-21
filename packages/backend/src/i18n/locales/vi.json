@@ -8,11 +8,11 @@
     "groupNotFound": "Group or account not found",
     "accountNotFound": "Account not found!",
     "accountUpdateFailed": "Account updation is not successful",
-    "accountNoExternalId": "Account does not have external ID",
     "accountNoExternalIdMonobank": "Account does not have external ID from Monobank",
     "accountNoExternalIdEnableBanking": "Account does not have external ID from Enable Banking",
     "accountNotFoundForTransaction": "Account not found for this transaction",
     "deleteBlockedByLoanPayments": "This account has loan payments. Delete or reassign them before deleting the account.",
+    "deleteBlockedByTrashedLoanPayments": "This account has loan payments in Trash. Delete them permanently from Trash before deleting the account.",
     "loanBalanceUseUpdateLoan": "Change a loan's outstanding balance from its loan page, not from account settings.",
     "loanCategoryImmutable": "A loan account's category can't be changed.",
     "dedicatedFlowCategoryNotAllowed": "Loan and vehicle accounts must be created through their dedicated endpoints, not the generic accounts endpoint.",
@@ -39,6 +39,7 @@
     "systemCannotBeMoved": "System categories cannot be moved.",
     "parentNotFound": "Category with such parentId doesn't exist.",
     "systemParentForbidden": "System categories cannot be used as a parent.",
+    "defaultCannotBeDeleted": "This category holds uncategorized transactions and cannot be deleted.",
     "ownParent": "Category cannot be its own parent.",
     "underOwnSubcategory": "Category cannot be moved under its own subcategory.",
     "nestingTooDeep": "Categories cannot be nested deeper than {{max}} levels."
@@ -56,7 +57,7 @@
     "idCannotBeChanged": "id cannot be changed",
     "editReadonlyFields": "Attempt to edit readonly fields of the external account",
     "changeTypeNotAllowed": "It's disallowed to change \"transactionType\" of the non-system account",
-    "bothRefundFieldsNotAllowed": "You cannot use both \"refundedByTxIds\" and \"refundsTxId\" simultaneously. Please choose one or the other.",
+    "bothRefundFieldsNotAllowed": "You cannot use both \"refundedByTxIds\" and \"refundsTargets\" simultaneously. Please choose one or the other.",
     "oppositeTransactionNotFound": "Cannot find opposite tx to make an updation",
     "transactionIdNotExist": "Transaction with provided `id` does not exist!",
     "notAuthorizedToEdit": "You are not authorized to edit this transaction.",
@@ -100,6 +101,16 @@
     "paymentLinkNotAllowed": "This transaction can't be linked to the payment. Only your own income or expense of the same type can be linked – not a transfer, refund, split, pending transaction or part of another payment.",
     "paymentLinkedAmountFixed": "The amount of a linked transaction can't be changed.",
     "paymentLinkedTypeMismatch": "Linked transactions must have the same type as the payment. Unlink them first.",
+    "refunds": {
+      "wholeLinkWithPartials": "A whole-refund link cannot be combined with partial links",
+      "externalLinkWithOthers": "A refund for a purchase outside the app cannot be combined with other refund links",
+      "externalLinkWithAmount": "A refund of a transaction outside the app cannot have a partial amount; it always covers the whole refund.",
+      "totalExceedsRefund": "Total refund link amounts cannot be greater than the refund transaction amount",
+      "totalExceedsSplit": "Total refund amount cannot be greater than the split amount",
+      "totalExceedsOriginal": "Total refund amount cannot be greater than the original transaction amount",
+      "refundOfRefund": "Cannot refund a \"refund\" transaction",
+      "duplicateLink": "This refund is already linked to that transaction"
+    },
     "splits": {
       "splitsOnTransfer": "Cannot add splits to transfer transactions",
       "splitLimitExceeded": "Maximum {{max}} splits allowed per transaction",
@@ -113,8 +124,7 @@
       "exceedTotal": "Total split amount ({{total}}) exceeds transaction amount ({{transactionAmount}})",
       "invalidData": "Invalid split data",
       "splitNotFound": "Split not found",
-      "cannotDeleteWithRefunds": "Cannot delete split that has refunds targeting it",
-      "cannotReduceBelowRefunded": "This split has refunds totaling {{refundsText}}. You cannot reduce it below the refunded amount. To reduce further, first unlink the refunds."
+      "cannotDeleteWithRefunds": "Cannot delete split that has refunds targeting it"
     },
     "reconciliation": {
       "systemNotAllowed": "Only bank-connected transactions can be merged or removed.",
@@ -135,6 +145,13 @@
         "message_one": "1 transaction has been pending for over a week. Check it with your bank so your balance stays accurate.",
         "message_other": "{{count}} transactions have been pending for over a week. Check them with your bank so your balance stays accurate."
       }
+    },
+    "trash": {
+      "paymentNotTrashable": "Remove it from the payment first to delete it.",
+      "portfolioNotTrashable": "Unlink it from the portfolio first to delete it.",
+      "ventureNotTrashable": "Unlink it from the venture first to delete it.",
+      "accountTypeChanged": "This transaction can't be restored because its account type has changed.",
+      "loanPaymentLegMissing": "This loan payment can't be restored because its other side was deleted."
     }
   },
   "budgets": {
@@ -225,7 +242,7 @@
     }
   },
   "investments": {
-    "portfolioNotFound": "Không tìm thấy danh mục đầu tư",
+    "portfolioNotFound": "Portfolio not found",
     "portfolioIdRequired": "Portfolio ID is required.",
     "holdingNotFound": "Holding not found",
     "holdingNotFoundAddSecurity": "Holding not found. Please add the security to the portfolio first.",
@@ -247,6 +264,7 @@
     "cannotDeleteHoldingWithActivePosition": "Cannot delete a holding with an active position. Please sell or transfer all shares first.",
     "transactionAlreadyTransfer": "Transaction is already marked as a transfer and cannot be linked to a portfolio.",
     "transactionAlreadyLinkedToPortfolio": "Transaction is already linked to a portfolio transfer.",
+    "linkedTransactionMustBelongToDestinationAccount": "The linked transaction must belong to the destination account.",
     "transactionAlreadyLinkedToVenture": "Transaction is already linked to a venture deal",
     "portfolioTransferNotFound": "Portfolio transfer not found",
     "exchangeCurrenciesMustDiffer": "Exchange currencies must be different",
@@ -279,7 +297,6 @@
     "connectionNotFound": "Connection not found",
     "connectionNotFoundOrNotYours": "Connection not found or does not belong to you",
     "providerNoReauthorization": "Provider {{providerType}} does not support reauthorization",
-    "providerNotFoundInRegistry": "Provider {{providerType}} not found in registry",
     "connectionIdNotFound": "Bank data provider connection {{connectionId}} not found",
     "accountIdNotFound": "Account {{accountId}} not found",
     "providerTypeMismatch": "Connection {{connectionId}} is for provider {{actualType}}, not {{expectedType}}",
@@ -318,7 +335,7 @@
     "periodLoadNotSupported": "Loading transactions for a custom period is not supported by this provider.",
     "transactionsLoadedCount": "Loaded {{count}} transactions.",
     "transactionsAllDuplicates": "Found {{count}} transactions for this period — all were already imported.",
-    "transactionsNoneInPeriod": "The provider returned no transactions for this period.",
+    "transactionsNoneInPeriod": "The data provider didn't return any transactions for this period.",
     "apiError": "{{provider}} API error: {{message}}",
     "simplefinUnreachable": "SimpleFIN is temporarily unreachable. Please try again later.",
     "currencySelectionRequired": "Account \"{{account}}\" has no currency reported by the bank — choose a currency for it before connecting.",
@@ -327,9 +344,7 @@
       "invalidCredentialsFormat": "Invalid credentials format for Monobank",
       "invalidApiToken": "Invalid Monobank API token",
       "rateLimitExceeded": "Monobank API rate limit exceeded. Please try again in a minute.",
-      "accountNotFound": "Account {{accountExternalId}} not found in Monobank",
       "accountReconnectRequired": "This account is no longer available at Monobank. Please reconnect your Monobank connection to resume syncing.",
-      "webhookNotImplemented": "handleWebhook not yet implemented for Monobank",
       "unknownCurrencyCode": "Unknown currency code: {{numericCode}}",
       "geoBlocked": "Monobank is blocking requests from this server's IP. Disable VPN or use a Ukrainian IP address.",
       "geoBlockedProduction": "Monobank sync is temporarily unavailable. We've been notified and are working on it. Please contact support if this is urgent."
@@ -365,8 +380,7 @@
       "invalidTokens": "Invalid Akahu tokens. Check the User Access Token and App ID Token from your Akahu app page.",
       "accountNoExternalId": "Account has no external ID for Akahu sync.",
       "accountNotFound": "Akahu account not found.",
-      "rateLimited": "Akahu is rate-limiting requests right now. Please try again shortly.",
-      "missingCurrency": "Akahu did not return a currency for this account."
+      "rateLimited": "Akahu is rate-limiting requests right now. Please try again shortly."
     },
     "simplefin": {
       "invalidCredentialsFormat": "Invalid SimpleFIN credentials format.",
@@ -381,8 +395,7 @@
     "walutomat": {
       "invalidCredentialsFormat": "Invalid Walutomat credentials format. API key and private key are required.",
       "invalidApiKey": "Invalid Walutomat API key or private key.",
-      "accountNoExternalId": "Walutomat account has no external ID.",
-      "walletNotFound": "Walutomat wallet not found for currency: {{currency}}"
+      "accountNoExternalId": "Walutomat account has no external ID."
     }
   },
   "csvImport": {
@@ -478,6 +491,7 @@
     "aiRateLimited": "AI provider rate limit reached. Please try again in a few minutes.",
     "aiExtractionFailed": "AI extraction failed. Please try again.",
     "ynab": {
+      "importAlreadyInProgress": "A YNAB import is already running. Wait for it to finish before starting another one.",
       "parse": {
         "fileEmpty": "YNAB Register.csv is empty.",
         "unparseable": "YNAB Register.csv could not be parsed as a CSV file.",
@@ -635,9 +649,9 @@
       "life": "Life & Entertainment",
       "communication": "Communication, PC",
       "financial-expenses": "Financial expenses",
-      "investments": "Đầu tư",
+      "investments": "Investments",
       "income": "Income",
-      "other": "Khác"
+      "other": "Other"
     },
     "subcategories": {
       "food": {
@@ -653,7 +667,6 @@
         "home-garden": "Home, garden",
         "pets-animals": "Pets, animals",
         "electronics-accessories": "Electronics, accessories",
-        "gifts-joy": "Gifts, joy",
         "stationery-tools": "Stationery, tools",
         "free-time": "Free time",
         "drugstore-chemist": "Drug-store, chemist"
@@ -690,7 +703,8 @@
         "books-audio-subscriptions": "Books, audio, subscriptions",
         "tv-streaming": "TV, Streaming",
         "holiday-trips-hotels": "Holiday, trips, hotels",
-        "charity-gifts": "Charity, gifts",
+        "gifts": "Gifts",
+        "charity": "Charity",
         "alcohol-tobacco": "Alcohol, tobacco",
         "lottery-gambling": "Lottery, gambling"
       },
@@ -746,6 +760,11 @@
         "requiresAccountField": "Auto-record requires an account to book the transaction against.",
         "requiresAmountField": "Auto-record requires expectedAmount and expectedCurrencyCode.",
         "excludesMatchingField": "Auto-record and matching rules are mutually exclusive."
+      },
+      "customInterval": {
+        "required": "A custom frequency needs an interval unit and count.",
+        "presetConflict": "An interval unit and count can only be set with the custom frequency.",
+        "countOutOfRange": "The interval count must be between {{min}} and {{max}} for this unit."
       }
     }
   },
@@ -822,8 +841,8 @@
   "auth": {
     "errors": {
       "passwordAlreadySet": "Your account already has a password.",
-      "passwordTooShort": "Mật khẩu quá ngắn.",
-      "passwordTooLong": "Mật khẩu quá dài.",
+      "passwordTooShort": "Password is too short.",
+      "passwordTooLong": "Password is too long.",
       "reauthenticationRequired": "For your security, sign in again to make this change.",
       "signupsDisabled": "Signups are disabled by the administrator."
     }

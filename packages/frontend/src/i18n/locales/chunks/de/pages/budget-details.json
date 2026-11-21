@@ -4,7 +4,7 @@
       "transactionsList": {
         "loadError": "Transaktionen konnten nicht geladen werden.",
         "selectionModeWarning": "Auswahlmodus – wähle Transaktionen zum Aufheben der Verknüpfung",
-        "selectAll": "Alles auswählen",
+        "selectAll": "Alle auswählen",
         "selected": "{count} ausgewählt",
         "unlink": "Verknüpfung aufheben",
         "cancel": "Abbrechen",
@@ -81,7 +81,7 @@
         "categoriesCount": "{count} Kategorie | {count} Kategorien",
         "byCurrency": "Nach Währung",
         "asPaid": "als bezahlt",
-        "timeline": "Verlauf",
+        "timeline": "Zeitstrahl",
         "todayMarker": "heute {date}",
         "timelineAria": "Kumulierte Ausgaben im Zeitverlauf mit Balken pro Zeitraum",
         "limitLabel": "{amount} Limit",
@@ -90,15 +90,15 @@
           "cumulative": "Ausgegeben, kumuliert",
           "earnedCumulative": "Eingenommen, kumuliert",
           "evenPace": "Gleichmäßiges Tempo bis zum Limit",
-          "projection": "Hochrechnung",
+          "projection": "Projektion",
           "daily": "Pro Tag",
           "weekly": "Pro Woche",
           "monthly": "Pro Monat"
         },
         "topPayees": "Top-Zahlungsempfänger",
         "bySpend": "nach Ausgaben",
-        "noPayee": "Kein ZahlungsempfängerEmpfänger",
-        "txCount": "{count} Transaktionen"
+        "noPayee": "Kein Zahlungsempfänger",
+        "txCount": "{count} Tx"
       },
       "sharing": {
         "inviteAnother": "Jemanden einladen",
@@ -107,7 +107,7 @@
         "loadError": "Mitglieder konnten nicht geladen werden.",
         "permissions": {
           "read": "Nur anzeigen",
-          "write": "Eigene Transaktionen zuweisen",
+          "write": "Eigene Transaktionen anhängen",
           "manage": "Verwalten"
         },
         "member": {

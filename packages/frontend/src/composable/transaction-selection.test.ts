@@ -369,7 +369,7 @@ describe('sumSelectedTotals', () => {
     });
   });
 
-  it('counts transfer_out_wallet as an ordinary expense', () => {
+  it('keeps out-of-wallet transfers separate from spending', () => {
     const transactions = [
       buildAmountTx({
         id: '1',
@@ -381,9 +381,9 @@ describe('sumSelectedTotals', () => {
 
     expect(sumSelectedTotals({ transactions, selectedIds: new Set(['1']) })).toEqual({
       income: 0,
-      expense: 300,
-      net: -300,
-      transfers: 0,
+      expense: 0,
+      net: 0,
+      transfers: 300,
     });
   });
 

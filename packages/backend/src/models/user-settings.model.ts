@@ -52,7 +52,7 @@ import Users from './users.model';
 
 /** `connectionId: null` is an explicit pick of the included server model. */
 const ZodAiFeatureConfigSchema = z.object({
-  feature: z.nativeEnum(AI_FEATURE),
+  feature: z.enum(AI_FEATURE),
   connectionId: z.string().nullable(),
 });
 
@@ -61,16 +61,16 @@ const ZodAiFeatureConfigSchema = z.object({
 const ZodAiConnectionSchema = z
   .object({
     id: z.string(),
-    provider: z.nativeEnum(AI_PROVIDER),
+    provider: z.enum(AI_PROVIDER),
     name: nameField,
     baseUrl: baseUrlField.optional(),
     keyEncrypted: z.string().optional(),
     model: modelField,
-    createdAt: z.string().datetime(),
+    createdAt: z.iso.datetime(),
     status: z.enum(['valid', 'invalid']),
-    lastValidatedAt: z.string().datetime(),
+    lastValidatedAt: z.iso.datetime(),
     lastError: z.string().optional(),
-    invalidatedAt: z.string().datetime().optional(),
+    invalidatedAt: z.iso.datetime().optional(),
   })
   .superRefine((connection, ctx) => {
     // Native providers always dial their official API, so a stored base URL would be dead weight.
@@ -105,14 +105,14 @@ const ZodNotificationPreferencesSchema = z.object({
 const ZodOnboardingStateSchema = z.object({
   completedTasks: z.array(z.string()).default([]),
   isDismissed: z.boolean().default(false),
-  dismissedAt: z.string().datetime().nullable().default(null),
+  dismissedAt: z.iso.datetime().nullable().default(null),
 });
 
 // Schema for partial updates - no defaults so only provided fields are included
 export const ZodOnboardingStateUpdateSchema = z.object({
   completedTasks: z.array(z.string()).optional(),
   isDismissed: z.boolean().optional(),
-  dismissedAt: z.string().datetime().nullable().optional(),
+  dismissedAt: z.iso.datetime().nullable().optional(),
 });
 
 export type OnboardingStateSchema = z.infer<typeof ZodOnboardingStateSchema>;
@@ -272,6 +272,20 @@ const ZodAccountsSettingsSchema = z.object({
   showArchivedInDropdowns: z.boolean().optional(),
 });
 
+const IOS_ADD_EXPENSE_MAX_EXCLUDED_CATEGORIES = 500;
+
+// iOS-only preferences for the Add Expense shortcut. `showBankAccounts` lists bank-connected
+// accounts, hidden when unset. `excludedCategoryIds` hides those categories and their subtrees,
+// so categories created later are shown.
+const ZodIosSettingsSchema = z.object({
+  addExpense: z
+    .object({
+      showBankAccounts: z.boolean().optional(),
+      excludedCategoryIds: z.array(z.uuid()).max(IOS_ADD_EXPENSE_MAX_EXCLUDED_CATEGORIES).optional(),
+    })
+    .optional(),
+});
+
 // A saved Pivot Report "view", persisted in the settings JSONB with no dedicated table.
 // Reuses `dateRange()` + `withDateOrder()` so a saved view can't hold a range the live
 // report would 400 on.
@@ -301,7 +315,7 @@ const ZodSavedTransactionViewSchema = z.object({
   id: z.string(),
   name: z.string().min(1).max(SAVED_TRANSACTION_VIEW_NAME_MAX_LENGTH),
   filters: z.record(z.string(), z.unknown()),
-  sorting: z.object({ sortBy: z.nativeEnum(TRANSACTION_SORT_FIELD), order: z.nativeEnum(SORT_DIRECTIONS) }).optional(),
+  sorting: z.object({ sortBy: z.enum(TRANSACTION_SORT_FIELD), order: z.enum(SORT_DIRECTIONS) }).optional(),
   datePreset: z.enum(TRANSACTION_DATE_PRESETS).optional(),
 });
 
@@ -371,6 +385,7 @@ export const ZodSettingsSchema = z.object({
   ui: ZodUiSettingsSchema.optional(),
   import: ZodImportSettingsSchema.optional(),
   accounts: ZodAccountsSettingsSchema.optional(),
+  ios: ZodIosSettingsSchema.optional(),
   savedPivotViews: z.array(ZodSavedPivotViewSchema).optional(),
   savedTransactionViews: z.array(ZodSavedTransactionViewSchema).max(MAX_SAVED_TRANSACTION_VIEWS).optional(),
   // When true, Payee extraction falls back to the transaction description/note when the
@@ -383,6 +398,8 @@ export const ZodSettingsSchema = z.object({
   payeePromotionThreshold: z.number().int().min(1).max(3).optional(),
   // Header "Support" (donation) button. Visible when unset; users opt out in Appearance settings.
   showSupportButton: z.boolean().optional(),
+  // Transaction rows show the payee's logo instead of the category icon when the payee has one. On when unset.
+  showPayeeLogos: z.boolean().optional(),
   // When true, the sidebar Accounts panel hides accounts whose display balance is
   // zero, and hides any account group left with no non-zero account. Off by default.
   hideZeroBalances: z.boolean().optional(),
@@ -505,12 +522,14 @@ export const ZodSettingsPatchSchema = z.object({
     })
     .optional(),
   accounts: ZodAccountsSettingsSchema.optional(),
+  ios: ZodIosSettingsSchema.optional(),
   // Same element schema as `ZodSettingsSchema`, defaults and all, so the two can't drift.
   savedPivotViews: z.array(ZodSavedPivotViewSchema).optional(),
   savedTransactionViews: z.array(ZodSavedTransactionViewSchema).max(MAX_SAVED_TRANSACTION_VIEWS).optional(),
   payeeExtractionUsesDescription: z.boolean().optional(),
   payeePromotionThreshold: z.number().int().min(1).max(3).optional(),
   showSupportButton: z.boolean().optional(),
+  showPayeeLogos: z.boolean().optional(),
   hideZeroBalances: z.boolean().optional(),
   hideSmartTrackingTip: z.boolean().optional(),
   matchTransfersWithManualAccounts: z.boolean().optional(),

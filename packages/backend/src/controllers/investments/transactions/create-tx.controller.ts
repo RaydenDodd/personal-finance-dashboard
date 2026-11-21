@@ -33,7 +33,7 @@ export default createController(
         settlementCurrencyCode: currencyCode().optional(),
         settlementAmount: numericString({ allowZero: true }).optional(),
         settlementFees: numericString({ allowZero: true }).optional(),
-        // Known security→settlement rate; the fee is derived as the residual.
+        // Known securityâ†’settlement rate; the fee is derived as the residual.
         // Omitting both this and settlementFees makes the service fall back to
         // the market rate for the trade date.
         settlementRate: numericString().optional(),

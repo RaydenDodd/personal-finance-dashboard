@@ -8,11 +8,11 @@
     "groupNotFound": "Grup atau akun tidak ditemukan",
     "accountNotFound": "Akun tidak ditemukan!",
     "accountUpdateFailed": "Pembaruan akun tidak berhasil",
-    "accountNoExternalId": "Akun tidak memiliki ID eksternal",
     "accountNoExternalIdMonobank": "Akun tidak memiliki ID eksternal dari Monobank",
     "accountNoExternalIdEnableBanking": "Akun tidak memiliki ID eksternal dari Enable Banking",
     "accountNotFoundForTransaction": "Akun tidak ditemukan untuk transaksi ini",
     "deleteBlockedByLoanPayments": "Akun ini memiliki pembayaran pinjaman. Hapus atau alihkan pembayaran tersebut sebelum menghapus akun.",
+    "deleteBlockedByTrashedLoanPayments": "This account has loan payments in Trash. Delete them permanently from Trash before deleting the account.",
     "loanBalanceUseUpdateLoan": "Ubah saldo pinjaman dari halaman pinjaman, bukan dari pengaturan akun.",
     "loanCategoryImmutable": "Kategori akun pinjaman tidak dapat diubah.",
     "dedicatedFlowCategoryNotAllowed": "Akun pinjaman dan kendaraan harus dibuat melalui endpoint khusus, bukan endpoint akun umum.",
@@ -39,6 +39,7 @@
     "systemCannotBeMoved": "Kategori sistem tidak dapat dipindahkan.",
     "parentNotFound": "Kategori dengan parentId tersebut tidak ada.",
     "systemParentForbidden": "Kategori sistem tidak dapat digunakan sebagai induk.",
+    "defaultCannotBeDeleted": "This category holds uncategorized transactions and cannot be deleted.",
     "ownParent": "Kategori tidak dapat menjadi induk bagi dirinya sendiri.",
     "underOwnSubcategory": "Kategori tidak dapat dipindahkan ke bawah subkategorinya sendiri.",
     "nestingTooDeep": "Kategori tidak dapat disarangkan lebih dari {{max}} tingkat."
@@ -100,6 +101,16 @@
     "paymentLinkNotAllowed": "This transaction can't be linked to the payment. Only your own income or expense of the same type can be linked – not a transfer, refund, split, pending transaction or part of another payment.",
     "paymentLinkedAmountFixed": "The amount of a linked transaction can't be changed.",
     "paymentLinkedTypeMismatch": "Linked transactions must have the same type as the payment. Unlink them first.",
+    "refunds": {
+      "wholeLinkWithPartials": "A whole-refund link cannot be combined with partial links",
+      "externalLinkWithOthers": "A refund for a purchase outside the app cannot be combined with other refund links",
+      "externalLinkWithAmount": "A refund of a transaction outside the app cannot have a partial amount; it always covers the whole refund.",
+      "totalExceedsRefund": "Total refund link amounts cannot be greater than the refund transaction amount",
+      "totalExceedsSplit": "Total refund amount cannot be greater than the split amount",
+      "totalExceedsOriginal": "Total refund amount cannot be greater than the original transaction amount",
+      "refundOfRefund": "Cannot refund a \"refund\" transaction",
+      "duplicateLink": "This refund is already linked to that transaction"
+    },
     "splits": {
       "splitsOnTransfer": "Tidak dapat menambahkan split ke transaksi transfer",
       "splitLimitExceeded": "Maksimal {{max}} split per transaksi",
@@ -113,8 +124,7 @@
       "exceedTotal": "Total jumlah split ({{total}}) melebihi jumlah transaksi ({{transactionAmount}})",
       "invalidData": "Data split tidak valid",
       "splitNotFound": "Split tidak ditemukan",
-      "cannotDeleteWithRefunds": "Tidak dapat menghapus split yang memiliki refund yang menargetkannya",
-      "cannotReduceBelowRefunded": "Split ini memiliki refund sebesar {{refundsText}}. Anda tidak dapat menguranginya di bawah jumlah yang sudah direfund. Untuk mengurangi lebih lanjut, lepaskan tautan refund terlebih dahulu."
+      "cannotDeleteWithRefunds": "Tidak dapat menghapus split yang memiliki refund yang menargetkannya"
     },
     "reconciliation": {
       "systemNotAllowed": "Only bank-connected transactions can be merged or removed.",
@@ -135,6 +145,13 @@
         "message_one": "1 transaction has been pending for over a week. Check it with your bank so your balance stays accurate.",
         "message_other": "{{count}} transactions have been pending for over a week. Check them with your bank so your balance stays accurate."
       }
+    },
+    "trash": {
+      "paymentNotTrashable": "Remove it from the payment first to delete it.",
+      "portfolioNotTrashable": "Unlink it from the portfolio first to delete it.",
+      "ventureNotTrashable": "Unlink it from the venture first to delete it.",
+      "accountTypeChanged": "This transaction can't be restored because its account type has changed.",
+      "loanPaymentLegMissing": "This loan payment can't be restored because its other side was deleted."
     }
   },
   "budgets": {
@@ -182,7 +199,7 @@
     "openEndedGoalCannotSnooze": "An open-ended goal can't be snoozed.",
     "zeroSumNeedsPool": "Keeping Ready to Assign at 0 needs a plan funded from a pool.",
     "suggestedGroups": {
-      "bills": "Tagihan",
+      "bills": "Bills",
       "everyday": "Everyday",
       "life": "Life"
     }
@@ -247,6 +264,7 @@
     "cannotDeleteHoldingWithActivePosition": "Tidak dapat menghapus holding dengan posisi aktif. Silakan jual atau transfer semua saham terlebih dahulu.",
     "transactionAlreadyTransfer": "Transaksi sudah ditandai sebagai transfer dan tidak dapat ditautkan ke portofolio.",
     "transactionAlreadyLinkedToPortfolio": "Transaksi sudah ditautkan ke transfer portofolio.",
+    "linkedTransactionMustBelongToDestinationAccount": "The linked transaction must belong to the destination account.",
     "transactionAlreadyLinkedToVenture": "Transaksi sudah ditautkan ke deal venture",
     "portfolioTransferNotFound": "Transfer portofolio tidak ditemukan",
     "exchangeCurrenciesMustDiffer": "Mata uang pertukaran harus berbeda",
@@ -279,13 +297,12 @@
     "connectionNotFound": "Koneksi tidak ditemukan",
     "connectionNotFoundOrNotYours": "Koneksi tidak ditemukan atau bukan milik Anda",
     "providerNoReauthorization": "Provider {{providerType}} tidak mendukung reotorisasi",
-    "providerNotFoundInRegistry": "Provider {{providerType}} tidak ditemukan di registry",
     "connectionIdNotFound": "Koneksi penyedia data bank {{connectionId}} tidak ditemukan",
     "accountIdNotFound": "Akun {{accountId}} tidak ditemukan",
     "providerTypeMismatch": "Koneksi {{connectionId}} adalah untuk provider {{actualType}}, bukan {{expectedType}}",
     "providerAlreadyRegistered": "Provider {{providerType}} sudah terdaftar. Tidak dapat mendaftarkan provider duplikat.",
     "providerNotRegistered": "Provider {{providerType}} belum terdaftar. Provider yang tersedia: {{available}}",
-    "unexpected": "Kesalahan tak terduga."
+    "unexpected": "Unexpected error."
   },
   "validation": {
     "dateInvalid": "\"date\" adalah tanggal tidak valid."
@@ -327,9 +344,7 @@
       "invalidCredentialsFormat": "Format kredensial tidak valid untuk Monobank",
       "invalidApiToken": "Token API Monobank tidak valid",
       "rateLimitExceeded": "Batas kecepatan API Monobank terlampaui. Silakan coba lagi dalam satu menit.",
-      "accountNotFound": "Akun {{accountExternalId}} tidak ditemukan di Monobank",
       "accountReconnectRequired": "Akun ini tidak lagi tersedia di Monobank. Silakan hubungkan kembali koneksi Monobank Anda untuk melanjutkan sinkronisasi.",
-      "webhookNotImplemented": "handleWebhook belum diimplementasikan untuk Monobank",
       "unknownCurrencyCode": "Kode mata uang tidak dikenal: {{numericCode}}",
       "geoBlocked": "Monobank memblokir permintaan dari IP server ini. Nonaktifkan VPN atau gunakan alamat IP Ukraina.",
       "geoBlockedProduction": "Sinkronisasi Monobank untuk sementara tidak tersedia. Kami telah diberitahu dan sedang menanganinya. Hubungi dukungan jika ini mendesak."
@@ -365,8 +380,7 @@
       "invalidTokens": "Invalid Akahu tokens. Check the User Access Token and App ID Token from your Akahu app page.",
       "accountNoExternalId": "Account has no external ID for Akahu sync.",
       "accountNotFound": "Akahu account not found.",
-      "rateLimited": "Akahu is rate-limiting requests right now. Please try again shortly.",
-      "missingCurrency": "Akahu did not return a currency for this account."
+      "rateLimited": "Akahu is rate-limiting requests right now. Please try again shortly."
     },
     "simplefin": {
       "invalidCredentialsFormat": "Format kredensial SimpleFIN tidak valid.",
@@ -381,8 +395,7 @@
     "walutomat": {
       "invalidCredentialsFormat": "Format kredensial Walutomat tidak valid. Kunci API dan kunci privat diperlukan.",
       "invalidApiKey": "Kunci API atau kunci privat Walutomat tidak valid.",
-      "accountNoExternalId": "Akun Walutomat tidak memiliki ID eksternal.",
-      "walletNotFound": "Dompet Walutomat tidak ditemukan untuk mata uang: {{currency}}"
+      "accountNoExternalId": "Akun Walutomat tidak memiliki ID eksternal."
     }
   },
   "csvImport": {
@@ -478,6 +491,7 @@
     "aiRateLimited": "AI provider rate limit reached. Please try again in a few minutes.",
     "aiExtractionFailed": "AI extraction failed. Please try again.",
     "ynab": {
+      "importAlreadyInProgress": "A YNAB import is already running. Wait for it to finish before starting another one.",
       "parse": {
         "fileEmpty": "YNAB Register.csv is empty.",
         "unparseable": "YNAB Register.csv could not be parsed as a CSV file.",
@@ -653,7 +667,6 @@
         "home-garden": "Rumah, taman",
         "pets-animals": "Hewan peliharaan",
         "electronics-accessories": "Elektronik, aksesori",
-        "gifts-joy": "Hadiah, hiburan",
         "stationery-tools": "Alat tulis, perkakas",
         "free-time": "Waktu luang",
         "drugstore-chemist": "Apotik, toko obat"
@@ -690,7 +703,8 @@
         "books-audio-subscriptions": "Buku, audio, langganan",
         "tv-streaming": "TV, Streaming",
         "holiday-trips-hotels": "Liburan, perjalanan, hotel",
-        "charity-gifts": "Amal, hadiah",
+        "gifts": "Gifts",
+        "charity": "Charity",
         "alcohol-tobacco": "Alkohol, tembakau",
         "lottery-gambling": "Lotere, perjudian"
       },
@@ -746,6 +760,11 @@
         "requiresAccountField": "Perekaman otomatis memerlukan akun untuk mencatat transaksi.",
         "requiresAmountField": "Perekaman otomatis memerlukan expectedAmount dan expectedCurrencyCode.",
         "excludesMatchingField": "Perekaman otomatis dan aturan pencocokan bersifat mutually exclusive."
+      },
+      "customInterval": {
+        "required": "A custom frequency needs an interval unit and count.",
+        "presetConflict": "An interval unit and count can only be set with the custom frequency.",
+        "countOutOfRange": "The interval count must be between {{min}} and {{max}} for this unit."
       }
     }
   },
@@ -822,8 +841,8 @@
   "auth": {
     "errors": {
       "passwordAlreadySet": "Your account already has a password.",
-      "passwordTooShort": "Kata sandi terlalu pendek.",
-      "passwordTooLong": "Kata sandi terlalu panjang.",
+      "passwordTooShort": "Password is too short.",
+      "passwordTooLong": "Password is too long.",
       "reauthenticationRequired": "For your security, sign in again to make this change.",
       "signupsDisabled": "Signups are disabled by the administrator."
     }

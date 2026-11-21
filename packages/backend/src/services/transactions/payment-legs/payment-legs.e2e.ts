@@ -88,7 +88,7 @@ describe('Multi-account payments', () => {
       expect.objectContaining({ accountId: voucher!.id, amount: 30, paymentAmount: 30, isLinked: false }),
     ]);
 
-    const voucherRows = (await helpers.getTransactions({ accountIds: [voucher!.id], includeTags: true, raw: true }))!;
+    const voucherRows = (await helpers.getTransactions({ accountIds: [voucher!.id], raw: true }))!;
     expect(voucherRows).toHaveLength(1);
     const leg = voucherRows[0]!;
     expect(leg).toMatchObject({
@@ -181,37 +181,44 @@ describe('Multi-account payments', () => {
     expect(response.statusCode).toBe(ERROR_CODES.ValidationError);
   });
 
-  it('deletes the linked rows with the main row', async () => {
+  it('rejects deleting the main row until its legs are removed', async () => {
     const [card, voucher] = await createManualAccounts({ count: 2 });
     const main = await createPayment({ mainAccountId: card!.id, legs: [{ accountId: voucher!.id, amount: 30 }] });
 
-    await helpers.deleteTransaction({ id: main.id });
+    expect((await helpers.deleteTransaction({ id: main.id })).statusCode).toBe(ERROR_CODES.ValidationError);
+    expect(await balanceOf({ id: card!.id })).toBe(930);
+    expect(await balanceOf({ id: voucher!.id })).toBe(970);
+    expect(await legsOf({ accountId: voucher!.id })).toHaveLength(1);
 
-    expect(await balanceOf({ id: card!.id })).toBe(1000);
-    expect(await balanceOf({ id: voucher!.id })).toBe(1000);
-    expect(await helpers.getTransactions({ accountIds: [voucher!.id], raw: true })).toHaveLength(0);
-  });
+    await helpers.updateTransaction({ id: main.id, payload: { paymentLegs: null }, raw: true });
+    expect((await helpers.deleteTransaction({ id: main.id })).statusCode).toBe(200);
 
-  it('bulk-deletes a main row selected together with its linked row', async () => {
-    const [card, voucher] = await createManualAccounts({ count: 2 });
-    const main = await createPayment({ mainAccountId: card!.id, legs: [{ accountId: voucher!.id, amount: 30 }] });
-    const [leg] = await legsOf({ accountId: voucher!.id });
-
-    const result = await helpers.bulkDeleteTransactions({ payload: { transactionIds: [leg!.id, main.id] }, raw: true });
-    expect(result.deletedIds.toSorted()).toEqual([leg!.id, main.id].toSorted());
     expect(await balanceOf({ id: card!.id })).toBe(1000);
     expect(await balanceOf({ id: voucher!.id })).toBe(1000);
     expect(await helpers.getTransactions({ accountIds: [card!.id, voucher!.id], raw: true })).toHaveLength(0);
   });
 
-  it('rejects deleting a created row on its own, directly or in bulk', async () => {
+  it('skips a main row and its created row selected together in a bulk delete', async () => {
+    const [card, voucher] = await createManualAccounts({ count: 2 });
+    const main = await createPayment({ mainAccountId: card!.id, legs: [{ accountId: voucher!.id, amount: 30 }] });
+    const [leg] = await legsOf({ accountId: voucher!.id });
+
+    const result = await helpers.bulkDeleteTransactions({ payload: { transactionIds: [leg!.id, main.id] }, raw: true });
+    expect(result.deletedIds).toEqual([]);
+    expect(result.skippedIds.toSorted()).toEqual([leg!.id, main.id].toSorted());
+    expect(await balanceOf({ id: card!.id })).toBe(930);
+    expect(await balanceOf({ id: voucher!.id })).toBe(970);
+    expect(await helpers.getTrash({ raw: true })).toEqual([]);
+  });
+
+  it('rejects deleting a created row on its own, and skips it in bulk', async () => {
     const [card, voucher] = await createManualAccounts({ count: 2 });
     await createPayment({ mainAccountId: card!.id, legs: [{ accountId: voucher!.id, amount: 30 }] });
     const [leg] = await legsOf({ accountId: voucher!.id });
 
     expect((await helpers.deleteTransaction({ id: leg!.id })).statusCode).toBe(ERROR_CODES.ValidationError);
-    const bulk = await helpers.bulkDeleteTransactions({ payload: { transactionIds: [leg!.id] } });
-    expect(bulk.statusCode).toBe(ERROR_CODES.ValidationError);
+    const bulk = await helpers.bulkDeleteTransactions({ payload: { transactionIds: [leg!.id] }, raw: true });
+    expect(bulk).toEqual({ deletedCount: 0, deletedIds: [], skippedIds: [leg!.id] });
 
     expect(await legsOf({ accountId: voucher!.id })).toHaveLength(1);
     expect(await balanceOf({ id: voucher!.id })).toBe(970);
@@ -230,9 +237,23 @@ describe('Multi-account payments', () => {
     });
     expect((await legsOf({ accountId: voucher!.id }))[0]!.categoryId).toBe(groceries.id);
 
-    await helpers.bulkUpdateTransactions({ payload: { transactionIds: [leg!.id], categoryId: dining.id }, raw: true });
-    expect((await helpers.getTransactionById({ id: main.id, raw: true }))!.categoryId).toBe(dining.id);
-    expect((await legsOf({ accountId: voucher!.id }))[0]!.categoryId).toBe(dining.id);
+    await helpers.bulkUpdateTransactions({
+      payload: { transactionIds: [leg!.id], categoryId: dining.id, excludeFromStats: true },
+      raw: true,
+    });
+    const mainAfter = (await helpers.getTransactionById({ id: main.id, raw: true }))!;
+    const [legAfter] = await legsOf({ accountId: voucher!.id });
+    expect(mainAfter.categoryId).toBe(dining.id);
+    expect(legAfter!.categoryId).toBe(dining.id);
+    expect(mainAfter.excludeFromStats).toBe(true);
+    expect(legAfter!.excludeFromStats).toBe(true);
+
+    await helpers.bulkUpdateTransactions({
+      payload: { transactionIds: [leg!.id], excludeFromStats: false },
+      raw: true,
+    });
+    expect((await helpers.getTransactionById({ id: main.id, raw: true }))!.excludeFromStats).toBe(false);
+    expect((await legsOf({ accountId: voucher!.id }))[0]!.excludeFromStats).toBe(false);
     expect(await balanceOf({ id: voucher!.id })).toBe(970);
   });
 
@@ -335,9 +356,7 @@ const createRow = async ({
 };
 
 const rowOf = async ({ accountId, id }: { accountId: RecordId; id: RecordId }) =>
-  (await helpers.getTransactions({ accountIds: [accountId], includeTags: true, raw: true }))!.find(
-    (tx) => tx.id === id,
-  )!;
+  (await helpers.getTransactions({ accountIds: [accountId], raw: true }))!.find((tx) => tx.id === id)!;
 
 const setupLinkedPayment = async () => {
   const [card, cash, voucher] = await createManualAccounts({ count: 3 });
@@ -523,16 +542,15 @@ describe('Multi-account payments v2', () => {
     expect(restored.tags!.map((tag) => tag.id)).toEqual([ownTag.id]);
   });
 
-  it('deletes the created legs with the main row and unlinks the linked ones', async () => {
-    const { card, cash, voucher, standalone, main, ownCategory } = await setupLinkedPayment();
+  it('rejects deleting a main row holding created and linked legs, leaving the payment whole', async () => {
+    const { card, cash, voucher, standalone, main } = await setupLinkedPayment();
 
-    await helpers.deleteTransaction({ id: main.id });
+    expect((await helpers.deleteTransaction({ id: main.id })).statusCode).toBe(ERROR_CODES.ValidationError);
 
-    expect(await legsOf({ accountId: voucher.id })).toHaveLength(0);
-    expect(await balanceOf({ id: voucher.id })).toBe(1000);
-    expect(await balanceOf({ id: card.id })).toBe(1000);
-    const survivor = await rowOf({ accountId: cash.id, id: standalone.id });
-    expect(survivor).toMatchObject({ paymentParentId: null, categoryId: ownCategory.id, note: 'Coffee' });
+    expect(await legsOf({ accountId: voucher.id })).toHaveLength(1);
+    expect(await balanceOf({ id: voucher.id })).toBe(980);
+    expect(await balanceOf({ id: card.id })).toBe(930);
+    expect(await rowOf({ accountId: cash.id, id: standalone.id })).toMatchObject({ paymentParentId: main.id });
     expect(await balanceOf({ id: cash.id })).toBe(970);
   });
 
@@ -722,25 +740,29 @@ describe('Multi-account payments: guards and cleanup', () => {
     expect(moved!.paymentParts!.find((part) => part.transactionId === leg!.id)!.paymentAmount).toBe(25);
   });
 
-  it('bulk-deletes a main row selected together with its linked row', async () => {
+  it('skips a main row and its linked row selected together in a bulk delete', async () => {
     const { card, cash, voucher, standalone, main } = await setupLinkedPayment();
 
     const result = await helpers.bulkDeleteTransactions({
       payload: { transactionIds: [standalone.id, main.id] },
       raw: true,
     });
-    expect(result.deletedIds.toSorted()).toEqual([standalone.id, main.id].toSorted());
-    expect(await balanceOf({ id: card.id })).toBe(1000);
-    expect(await balanceOf({ id: cash.id })).toBe(1000);
-    expect(await balanceOf({ id: voucher.id })).toBe(1000);
+    expect(result.deletedIds).toEqual([]);
+    expect(result.skippedIds.toSorted()).toEqual([standalone.id, main.id].toSorted());
+    expect(await balanceOf({ id: card.id })).toBe(930);
+    expect(await balanceOf({ id: cash.id })).toBe(970);
+    expect(await balanceOf({ id: voucher.id })).toBe(980);
   });
 
-  it('deletes a linked row on its own, shrinking the payment', async () => {
+  it('rejects deleting a linked row or a created row on its own', async () => {
     const { cash, voucher, standalone } = await setupLinkedPayment();
+    const totalBefore = (await helpers.getTransactions({ raw: true }))!.find((tx) => tx.paymentTotal)!.paymentTotal;
 
-    expect((await helpers.deleteTransaction({ id: standalone.id })).statusCode).toBe(200);
-    expect(await balanceOf({ id: cash.id })).toBe(1000);
-    expect((await helpers.getTransactions({ raw: true }))![0]!.paymentTotal).toBe(90);
+    expect((await helpers.deleteTransaction({ id: standalone.id })).statusCode).toBe(ERROR_CODES.ValidationError);
+    expect(await balanceOf({ id: cash.id })).toBe(970);
+    expect((await helpers.getTransactions({ raw: true }))!.find((tx) => tx.paymentTotal)!.paymentTotal).toBe(
+      totalBefore,
+    );
 
     const [createdLeg] = await legsOf({ accountId: voucher.id });
     expect((await helpers.deleteTransaction({ id: createdLeg!.id })).statusCode).toBe(ERROR_CODES.ValidationError);

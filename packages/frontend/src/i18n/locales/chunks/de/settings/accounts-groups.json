@@ -44,7 +44,7 @@
         "rename": {
           "title": "Gruppe umbenennen",
           "description": "Klicke auf das Logo, um ein Banklogo, Initialen oder eine Farbe auszuwählen.",
-          "submit": "Speichern"
+          "submit": "Änderungen speichern"
         },
         "move": {
           "title": "\"{name}\" verschieben",
@@ -93,7 +93,7 @@
       "organize": {
         "button": "Organisieren",
         "hint": "Ziehe eine Gruppe auf eine andere, um sie unterzuordnen",
-        "save": "Speichern",
+        "save": "Änderungen speichern",
         "topLevel": "Oberste Ebene",
         "dropToTopLevel": "Hier ablegen, um \"{name}\" zu einer Hauptgruppe zu machen",
         "movesCount": "{count} Verschiebung | {count} Verschiebungen",

@@ -1,5 +1,8 @@
-import { type Feature, type GoalModel, TRANSACTION_TRANSFER_NATURE, USER_ROLES } from '@bt/shared/types';
+import { type Feature, type GoalModel, USER_ROLES } from '@bt/shared/types';
+import { t } from '@i18n/index';
+import { logger } from '@js/utils/logger';
 import Accounts from '@models/accounts.model';
+import { isBaseCurrencyChangeLocked } from '@services/currencies/base-currency-lock';
 import { FEATURE_NOT_IN_PLAN_MESSAGE, hasFeature } from '@services/entitlements/feature-trial.service';
 import { getEntitlementsByUserId } from '@services/entitlements/resolve-entitlements.service';
 
@@ -18,6 +21,17 @@ export function getUserId({ extra }: { extra: { authInfo?: { extra?: { userId?: 
     throw new Error('Authentication required. No user ID found in auth info.');
   }
   return userId;
+}
+
+/**
+ * Refuses a demo user, as the `blockDemoUsers` middleware does on the REST routes that carry it.
+ * `requireScope` calls it for every write; a read tool whose REST route carries `blockDemoUsers`
+ * (`GET /bank-data-providers/sync/status`) calls it directly.
+ */
+export function assertNotDemoUser({ extra }: { extra: { authInfo?: { extra?: { role?: string } } } }): void {
+  if (extra?.authInfo?.extra?.role === USER_ROLES.demo) {
+    throw new Error('This action is not available in demo mode. Sign up for a free account to unlock all features.');
+  }
 }
 
 /**
@@ -68,38 +82,24 @@ export const goalsForMcp = async ({ userId, goals }: { userId: number; goals: Go
 };
 
 /**
- * Mirrors the REST transaction schemas: the original-currency pair is set (or cleared)
- * together, and never rides on a payload that makes the transaction a transfer.
+ * Refuses a write while a base-currency change is recalculating the user's amounts, as the
+ * `checkBaseCurrencyLock` middleware does on the REST routes. Fails closed when Redis is
+ * unreachable, since a write that slips past the lock would be rewritten by the recalculation.
  */
-export function assertOriginalCurrencyArgs({
-  args,
-}: {
-  args: {
-    originalAmount?: number | null;
-    originalCurrencyCode?: string | null;
-    transferNature?: TRANSACTION_TRANSFER_NATURE;
-    destinationAccountId?: unknown;
-    destinationAmount?: unknown;
-    destinationTransactionId?: unknown;
-  };
-}): void {
-  const { originalAmount, originalCurrencyCode } = args;
-
-  if (
-    (originalAmount === undefined) !== (originalCurrencyCode === undefined) ||
-    (originalAmount === null) !== (originalCurrencyCode === null)
-  ) {
-    throw new Error('"originalAmount" and "originalCurrencyCode" must be set, or cleared, together');
+export async function assertBaseCurrencyUnlocked({ userId }: { userId: number }): Promise<void> {
+  let locked: boolean;
+  try {
+    locked = await isBaseCurrencyChangeLocked({ userId });
+  } catch (error) {
+    logger.error({
+      message: 'Base currency lock check failed',
+      error: error instanceof Error ? error : new Error(String(error)),
+    });
+    throw new Error(t({ key: 'common.serviceTemporarilyUnavailable' }), { cause: error });
   }
-  if (originalAmount == null) return;
 
-  const isTransfer =
-    (args.transferNature && args.transferNature !== TRANSACTION_TRANSFER_NATURE.not_transfer) ||
-    args.destinationAccountId ||
-    args.destinationAmount ||
-    args.destinationTransactionId;
-  if (isTransfer) {
-    throw new Error('Original currency metadata cannot be added to transfer transactions');
+  if (locked) {
+    throw new Error(t({ key: 'currencies.baseCurrencyChangeInProgress' }));
   }
 }
 

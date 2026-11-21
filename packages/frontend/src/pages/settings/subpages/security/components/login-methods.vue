@@ -43,7 +43,7 @@
             :disabled="!canDisconnect || isDisconnecting"
             @click="providerToDisconnect = provider"
           >
-            <Loader2Icon v-if="isDisconnecting" class="mr-2 size-4 animate-spin" />
+            <Loader2Icon v-if="isDisconnecting" class="size-4 animate-spin" />
             {{ $t('settings.security.loginMethods.oauth.disconnect') }}
           </Button>
           <DemoRestricted v-else feature="connect_oauth_provider">
@@ -53,7 +53,7 @@
               :disabled="isConnecting || isDemo"
               @click="handleConnectOAuth({ provider })"
             >
-              <Loader2Icon v-if="isConnecting" class="mr-2 size-4 animate-spin" />
+              <Loader2Icon v-if="isConnecting" class="size-4 animate-spin" />
               {{ $t('settings.security.loginMethods.oauth.connect') }}
             </Button>
           </DemoRestricted>
@@ -107,8 +107,8 @@
           </div>
           <DemoRestricted feature="add_passkey">
             <Button variant="outline" size="sm" :disabled="isAddingPasskey || isDemo" @click="handleAddPasskey">
-              <Loader2Icon v-if="isAddingPasskey" class="mr-2 size-4 animate-spin" />
-              <PlusIcon v-else class="mr-2 size-4" />
+              <Loader2Icon v-if="isAddingPasskey" class="size-4 animate-spin" />
+              <PlusIcon v-else class="size-4" />
               {{ $t('settings.security.loginMethods.passkeys.addButton') }}
             </Button>
           </DemoRestricted>
@@ -124,6 +124,7 @@
             >
               <InputField
                 v-model="editingName"
+                size="xs"
                 class="flex-1"
                 autofocus
                 :placeholder="$t('settings.security.loginMethods.passkeys.renamePlaceholder')"
@@ -304,20 +305,16 @@ const hasPassword = ref(false);
 
 const getAccountByProvider = (provider: OAUTH_PROVIDER) => accounts.value.find((a) => a.providerId === provider);
 
-const { oidcProvider, getProviderName } = useAuthFeatures();
+const { isProviderEnabled, getProviderName } = useAuthFeatures();
 
-// The OIDC row only makes sense on servers that configure it, or to let a user unlink a stale account.
-const visibleProviders = computed(() =>
-  OAUTH_PROVIDERS_LIST.filter(
-    (provider) => provider !== OAUTH_PROVIDER.oidc || oidcProvider.value || getAccountByProvider(provider),
-  ),
-);
+// Accounts on unconfigured providers can't sign in, so they're hidden and don't count as login methods.
+const visibleProviders = computed(() => OAUTH_PROVIDERS_LIST.filter((provider) => isProviderEnabled({ provider })));
 
-const hasAnyOAuthAccount = computed(() => OAUTH_PROVIDERS_LIST.some((p) => getAccountByProvider(p)));
+const hasAnyOAuthAccount = computed(() => visibleProviders.value.some((p) => getAccountByProvider(p)));
 
 // Count total login methods
 const loginMethodCount = computed(() => {
-  const oauthCount = OAUTH_PROVIDERS_LIST.filter((p) => getAccountByProvider(p)).length;
+  const oauthCount = visibleProviders.value.filter((p) => getAccountByProvider(p)).length;
   const passkeyCount = passkeys.value.length;
   const passwordCount = hasPassword.value ? 1 : 0;
   return oauthCount + passkeyCount + passwordCount;

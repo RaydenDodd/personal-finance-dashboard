@@ -128,7 +128,7 @@
       "namePlaceholder": "Название счёта",
       "currencyLabel": "Валюта",
       "currencyPlaceholder": "Выберите валюту",
-      "addCurrencyButton": "Добавить новую валюту +",
+      "addCurrencyButton": "Добавить новую валюту",
       "initialBalanceLabel": "Начальный баланс",
       "initialBalancePlaceholder": "Начальный баланс",
       "initialBalanceHelpLink": "What should I enter?",
@@ -136,7 +136,7 @@
       "accountCategoryPlaceholder": "Выберите категорию счёта",
       "creditLimitLabel": "Кредитный лимит",
       "creditLimitPlaceholder": "Кредитный лимит",
-      "defaultPaymentTypeLabel": "Default payment type",
+      "defaultPaymentTypeLabel": "Тип платежа по умолчанию",
       "submitButton": "Создать",
       "submitButtonLoading": "Создание...",
       "notifications": {
@@ -326,7 +326,7 @@
     },
     "currencySelect": {
       "yourCurrencies": "Ваши валюты",
-      "otherCurrencies": "Other currencies"
+      "otherCurrencies": "Другие валюты"
     },
     "comboboxAccounts": {
       "allAccounts": "Все счета",
@@ -356,7 +356,7 @@
       "placeholder": "Выберите категории...",
       "searchPlaceholder": "Поиск категорий...",
       "noCategoriesFound": "Категории не найдены",
-      "takenBy": "In {name}"
+      "takenBy": "В {name}"
     },
     "payeeMultiSelect": {
       "label": "Все получатели",
@@ -368,13 +368,13 @@
       "blankOption": "Без получателя"
     },
     "budgetMultiSelect": {
-      "label": "Все бюджеты",
-      "selectedMany": "Выбрано бюджетов: {n}",
-      "searchPlaceholder": "Поиск бюджетов",
-      "noResults": "Бюджеты не найдены",
-      "unknownBudget": "Неизвестный бюджет",
-      "blankOption": "Not in any tracker",
-      "loadError": "Не удалось загрузить бюджеты. Попробуйте снова."
+      "label": "Все трекеры",
+      "selectedMany": "Выбрано {n} трекеров",
+      "searchPlaceholder": "Поиск трекеров",
+      "noResults": "Трекеры не найдены",
+      "unknownBudget": "Неизвестный трекер",
+      "blankOption": "Нет ни в одном трекере",
+      "loadError": "Не удалось загрузить трекеры. Попробуйте снова."
     },
     "payeeSelect": {
       "placeholder": "Выберите получателя",

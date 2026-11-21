@@ -8,6 +8,7 @@
     "allTransactions": "Semua Transaksi",
     "transactions": "Transaksi",
     "transactionGroups": "Grup",
+    "trash": "Trash",
     "analytics": "Analitik",
     "optimizations": "Optimasi",
     "automations": "Otomatisasi",
@@ -16,7 +17,7 @@
     "community": "Community",
     "logout": "Keluar",
     "appVersion": "App version {version}",
-    "updateAvailable": "Pembaruan tersedia",
+    "updateAvailable": "Update available",
     "updateToVersion": "Update · {version}",
     "settings": "Pengaturan",
     "planned": {
@@ -31,6 +32,7 @@
   "sidebar": {
     "collapse": "Collapse sidebar",
     "expand": "Expand sidebar",
+    "resize": "Resize sidebar",
     "settings": {
       "title": "Pengaturan",
       "sections": {

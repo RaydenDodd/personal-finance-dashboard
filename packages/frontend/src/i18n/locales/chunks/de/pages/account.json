@@ -178,7 +178,7 @@
         "defaultPaymentType": "Standard-Zahlungsart:",
         "editDefaultPaymentType": "Standard-Zahlungsart bearbeiten",
         "defaultPaymentTypeUpdateSuccess": "Standard-Zahlungsart aktualisiert",
-        "defaultPaymentTypeUpdateError": "Standard-Zahlungsart konnte nicht aktualisiert werden",
+        "defaultPaymentTypeUpdateError": "Aktualisierung der Standard-Zahlungsart fehlgeschlagen",
         "currency": "Währung:",
         "main": "(Hauptwährung)",
         "exchangeRate": "Wechselkurs:",
@@ -213,7 +213,7 @@
       "syncTransactions": {
         "title": "Neueste Transaktionen synchronisieren",
         "autoSyncInfo": "Transaktionen werden alle 12 Stunden automatisch synchronisiert",
-        "syncing": "Synchronisieren...",
+        "syncing": "Synchronisierung läuft...",
         "syncButton": "Sync",
         "notLinked": "Dieses Konto ist nicht mit einer Bankverbindung verknüpft",
         "syncStarted": "Synchronisierung gestartet...",
@@ -354,9 +354,9 @@
         "empty": "Noch keine manuellen Anpassungen. Passe den Wert an, um eine Anpassung zu erfassen.",
         "delete": "Löschen",
         "deleteTitle": "Diese Anpassung löschen?",
-        "deleteDescription": "Das Entfernen dieser Anpassung verankert den Wertverlust wieder an der vorherigen Anpassung (oder dem ursprünglichen Kauf, falls keine vorhanden ist). Die zugehörige Transaktion wird gelöscht.",
+        "deleteDescription": "Das Entfernen dieser Anpassung verankert die Abschreibung neu beim vorherigen Wert (oder beim Originalkauf, falls keiner vorhanden ist). Die zugehörige Transaktion wird in den Papierkorb verschoben, wo du sie 30 Tage lang wiederherstellen kannst.",
         "deleteConfirm": "Löschen",
-        "deleteSuccess": "Anpassung entfernt",
+        "deleteSuccess": "Anpassung entfernt und zugehörige Transaktion in den Papierkorb verschoben",
         "deleteError": "Anpassung konnte nicht entfernt werden"
       },
       "sections": {

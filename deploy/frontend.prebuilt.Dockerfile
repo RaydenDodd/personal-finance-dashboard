@@ -1,6 +1,6 @@
 # Build context contains only frontend-dist/, nginx.conf and docker-entrypoint.sh.
 # Vue compilation happens on the development machine. nginx remains native ARM64.
-FROM nginx:1.27-alpine
+FROM nginx:stable-alpine
 
 LABEL org.opencontainers.image.source="https://github.com/RaydenDodd/personal-finance-dashboard"
 

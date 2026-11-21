@@ -6,7 +6,7 @@ import TrackerLines from '@models/tracker-lines.model';
 import Trackers from '@models/trackers.model';
 import { findTransactions } from '@models/transactions-query';
 import type * as Transactions from '@models/transactions.model';
-import { moneyMovementWhere } from '@services/stats/stats-transactions';
+import { excludeFromStatsWhere, moneyMovementWhere } from '@services/stats/stats-transactions';
 import { includeLines } from '@services/trackers/get-trackers';
 import { Op } from 'sequelize';
 
@@ -101,9 +101,9 @@ const buildCategoryCanonicalizer = async ({
 
   const categories = (await Categories.findAll({
     where: { userId: { [Op.in]: [...userIds] } },
-    attributes: ['id', 'key', 'userId'],
+    attributes: ['id', 'key', 'parentId', 'userId'],
     raw: true,
-  })) as unknown as { id: RecordId; key: string | null; userId: number }[];
+  })) as unknown as { id: RecordId; key: string | null; parentId: RecordId | null; userId: number }[];
   const mergeMap = buildSharedTrackerMergeMap({ categories, ownerUserId });
   return (categoryId) => mergeMap.get(categoryId) ?? categoryId;
 };
@@ -136,7 +136,7 @@ const getLinkedTransactionsStats = async ({
     Transactions.default,
     'id' | 'time' | 'amount' | 'refAmount' | 'transactionType' | 'refundLinked' | 'categoryId' | 'userId'
   >[] = await findTransactions({
-    where: moneyMovementWhere,
+    where: { [Op.and]: [moneyMovementWhere, excludeFromStatsWhere] },
     access: { trackerScoped: [trackerId as RecordId] },
     completeness: 'all',
     planned: { visibleTo: callerUserId },
@@ -176,7 +176,7 @@ const updateDateRange = (result: StatsResponse, time: Date) => {
 /**
  * Nets out refund pairs from actualIncome/actualExpense so a refund-income doesn't inflate
  * income and the matching expense reflects net spend (matching the global "Expenses Structure"
- * widget). For each refund where a side is in the tracker, we subtract `refundTx.refAmount`
+ * widget). For each refund where a side is in the tracker, we subtract the pair's `shareRefAmount`
  * from that side. Balance and utilizationRate are recomputed from the adjusted totals.
  */
 const applyRefundAdjustments = async ({
@@ -192,7 +192,7 @@ const applyRefundAdjustments = async ({
   if (pairs.length === 0) return;
 
   for (const pair of pairs) {
-    const adjustment = pair.refundTx.refAmount.toCents();
+    const adjustment = pair.shareRefAmount.toCents();
 
     if (pair.originalInScope) {
       if (pair.originalTx.transactionType === TRANSACTION_TYPES.expense) {

@@ -255,9 +255,9 @@ const submit = () => {
     isTransferTx: true,
     isCurrenciesDifferent: isCurrenciesDifferent.value,
     isOriginalRefundsOverriden: false,
-    isRecordExternal: false,
+    isRecordBankLocked: false,
+    isRecordOnBankAccount: false,
     transaction: props.transaction,
-    oppositeTransaction: props.oppositeTransaction,
     linkedTransaction: null,
   });
 };

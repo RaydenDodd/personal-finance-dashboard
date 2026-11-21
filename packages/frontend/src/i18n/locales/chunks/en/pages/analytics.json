@@ -100,11 +100,44 @@
         "comparisonPeriod": "Previous period",
         "cumulativeNote": "Cumulative total up to this point"
       },
+      "scope": {
+        "label": "Category scope",
+        "all": "All categories",
+        "up": "Up one level",
+        "transactions": "Transactions",
+        "count": "{count} category | {count} categories",
+        "more": "+{count}",
+        "allExcept": "All except {list}",
+        "clear": "Clear"
+      },
       "categoryBreakdown": {
         "title": "Category breakdown",
         "noData": "No data for this period",
         "viewAll": "View all categories",
-        "moreCount": "{count} more"
+        "moreCount": "{count} more",
+        "noSubcategory": "{name} · no subcategory",
+        "byLevel": "By level",
+        "detail": "Detail",
+        "others": "Others"
+      },
+      "hero": {
+        "vsPrevious": "{percent}% vs previous period",
+        "same": "Same as previous period"
+      },
+      "overTime": {
+        "title": "Over time",
+        "cumulative": "Cumulative",
+        "perPeriod": "Per period",
+        "granularity": {
+          "monthly": "Monthly",
+          "quarterly": "Quarterly",
+          "yearly": "Yearly"
+        }
+      },
+      "transactionsCard": {
+        "title": "Transactions",
+        "largest": "Largest",
+        "recent": "Recent"
       },
       "monthlyComparison": {
         "title": "Monthly comparison",
@@ -114,19 +147,16 @@
         "vsLastMonth": "vs previous month",
         "viewTransactions": "View transactions"
       },
-      "cumulativeProgress": {
-        "title": "Cumulative progress"
-      },
       "filters": {
         "button": "Filters",
         "title": "Filters",
-        "categories": "Categories",
         "include": "Include",
         "exclude": "Exclude",
         "accounts": "Accounts",
         "payees": "Payees",
         "tags": "Tags",
-        "reset": "Reset"
+        "reset": "Reset",
+        "categories": "Categories"
       },
       "legend": {
         "hide": "Hide from chart",
@@ -135,7 +165,10 @@
       "vsPreviousPeriod": "vs previous period",
       "loadError": "Failed to load data",
       "noData": "No data available",
-      "noDataHint": "No transactions recorded for this period"
+      "noDataHint": "No transactions recorded for this period",
+      "cumulativeProgress": {
+        "title": "Cumulative progress"
+      }
     },
     "investmentCalculator": {
       "subtitle": "Project how your portfolio could grow with regular contributions.",

@@ -6,7 +6,7 @@
     "searchPlaceholder": "Zahlungsempfänger suchen…",
     "columns": {
       "name": "Name",
-      "transactionCount": "Anzahl",
+      "transactionCount": "# Tx",
       "netFlow": "Nettofluss",
       "category": "Kategorie",
       "categoryHint": "Effektive Kategorie für diesen Zahlungsempfänger. Zeigt den Standardwert an, falls du einen festgelegt hast — ansonsten die Kategorie, die in vergangenen Transaktionen am häufigsten verwendet wurde. Wird beim Erstellen einer neuen Transaktion automatisch ausgefüllt.",
@@ -16,7 +16,7 @@
     },
     "sort": {
       "label": "Sortieren nach",
-      "transactionCount": "Anzahl Transaktionen",
+      "transactionCount": "Anzahl Tx",
       "netFlow": "Nettofluss",
       "name": "Name",
       "lastSeen": "Letzte Aktivität",
@@ -177,6 +177,6 @@
       "forceConfirm": "Zahlungsempfänger löschen und ignorieren"
     },
     "loadingMore": "Weitere laden…",
-    "txCount": "{count} Transaktionen"
+    "txCount": "{count} Tx"
   }
 }

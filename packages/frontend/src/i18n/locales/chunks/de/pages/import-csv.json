@@ -67,7 +67,7 @@
           "starting": "Starte Import…",
           "progressCount": "{processed} / {total}",
           "statusQueued": "In Warteschlange",
-          "statusRunning": "Importieren…",
+          "statusRunning": "Wird importiert...",
           "statusCompleted": "Abgeschlossen",
           "statusFailed": "Fehlgeschlagen",
           "failed": "Import fehlgeschlagen.",
@@ -95,7 +95,7 @@
           "invalidWillBeSkipped": "ungültige Zeilen werden übersprungen.",
           "duplicatesWillBeSkipped": "Duplikate werden übersprungen.",
           "backToMapping": "Zurück zur Zuordnung",
-          "importing": "Importieren...",
+          "importing": "Wird importiert...",
           "importButton": "{count} Transaktionen importieren",
           "unpriceableTitle": "{count} Zeile(n) können nicht bewertet werden – kein Wechselkurs gefunden",
           "unpriceableDescription": "Diese Zeilen verwenden eine Währung, für die kein Wechselkurs gespeichert ist und die nicht in deine Basiswährung umgerechnet werden kann. Du musst sie überspringen oder den Import abbrechen.",
@@ -116,7 +116,7 @@
           "imported": "Importiert",
           "skippedDuplicates": "Übersprungen (Duplikate)",
           "accountsCreated": "Konten erstellt",
-          "accountsSkipped": "Konten übersprungen",
+          "accountsSkipped": "Übersprungene Konten",
           "categoriesCreated": "Kategorien erstellt",
           "tagsCreated": "Tags erstellt",
           "payeesCreated": "Zahlungsempfänger erstellt",
@@ -140,9 +140,9 @@
         "stepTitle": "Spalten zuordnen",
         "description": "Ordne deine CSV-Spalten den erforderlichen Feldern zu",
         "file": "Datei",
-        "totalRows": "Zeilen insgesamt",
+        "totalRows": "Zeilen gesamt",
         "delimiter": "Trennzeichen",
-        "detecting": "Erkenne Duplikate…"
+        "detecting": "Duplikate werden gesucht..."
       },
       "common": {
         "selectOption": "Option auswählen...",
@@ -226,7 +226,7 @@
         "selectAction": "Aktion auswählen",
         "actions": {
           "createNew": "Neu erstellen",
-          "linkExisting": "Verknüpfen",
+          "linkExisting": "Mit bestehendem verknüpfen",
           "skip": "Überspringen"
         },
         "quickActions": {
@@ -307,7 +307,8 @@
           "account": "Konto",
           "currency": "Währung",
           "transactionType": "Transaktionstyp",
-          "payee": "Zahlungsempfänger"
+          "payee": "Zahlungsempfänger",
+          "tags": "Tags"
         },
         "dateFormat": {
           "label": "Datumsformat",

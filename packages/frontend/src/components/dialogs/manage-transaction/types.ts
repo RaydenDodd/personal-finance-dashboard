@@ -16,9 +16,16 @@ export interface RefundWithSplit {
   transaction: TransactionModel;
   /** The split ID this refund targets. Required when the original transaction has splits. */
   splitId?: string;
+  /**
+   * Share of the refund tx (in its currency) assigned to this original. `null` = the whole refund;
+   * `undefined` on a "refunded by" link = keep the share the server already has.
+   */
+  amount?: number | null;
+  /** `true` = share set by the user, `false` = filled by the app, unset = as saved. UI-only. */
+  isAdjusted?: boolean;
 }
 
-export type RefundsAnoterTx = RefundWithSplit | null | undefined;
+export type RefundsAnoterTx = RefundWithSplit[] | null | undefined;
 export type RefundedByAnotherTxs = RefundWithSplit[] | null | undefined;
 
 /**
@@ -82,6 +89,8 @@ export interface UI_FORM_STRUCT {
   paymentTypeUserTouched?: boolean;
   /** Entry for money that hasn't moved yet: no balance impact until it's confirmed. */
   isPlanned?: boolean;
+  /** Keeps the row out of the reports without removing it from the ledger. */
+  excludeFromStats?: boolean;
   /** Decimal amount actually spent, in `originalCurrency`. Reaches the API only as a complete pair. */
   originalAmount?: number | null;
   /** Any ISO currency, not only the user's linked ones. Sent to the API as its `code`. */
@@ -102,6 +111,7 @@ export type TransactionPrefill = Pick<UI_FORM_STRUCT, 'type' | 'account' | 'amou
       | 'latitude'
       | 'longitude'
       | 'isPlanned'
+      | 'excludeFromStats'
       | 'splits'
       | 'toAccount'
       | 'targetAmount'

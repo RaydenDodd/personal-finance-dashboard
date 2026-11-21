@@ -18,8 +18,8 @@
           "accountName": "Profilo {provider}",
           "notConnected": "Non connesso",
           "disconnect": "Disconnetti",
-          "disconnectConfirmTitle": "Disconnect {provider}?",
-          "disconnectConfirmDescription": "You won't be able to log in with this {provider} account anymore. You can reconnect it at any time.",
+          "disconnectConfirmTitle": "Scollegare {provider}?",
+          "disconnectConfirmDescription": "Non sarà più possibile accedere con questo profilo {provider}. È possibile ricollegarlo in qualsiasi momento.",
           "connect": "Connetti"
         },
         "password": {
@@ -33,7 +33,7 @@
           "title": "Passkey",
           "noPasskeys": "Nessuna passkey registrata",
           "passkeyCount": "{count} passkey registrate",
-          "addButton": "Aggiungi Passkey",
+          "addButton": "Aggiungi passkey",
           "passkeyName": "Passkey",
           "added": "Aggiunta il {date}",
           "rename": "Rinomina",

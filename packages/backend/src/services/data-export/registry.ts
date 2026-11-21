@@ -98,6 +98,7 @@ export const EXPORT_DOMAINS: { readonly [N in ExportFileName]: ExportDomain<N> }
       { header: 'LinkedTransfer', field: 'linkedTransfer', kind: 'text' },
       { header: 'Subscription', field: 'subscription', kind: 'text' },
       { header: 'Planned', field: 'isPlanned', kind: 'boolean' },
+      { header: 'ExcludedFromStats', field: 'excludeFromStats', kind: 'boolean' },
     ],
   },
   accounts: {
@@ -243,6 +244,8 @@ export const EXPORT_DOMAINS: { readonly [N in ExportFileName]: ExportDomain<N> }
       { header: 'Amount', field: 'amount', kind: 'money' },
       { header: 'Currency', field: 'currency', kind: 'text' },
       { header: 'Frequency', field: 'frequency', kind: 'text' },
+      { header: 'IntervalUnit', field: 'intervalUnit', kind: 'text' },
+      { header: 'IntervalCount', field: 'intervalCount', kind: 'number' },
       { header: 'StartDate', field: 'startDate', kind: 'date' },
       { header: 'EndDate', field: 'endDate', kind: 'date' },
       { header: 'Category', field: 'category', kind: 'text' },

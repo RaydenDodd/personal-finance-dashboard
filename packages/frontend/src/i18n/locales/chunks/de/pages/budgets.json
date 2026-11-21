@@ -88,7 +88,7 @@
         "title": "Noch keine Tracker",
         "description": "Erstelle einen Tracker, um deine Ausgaben zu verfolgen oder bestimmte Ereignisse zu überwachen."
       },
-      "searchPlaceholder": "Tracker suchen",
+      "searchPlaceholder": "Tracker durchsuchen",
       "filters": {
         "all": "Alle",
         "autoAdd": "Automatisches Hinzufügen an",
@@ -115,7 +115,7 @@
       "menu": {
         "moreActions": "Weitere Aktionen",
         "open": "Öffnen",
-        "duplicate": "Duplikat"
+        "duplicate": "Duplizieren"
       },
       "duplicateSuccess": "Tracker dupliziert",
       "duplicateError": "Duplizieren des Trackers fehlgeschlagen",
@@ -133,8 +133,8 @@
         "endedMonthsAgo": "Vor {count} Monat | Vor {count} Monaten",
         "description": "Er wurde {ago} beendet. Archivierte Tracker werden in die Gruppe \"Archiviert\" verschoben und behalten ihre Transaktionen und Statistiken. Du kannst sie jederzeit reaktivieren.",
         "dontAsk": "Für diesen Tracker nicht mehr fragen",
-        "notNow": "Nicht jetzt",
-        "dismissError": "Tracker konnte nicht aktualisiert werden",
+        "notNow": "Jetzt nicht",
+        "dismissError": "Aktualisierung des Trackers fehlgeschlagen",
         "dismissSuccess": "Alles klar. Wir werden die Archivierung dieses Trackers nicht mehr vorschlagen."
       }
     },
@@ -167,7 +167,7 @@
         "spent": "Ausgegeben",
         "left": "Verbleibend",
         "overBy": "Überzogen um",
-        "earned": "Eingenommen",
+        "earned": "Verdient",
         "toGo": "Verbleibend",
         "headroom": "Spielraum",
         "aboveTargetBy": "Über dem Ziel um",
@@ -186,7 +186,7 @@
         "share": "Teilen",
         "setLimits": "Limits festlegen",
         "removeLimits": "Limits entfernen",
-        "duplicate": "Duplikat",
+        "duplicate": "Duplizieren",
         "openInTransactions": "In Transaktionen öffnen",
         "more": "Weitere Aktionen"
       },

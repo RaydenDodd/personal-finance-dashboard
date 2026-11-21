@@ -97,6 +97,13 @@ export interface UiSettings {
   investmentTransactionsTable?: InvestmentTransactionsTableSettings;
 }
 
+export interface IosAddExpenseSettings {
+  /** Lists bank-connected accounts in the Add Expense shortcut. Off when unset. */
+  showBankAccounts?: boolean;
+  /** Categories hidden, with their subcategories, from the Add Expense shortcut. */
+  excludedCategoryIds?: string[];
+}
+
 export interface UserSettingsSchema {
   locale?: SupportedLocale;
   dashboard?: {
@@ -139,6 +146,8 @@ export interface UserSettingsSchema {
   savedTransactionViews?: SavedTransactionView[];
   /** Header "Support" (donation) button visibility. Defaults to visible when unset. */
   showSupportButton?: boolean;
+  /** Transaction rows show the payee's logo instead of the category icon. On when unset. */
+  showPayeeLogos?: boolean;
   /**
    * Hide zero-balance accounts (and account groups emptied by that hiding) from the sidebar
    * Accounts panel. Defaults to visible/off when unset.
@@ -151,6 +160,8 @@ export interface UserSettingsSchema {
     defaultAccountId?: string | null;
     showArchivedInDropdowns?: boolean;
   };
+  /** iOS-only preferences. */
+  ios?: { addExpense?: IosAddExpenseSettings };
   /**
    * Categories whose spending counts as savings in the cash-flow analytics instead of as an
    * expense. Subcategories inherit from their parent. Empty or unset leaves cash flow unchanged.

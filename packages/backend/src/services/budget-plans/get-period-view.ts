@@ -3,14 +3,16 @@ import {
   BudgetPlanCoverage,
   BudgetPlanGoalsSummary,
   BudgetPlanLineGroup,
+  BudgetPlanLinePace,
   BudgetPlanPeriodView,
   BudgetPlanPeriodViewLineGoal,
   BudgetPlanPool,
 } from '@bt/shared/types';
 import { centsToApiDecimal, centsToApiDecimalOrNull } from '@common/types/money';
-import { toUtcDateString } from '@common/utils/date';
+import { toUtcDateString, toZonedDateString } from '@common/utils/date';
 import { t } from '@i18n/index';
 import { NotFoundError } from '@js/errors';
+import { logger } from '@js/utils/logger';
 import BudgetAssignments from '@models/budget-assignments.model';
 import BudgetLineCategories from '@models/budget-line-categories.model';
 import BudgetLineGoals from '@models/budget-line-goals.model';
@@ -28,6 +30,7 @@ import { GoalEvaluation, GoalPeriodAssigned, GoalSpec, evaluateGoal } from './fo
 import { assignmentCents } from './fold/resolve-assigned';
 import { goalSpecToApi, toGoalSpec } from './line-goals';
 import { loadGroups } from './line-groups';
+import { periodPaces } from './period-pace';
 import { ensurePeriods, loadLines } from './periods/ensure-periods';
 import { ownerCategories } from './validate-line-categories';
 
@@ -54,11 +57,13 @@ const periodPool = async ({
   views,
   periodId,
   today,
+  timezone,
 }: {
   plan: BudgetPlans;
   views: FoldedPeriodView[];
   periodId: RecordId;
   today: string;
+  timezone: string;
 }): Promise<{ pool: BudgetPlanPool; nextReadyToAssign: number | null } | null> => {
   if (!plan.poolFrom) return null;
   const poolFrom = toUtcDateString(plan.poolFrom);
@@ -71,6 +76,7 @@ const periodPool = async ({
     plan,
     opening: poolFrom,
     closing: view.period.endDate < tomorrow ? view.period.endDate : tomorrow,
+    timezone,
   });
 
   const entries = foldPool({ periods: poolViews, openingCash: opening });
@@ -240,6 +246,7 @@ const toApi = ({
   asks,
   goalsSummary: summary,
   coverage,
+  paces,
 }: {
   view: FoldedPeriodView;
   groups: BudgetPlanLineGroup[];
@@ -251,6 +258,7 @@ const toApi = ({
   asks: Map<string, GoalEvaluation>;
   goalsSummary: BudgetPlanGoalsSummary | null;
   coverage: BudgetPlanCoverage | null;
+  paces: Map<string, BudgetPlanLinePace>;
 }): BudgetPlanPeriodView => ({
   period: view.period,
   header: {
@@ -274,6 +282,7 @@ const toApi = ({
     available: centsToApiDecimal(line.available),
     carryPolicy: line.carryPolicy,
     goal: asks.has(line.lineId) ? goalToApi({ goal: goals.get(line.lineId)!, result: asks.get(line.lineId)! }) : null,
+    pace: paces.get(line.lineId) ?? null,
   })),
   unbudgeted: view.unbudgeted.map((entry) => ({
     categoryId: entry.categoryId,
@@ -292,13 +301,21 @@ const loadGoals = async ({ planId }: { planId: RecordId }): Promise<Map<string, 
 };
 
 /** Everything `foldPlan` needs for the whole plan, periods ensured through today. */
-export const loadFoldInput = async ({ plan, today }: { plan: BudgetPlans; today: string }) => {
+export const loadFoldInput = async ({
+  plan,
+  today,
+  timezone,
+}: {
+  plan: BudgetPlans;
+  today: string;
+  timezone: string;
+}) => {
   const periods = await ensurePeriods({ plan, today });
 
   const [lines, { categories }, activityRows] = await Promise.all([
     loadLines({ planId: plan.id }),
     ownerCategories({ userId: plan.userId }),
-    getPlanActivity({ plan, periods }),
+    getPlanActivity({ plan, periods, timezone }),
   ]);
 
   const lineIds = lines.map((line) => line.id);
@@ -326,21 +343,25 @@ export const loadFoldInput = async ({ plan, today }: { plan: BudgetPlans; today:
   };
 };
 
+export type FoldInput = Awaited<ReturnType<typeof loadFoldInput>>;
+
 /** Folds the whole plan from the epoch to answer for one period. */
 export const getPeriodView = async ({
   userId,
   planId,
   periodId,
+  timezone,
 }: {
   userId: number;
   planId: RecordId;
   periodId: RecordId;
+  timezone: string;
 }): Promise<BudgetPlanPeriodView> => {
   const plan = await findPlan({ planId, userId });
 
-  const today = toUtcDateString(new Date());
+  const today = toZonedDateString({ date: new Date(), timezone });
   const [foldInput, goals, groups] = await Promise.all([
-    loadFoldInput({ plan, today }),
+    loadFoldInput({ plan, today, timezone }),
     loadGoals({ planId: plan.id }),
     loadGroups({ planId: plan.id }),
   ]);
@@ -354,7 +375,13 @@ export const getPeriodView = async ({
   const views = foldPlan(foldInput);
   const view = views[index]!;
   const explicitViews = plan.poolFrom ? foldPlan({ ...foldInput, explicitFutureOnly: true }) : [];
-  const poolResult = plan.poolFrom ? await periodPool({ plan, views: explicitViews, periodId, today }) : null;
+  const [poolResult, paces] = await Promise.all([
+    plan.poolFrom ? periodPool({ plan, views: explicitViews, periodId, today, timezone }) : null,
+    periodPaces({ plan, foldInput, index, view, today, timezone }).catch((error) => {
+      logger.error({ message: 'Failed to compute budget line paces', error }, { planId: plan.id, periodId });
+      return new Map<string, BudgetPlanLinePace>();
+    }),
+  ]);
 
   const asks = evaluateGoals({ plan, view, views, goals });
   const next = explicitViews[index + 1];
@@ -379,5 +406,6 @@ export const getPeriodView = async ({
     asks,
     goalsSummary: goals.size ? goalsSummary({ plan, asks }) : null,
     coverage,
+    paces,
   });
 };

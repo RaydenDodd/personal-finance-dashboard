@@ -10,8 +10,8 @@
     },
     "auth": {
       "reauthenticationRequired": "Zu deiner Sicherheit melde dich erneut an, um diese Änderung vorzunehmen.",
-      "passwordTooShort": "Passwort ist zu kurz.",
-      "passwordTooLong": "Passwort ist zu lang.",
+      "passwordTooShort": "Das Passwort ist zu kurz.",
+      "passwordTooLong": "Das Passwort ist zu lang.",
       "providerNotConfigured": "Dieser Anmeldeanbieter ist auf diesem Server nicht konfiguriert.",
       "accountAlreadyLinked": "Dieses Konto ist bereits mit einem anderen Benutzer verknüpft.",
       "cannotUnlinkLastAccount": "Du kannst deine einzige Anmeldemethode nicht entfernen.",

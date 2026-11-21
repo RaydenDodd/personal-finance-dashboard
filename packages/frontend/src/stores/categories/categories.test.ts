@@ -104,7 +104,7 @@ describe('categories store – loadCategories({ force: true })', () => {
     const { VUE_QUERY_CACHE_KEYS } = await import('@/common/const');
     const store = useCategoriesStore();
     const june = [...VUE_QUERY_CACHE_KEYS.analyticsCashFlow, '2026-06'];
-    const october = [...VUE_QUERY_CACHE_KEYS.widgetExpensesStructureCurrentAmount, '2026-10'];
+    const october = [...VUE_QUERY_CACHE_KEYS.widgetExpensesStructureTotal, '2026-10'];
     queryClient.setQueryData(june, { oldParent: 'Entertainment' });
     queryClient.setQueryData(october, { oldParent: 'Entertainment' });
     mockLoadSystemCategories.mockResolvedValue([FOOD, { ...GROCERIES, parentId: FOOD.id }]);

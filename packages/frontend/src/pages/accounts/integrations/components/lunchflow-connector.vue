@@ -83,7 +83,7 @@
                   <Tooltip.TooltipTrigger as-child>
                     <UiButton variant="ghost" size="sm" :disabled="isLoading" @click="handleSkipImport">
                       {{ t('pages.integrations.lunchflow.skipButton') }}
-                      <InfoIcon class="text-muted-foreground ml-1 size-3.5" />
+                      <InfoIcon class="text-muted-foreground size-3.5" />
                     </UiButton>
                   </Tooltip.TooltipTrigger>
                   <Tooltip.TooltipContent class="max-w-60 p-3">
@@ -138,6 +138,7 @@
 </template>
 
 <script lang="ts" setup>
+import { numberFormatLocale } from '@/js/helpers/formatters';
 import {
   type AvailableAccount,
   connectProvider,
@@ -253,7 +254,7 @@ const getErrorMessage = (error: unknown): string | undefined => {
 };
 
 const formatBalance = (balance: number, currency: string) => {
-  return new Intl.NumberFormat(undefined, {
+  return new Intl.NumberFormat(numberFormatLocale.value, {
     style: 'currency',
     currency,
   }).format(balance);

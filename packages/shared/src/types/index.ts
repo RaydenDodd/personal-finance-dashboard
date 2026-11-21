@@ -11,6 +11,7 @@ export * from './categories';
 export * from './tags';
 export * from './payees';
 export * from './transactions';
+export * from './transaction-groups';
 
 export * from './categorization';
 export * from './transaction-automations';
@@ -37,4 +38,5 @@ export * from './billing';
 export * from './resource-lease';
 export * from './client-logs';
 export * from './sse';
+export * from './mcp';
 export * from './testing';

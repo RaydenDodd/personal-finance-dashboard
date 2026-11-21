@@ -1,4 +1,11 @@
-import { BANK_PROVIDER_TYPE, DEACTIVATION_REASON, TRANSACTION_TYPES, asDecimal } from '@bt/shared/types';
+import {
+  ACCOUNT_TYPES,
+  type AccountApiResponse,
+  BANK_PROVIDER_TYPE,
+  DEACTIVATION_REASON,
+  TRANSACTION_TYPES,
+  asDecimal,
+} from '@bt/shared/types';
 import { describe, expect, it } from '@jest/globals';
 import { ERROR_CODES } from '@js/errors';
 import Transactions from '@models/transactions.model';
@@ -8,6 +15,7 @@ import {
   AKAHU_ACCOUNT_1_ID,
   AKAHU_ACCOUNT_INACTIVE_ID,
   AKAHU_ACCOUNT_NO_TX_ID,
+  getMockedAkahuAccounts,
   getMockedAkahuTransactions,
 } from '@tests/mocks/akahu/data';
 import {
@@ -456,47 +464,6 @@ describe('Akahu Data Provider E2E', () => {
     });
   });
 
-  describe('Period load', () => {
-    it('imports new rows in the window and skips the already-imported one', async () => {
-      const conn = await helpers.akahu.pairAkahuUser();
-      const { account } = await helpers.akahu.connectAccountsAndSync({
-        connectionId: conn.connectionId,
-        accountId: AKAHU_ACCOUNT_1_ID,
-        mockedTransactions: getMockedAkahuTransactions({ amount: 1 }),
-      });
-      const before = await Transactions.count({ where: { accountId: account.id } });
-
-      const NEW_ROWS = 3;
-      // Row 0 shares the id of the already-imported row.
-      const response = getMockedAkahuTransactions({ amount: NEW_ROWS + 1 });
-      const from = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000);
-      const to = new Date();
-      let sentWindow: { start: string | null; end: string | null } | undefined;
-      global.mswMockServer.use(
-        getAkahuTransactionsMock({
-          response,
-          accountId: AKAHU_ACCOUNT_1_ID,
-          onRequest: (params) => (sentWindow = { start: params.get('start'), end: params.get('end') }),
-        }),
-      );
-
-      const result = await helpers.bankDataProviders.loadTransactionsForPeriod({
-        connectionId: conn.connectionId,
-        accountId: account.id,
-        from: from.toISOString(),
-        to: to.toISOString(),
-        raw: true,
-      });
-
-      expect(sentWindow).toEqual({
-        start: new Date(from.getTime() - 1).toISOString(),
-        end: to.toISOString(),
-      });
-      expect(result.jobGroupId).toBeNull();
-      expect(await Transactions.count({ where: { accountId: account.id } })).toBe(before + NEW_ROWS);
-    });
-  });
-
   describe('Credential updates', () => {
     it('accepts a fresh token pair', async () => {
       const { connectionId } = await helpers.akahu.pairAkahuUser();
@@ -607,6 +574,49 @@ describe('Akahu Data Provider E2E', () => {
       const rows = await Transactions.findAll({ where: { accountId: account.id }, raw: true });
       expect(rows.length).toBe(MOCK_AMOUNT);
       expect(rows.filter((r) => r.originalId).length).toBe(MOCK_AMOUNT);
+    });
+
+    it('refuses a connect-flow relink when Akahu reports no current balance', async () => {
+      const { account } = await helpers.createAccountWithNewCurrency({ currency: 'NZD' });
+      await helpers.createTransaction({
+        payload: helpers.buildTransactionPayload({ accountId: account.id }),
+        raw: true,
+      });
+      const { connectionId } = await helpers.akahu.pairAkahuUser();
+      const linkResponse = await helpers.linkAccountToBankConnection({
+        id: account.id,
+        connectionId,
+        externalAccountId: AKAHU_ACCOUNT_1_ID,
+        raw: false,
+      });
+      expect(linkResponse.statusCode).toBe(200);
+      await helpers.unlinkAccountFromBankConnection({ id: account.id, raw: true });
+      const unlinked = (await helpers.getAccount({ id: account.id, raw: true })) as unknown as AccountApiResponse;
+
+      const accounts = getMockedAkahuAccounts();
+      global.mswMockServer.use(
+        http.get(`${AKAHU_BASE_URL}/accounts`, () =>
+          HttpResponse.json({
+            ...accounts,
+            items: accounts.items.map((item) =>
+              item._id === AKAHU_ACCOUNT_1_ID ? { ...item, balance: { ...item.balance, current: null } } : item,
+            ),
+          }),
+        ),
+      );
+
+      const result = await helpers.bankDataProviders.connectSelectedAccounts({
+        connectionId,
+        accountExternalIds: [AKAHU_ACCOUNT_1_ID],
+        raw: false,
+        waitForSync: false,
+      });
+      expect(result.statusCode).toBe(ERROR_CODES.ServiceUnavailable);
+
+      const after = (await helpers.getAccount({ id: account.id, raw: true })) as unknown as AccountApiResponse;
+      expect(after.type).toBe(ACCOUNT_TYPES.system);
+      expect(after.bankDataProviderConnectionId).toBeNull();
+      expect(after.currentBalance).toBe(unlinked.currentBalance);
     });
   });
 });

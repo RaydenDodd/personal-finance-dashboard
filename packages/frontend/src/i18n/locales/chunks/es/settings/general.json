@@ -12,7 +12,7 @@
       "payday": {
         "label": "El ciclo de pago comienza el",
         "description": "Día del mes que comienza tu ciclo de pago. El período predeterminado del tablero de control se extiende de este día al día anterior al mes próximo.",
-        "placeholder": "Seleccionar día",
+        "placeholder": "Select day",
         "successNotification": "Inicio del ciclo de pago actualizado"
       },
       "unrealizedLossAlert": {
@@ -85,6 +85,21 @@
         "successNotification": "Ajustes del selector de cuentas actualizados",
         "errorNotification": "Error al actualizar los ajustes del selector de cuentas"
       },
+      "iosAddExpense": {
+        "label": "iPhone Add Expense",
+        "description": "Settings for the Add Expense shortcut on iPhone (Siri, Spotlight and the Action button).",
+        "showBankAccounts": {
+          "label": "Show bank-connected accounts",
+          "description": "Off by default: transactions on bank-connected accounts arrive through sync."
+        },
+        "hiddenCategories": {
+          "label": "Hidden categories",
+          "description": "Checked categories, with their subcategories, are hidden from the shortcut's category list.",
+          "placeholder": "None"
+        },
+        "successNotification": "iPhone Add Expense settings updated",
+        "errorNotification": "Failed to update iPhone Add Expense settings"
+      },
       "showUpcomingTransactions": {
         "label": "Mostrar transacciones próximas",
         "description": "Fija en la parte superior de la lista de transacciones una sección con los pagos programados vencidos y los que vencen en los próximos 3 días.",
@@ -106,7 +121,7 @@
             "description": "Mantenga un número de pedido, número de factura o referencia de reserva con la transacción."
           },
           "originalAmount": {
-            "label": "Importe original",
+            "label": "Original amount",
             "description": "La cantidad realmente cobrada en otra moneda, cuando difiere de la divisa de la cuenta."
           },
           "location": {

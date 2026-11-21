@@ -180,7 +180,7 @@
         "errors": {
           "noAuthUrl": "Keine Autorisierungs-URL vom Server erhalten",
           "failedToLoadBanks": "Banken konnten nicht geladen werden",
-          "failedToConnectProvider": "Verbindung zum Anbieter fehlgeschlagen"
+          "failedToConnectProvider": "Verbindung mit Anbieter fehlgeschlagen"
         },
         "help": {
           "trigger": "Woher bekomme ich die Enable Banking-Zugangsdaten?"
@@ -268,9 +268,9 @@
         "connectingButton": "Verbinden...",
         "loadingWallets": "Währungskonten werden geladen...",
         "selectWalletsHint": "Wähle aus, welche Währungskonten synchronisiert werden sollen ({count} verfügbar)",
-        "selectAll": "Alles auswählen",
+        "selectAll": "Alle auswählen",
         "importButton": "{count} Währungskonto/Währungskonten importieren",
-        "importingButton": "Importieren...",
+        "importingButton": "Importiere...",
         "importSuccess": "{count} Konto/Konten verbunden. Transaktionen werden im Hintergrund synchronisiert.",
         "errors": {
           "connectFailed": "Verbindung zu Walutomat fehlgeschlagen. Überprüfe deine Zugangsdaten.",
@@ -316,11 +316,11 @@
         "connectButton": "Verbinden",
         "loadingAccounts": "Konten werden geladen...",
         "accountsPreviewHint": "{count} Konto/Konten gefunden. Alle Konten werden importiert.",
-        "importingButton": "Importieren...",
+        "importingButton": "Importiere...",
         "importButton": "{count} Konto/Konten importieren",
         "importSuccess": "{count} Konto/Konten verbunden. Transaktionen werden im Hintergrund synchronisiert.",
         "skipButton": "Überspringen",
-        "skipTooltip": "Überspringe den Import, um später nur bestimmte Konten zu verbinden oder bestehende Konten über deren Einstellungen neu zu verknüpfen.",
+        "skipTooltip": "Import überspringen, um nur bestimmte Konten später zu verbinden oder bestehende Konten in deren Einstellungen neu zu verknüpfen.",
         "errors": {
           "connectFailed": "Verbindung zu Akahu fehlgeschlagen",
           "importFailed": "Import der Konten fehlgeschlagen"
@@ -496,7 +496,7 @@
       },
       "error": {
         "title": "Autorisierung fehlgeschlagen",
-        "backToIntegrations": "Zurück zu Integrationen"
+        "backToIntegrations": "Zurück zu den Integrationen"
       },
       "success": {
         "title": "Verbindung erfolgreich!",

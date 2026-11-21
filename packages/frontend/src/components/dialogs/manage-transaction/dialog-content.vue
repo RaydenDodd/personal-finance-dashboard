@@ -5,6 +5,13 @@ import { loadTransactionById } from '@/api/transactions';
 import { OUT_OF_WALLET_ACCOUNT_MOCK, VERBOSE_PAYMENT_TYPES, VUE_QUERY_CACHE_KEYS } from '@/common/const';
 import type { FormattedCategory } from '@/common/types';
 import { getMaxLoanPayment, isLoanOverpayment, isLoanPaymentPreAnchor } from '@/common/utils/loan-payment';
+import {
+  formatBankSeamDay,
+  getBankSeamCutoff,
+  isBankAccount,
+  isBankLockedLeg,
+  isOnBankAccount,
+} from '@/common/utils/bank-row-permissions';
 import { isHttpUrl } from '@/common/utils/external-url';
 import { roundCoordinate } from '@/common/utils/coordinates';
 import { buildMapUrl } from '@/common/utils/map-url';
@@ -26,11 +33,9 @@ import { Checkbox } from '@/components/lib/ui/checkbox';
 import { Switch } from '@/components/lib/ui/switch';
 import { cn } from '@/lib/utils';
 import { ScrollArea } from '@/components/lib/ui/scroll-area';
-import { StatusBadge } from '@/components/lib/ui/status-badge';
 import { DesktopOnlyTooltip } from '@/components/lib/ui/tooltip';
 import { useNotificationCenter } from '@/components/notification-center';
 import { useExchangeRates } from '@/composable/data-queries/currencies';
-import { useAccountName } from '@/composable/use-account-name';
 import { useFormValidation } from '@/composable/form-validator';
 import { useCurrencyName, useFormatCurrency } from '@/composable/formatters';
 import { CUSTOM_BREAKPOINTS, useWindowBreakpoints } from '@/composable/window-breakpoints';
@@ -53,7 +58,7 @@ import {
 import { useQuery } from '@tanstack/vue-query';
 import { between, helpers, maxLength, minValue, required } from '@vuelidate/validators';
 import { createReusableTemplate, useEventListener, watchOnce } from '@vueuse/core';
-import { endOfDay, format } from 'date-fns';
+import { endOfDay, format, isBefore, subMilliseconds } from 'date-fns';
 import {
   CommandIcon,
   CopyIcon,
@@ -64,6 +69,7 @@ import {
   MapIcon,
   MapPinIcon,
   SplitIcon,
+  Trash2Icon,
   XIcon,
 } from '@lucide/vue';
 import { storeToRefs } from 'pinia';
@@ -124,7 +130,7 @@ import { useUserSettings } from '@/composable/data-queries/user-settings';
 import {
   canDeleteTransaction,
   getUnlistedCategoryIds,
-  isConnectedAccount,
+  isPaymentTransaction,
   isTxEditableAsManual,
   prepopulateForm,
 } from './helpers';
@@ -183,7 +189,6 @@ const isVentureLinkedView = computed(
 
 const route = useRoute();
 const { t } = useI18n();
-const getAccountName = useAccountName();
 watch(() => route.path, closeModal);
 
 const { currenciesMap, systemCurrencies } = storeToRefs(useCurrenciesStore());
@@ -240,6 +245,7 @@ const form = ref<UI_FORM_STRUCT>({
   payeeId: null,
   categoryUserTouched: false,
   isPlanned: false,
+  excludeFromStats: false,
   originalAmount: null,
   originalCurrency: null,
 });
@@ -323,7 +329,11 @@ const { addInfoNotification, addErrorNotification, addSuccessNotification } = us
 const {
   isInitialRefundsDataLoaded,
   initialRefundsFormSlice,
-  originalRefunds,
+  hasInAppRefundLinks,
+  isRefundsLoadFailed,
+  hasExternalRefundLink,
+  savedRefundShares,
+  isRefundSharesOverAssigned,
   isOriginalRefundsOverriden,
   refundTransactionsTypeBasedOnFormType,
 } = getRefundInfo({
@@ -377,25 +387,25 @@ const splitsTotal = computed(() => {
   return form.value.splits.reduce((sum, split) => sum + (split.amount ?? 0), 0);
 });
 
-const isRecordExternal = computed(() => {
-  if (!transaction.value) return false;
-  // Check the account type, not the transaction type
-  // A system transaction in a monobank account should be treated as external
-  const account = accountsRecord.value[transaction.value.accountId];
-  return (account && account.type !== ACCOUNT_TYPES.system) ?? false;
+const toLeg = ({ tx }: { tx: TransactionModel | undefined }) => ({
+  transaction: tx,
+  account: tx ? accountsRecord.value[tx.accountId] : undefined,
 });
-const isOppositeTxExternal = computed(() => {
-  if (!oppositeTransaction.value) return false;
-  // Check the account type, not the transaction type
-  // A system transaction in a monobank account should be treated as external
-  const account = accountsRecord.value[oppositeTransaction.value.accountId];
-  return (account && account.type !== ACCOUNT_TYPES.system) ?? false;
-});
-// If record is external (and not a transfer), the account field will be disabled,
+const isLegOnBankAccount = ({ tx }: { tx: TransactionModel | undefined }) =>
+  !!tx && isOnBankAccount({ transaction: tx, account: accountsRecord.value[tx.accountId] });
+const isRecordOnBankAccount = computed(() => isLegOnBankAccount({ tx: transaction.value }));
+const isOppositeOnBankAccount = computed(() => isLegOnBankAccount({ tx: oppositeTransaction.value }));
+const isRecordBankLocked = computed(() => isBankLockedLeg(toLeg({ tx: transaction.value })));
+const isOppositeBankLocked = computed(() => isBankLockedLeg(toLeg({ tx: oppositeTransaction.value })));
+// Both transfer legs share the date, so a pre-seam leg on either side caps it.
+const seamCutoff = computed(() =>
+  getBankSeamCutoff({ legs: [toLeg({ tx: transaction.value }), toLeg({ tx: oppositeTransaction.value })] }),
+);
+// If record is on a bank account (and not a transfer), the account field will be disabled,
 // so we need to preselect the account. For transfer cases, prepopulateForm fills
 // form.account based on which side is the source – bypassing this preselection.
 watch(
-  () => isRecordExternal.value,
+  () => isRecordOnBankAccount.value,
   (value) => {
     if (!value) return;
     if (transaction.value?.transferNature === TRANSACTION_TRANSFER_NATURE.transfer_out_wallet) return;
@@ -556,6 +566,7 @@ const loanDestinationAccounts = computed(() =>
 const isDestinationTypeLocked = computed(() => isTwoLegTransfer(transaction.value?.transferNature));
 
 const {
+  isAmountFieldDisabled,
   isTargetFieldVisible,
   isTargetAmountFieldDisabled,
   targetCurrency,
@@ -565,8 +576,10 @@ const {
 } = useTransferFormLogic({
   form,
   isTransferTx,
-  isRecordExternal,
-  isOppositeTxExternal,
+  isRecordBankLocked,
+  isOppositeBankLocked,
+  isRecordOnBankAccount,
+  isOppositeOnBankAccount,
   transaction: transaction.value,
   oppositeTransaction: oppositeTransaction.value,
   linkedTransaction,
@@ -581,21 +594,8 @@ const {
 // 3. When editing, validate refAmount in the same way
 
 const isEditableAsManual = computed(() =>
-  isTxEditableAsManual({ transaction: transaction.value, isRecordExternal: isRecordExternal.value }),
+  isTxEditableAsManual({ transaction: transaction.value, isRecordBankLocked: isRecordBankLocked.value }),
 );
-
-const isAmountFieldDisabled = computed(() => {
-  if (!isEditableAsManual.value) {
-    if (!isTransferTx.value) return true;
-    if (transaction.value?.transactionType === TRANSACTION_TYPES.expense) {
-      return true;
-    }
-  }
-  // Means it's "Out of wallet"
-  if (form.value.account?.id === OUT_OF_WALLET_ACCOUNT_MOCK.id) return true;
-  if (isTransferTx.value && linkedTransaction.value) return true;
-  return false;
-});
 
 // Only the bank sync confirms a plan on a connected account, so edit mode keeps the
 // toggle interactive solely for manual-account plans: turning it off books the money
@@ -631,7 +631,7 @@ const isPlannedBadgeVisible = computed(
 const isSelectedAccountConnected = computed(() => {
   const account = resolvedAccount.value;
   if (!account) return false;
-  return isConnectedAccount({ account });
+  return isBankAccount({ account });
 });
 
 const nonTransferSourceAccounts = computed(() =>
@@ -917,6 +917,7 @@ const validationRules = computed(() => {
   const overpayActive = isLoanOverpayCheckActive.value && !isPreAnchorLoanPayment.value;
   const overpayOnAmount = overpayActive && !isCurrenciesDifferent.value;
   const overpayOnTarget = overpayActive && isCurrenciesDifferent.value;
+  const seamCap = form.value.isPlanned ? undefined : seamCutoff.value;
 
   return {
     form: {
@@ -937,6 +938,17 @@ const validationRules = computed(() => {
               notFutureDate: helpers.withMessage(
                 () => t('dialogs.manageTransaction.form.validation.futureDate'),
                 (value: unknown) => !(value instanceof Date) || value.getTime() <= endOfDay(new Date()).getTime(),
+              ),
+            }
+          : {}),
+        ...(seamCap
+          ? {
+              notAfterBankSeam: helpers.withMessage(
+                () =>
+                  t('transactions.bankSeamDateError', {
+                    date: formatBankSeamDay({ seamAt: seamCap }),
+                  }),
+                (value: unknown) => !(value instanceof Date) || isBefore(value, seamCap),
               ),
             }
           : {}),
@@ -1106,6 +1118,7 @@ const submit = ({ keepOpen = false }: { keepOpen?: boolean } = {}) => {
     showLegErrors.value = true;
     return;
   }
+  if (isRefundSharesOverAssigned.value) return;
 
   shouldKeepOpen = isCreateMoreAvailable.value && (keepOpen || Boolean(props.createMore));
   submitMutation.mutate({
@@ -1114,10 +1127,10 @@ const submit = ({ keepOpen = false }: { keepOpen?: boolean } = {}) => {
     isTransferTx: isTransferTx.value,
     isCurrenciesDifferent: isCurrenciesDifferent.value,
     isOriginalRefundsOverriden: isOriginalRefundsOverriden.value,
-    isRecordExternal: isRecordExternal.value,
+    isRecordBankLocked: isRecordBankLocked.value,
+    isRecordOnBankAccount: isRecordOnBankAccount.value,
     transaction: transaction.value,
     linkedTransaction: linkedTransaction.value,
-    oppositeTransaction: oppositeTransaction.value,
     pendingAttachments: pendingAttachments.value,
   });
 };
@@ -1126,8 +1139,6 @@ const unlinkTransactions = () => {
   if (!transaction.value) return;
   unlinkMutation.mutate({
     transferIds: [transaction.value.transferId],
-    transactionId: transaction.value.id,
-    oppositeTransactionId: oppositeTransaction.value?.id,
   });
 };
 
@@ -1151,21 +1162,21 @@ const paymentLegsLabel = computed(() =>
     ? t('dialogs.manageTransaction.form.paymentLegs.receivedIntoLabel')
     : t('dialogs.manageTransaction.form.paymentLegs.paidFromLabel'),
 );
+// A hand-entered row dated on or after the bank seam; the bank-sync copy would be wrong for it.
+const manualAfterLinkHint = computed(() => {
+  const tx = transaction.value;
+  const seamAt = tx ? accountsRecord.value[tx.accountId]?.bankSeamAt : null;
+  if (!tx || !seamAt || isEditableAsManual.value || tx.accountType !== ACCOUNT_TYPES.system) return undefined;
+  return t('transactions.inlineEdit.manualAfterLinkDescription', { date: formatBankSeamDay({ seamAt }) });
+});
 const paymentLegsHint = computed(() => {
   if (!isEditableAsManual.value) return t('dialogs.manageTransaction.form.paymentLegs.syncedHint');
   if (isSavedMultiAccount.value) return t('dialogs.manageTransaction.form.paymentLegs.editHint');
   return undefined;
 });
-const deletedPaymentParts = computed(() =>
-  isSavedMultiAccount.value
-    ? transaction.value!.paymentParts!.map((part) => ({
-        ...part,
-        accountName: getAccountName({ accountId: part.accountId }),
-        signedAmount: transaction.value!.transactionType === TRANSACTION_TYPES.expense ? -part.amount : part.amount,
-      }))
-    : [],
+const isDeleteBlockedByPayment = computed(
+  () => !!transaction.value && isMutable.value && isPaymentTransaction({ transaction: transaction.value }),
 );
-const hasLinkedPaymentParts = computed(() => deletedPaymentParts.value.some((part) => part.isLinked));
 
 const deleteTransactionHandler = () => {
   if (!canDelete.value) return;
@@ -1200,9 +1211,16 @@ const isAttachmentsAvailable = computed(() => !!transaction.value?.id || !form.v
 const isLocationFilled = computed(() => form.value.latitude != null || form.value.longitude != null);
 
 const isRefundAvailable = computed(
-  () => !isTransferTx.value && !isAccountSharedWithCaller.value && !isMultiAccount.value,
+  () => !isTransferTx.value && !isAccountSharedWithCaller.value && !isMultiAccount.value && !form.value.isPlanned,
 );
-const isRefundLinked = computed(() => !!(form.value.refundsTx || form.value.refundedByTxs?.length));
+const isRefundLinked = computed(() => !!(form.value.refundsTx?.length || form.value.refundedByTxs?.length));
+// The field is hidden then, so a kept link would be submitted unseen and its errors could not be shown.
+watch(isRefundAvailable, (isAvailable) => {
+  if (isAvailable) return;
+  const emptyValue = hasInAppRefundLinks.value ? null : undefined;
+  if (form.value.refundsTx?.length) form.value.refundsTx = emptyValue;
+  if (form.value.refundedByTxs?.length) form.value.refundedByTxs = emptyValue;
+});
 const refundFieldRef = ref<InstanceType<typeof MarkAsRefundField> | null>(null);
 
 const moreOptionsRef = ref<HTMLElement | null>(null);
@@ -1215,7 +1233,7 @@ const { shown: shownFields, chips: addFieldChips } = useFieldReveal({
   isTransferTx,
   isLoanDestination,
   isAttachmentsAvailable,
-  isRefundAvailable,
+  isRefundAvailable: () => isRefundAvailable.value && !isRefundsLoadFailed.value,
   isRefundLinked,
   isOptionalFieldEnabled,
   onLinkRefund: () => refundFieldRef.value!.open(),
@@ -1416,7 +1434,7 @@ const isDuplicateVisible = computed(
       transferNature: transaction.value?.transferNature,
       form: form.value,
       transferDestinationType: transferDestinationType.value,
-      hasLockedLeg: !!linkedTransaction.value || isRecordExternal.value || isOppositeTxExternal.value,
+      hasLockedLeg: !!linkedTransaction.value || isRecordOnBankAccount.value || isOppositeOnBankAccount.value,
       hasOppositeTransaction: !!oppositeTransaction.value,
       sourceAccounts: txTargetableSourceAccountsActiveFirst.value,
       plannedAccounts: plannedTargetableAccountsActiveFirst.value,
@@ -1476,7 +1494,7 @@ onUnmounted(() => {
           :error-message="timeErrorMessage"
           :hide-input-time="isMobileView"
           :calendar-options="{
-            maxDate: form.isPlanned ? undefined : new Date(),
+            maxDate: form.isPlanned ? undefined : seamCutoff ? subMilliseconds(seamCutoff, 1) : new Date(),
           }"
           @update:model-value="onDateUpdate"
         />
@@ -1659,7 +1677,7 @@ onUnmounted(() => {
                 type="button"
                 variant="secondary"
                 size="icon"
-                class="size-10 shrink-0 md:size-9"
+                class="shrink-0"
                 :disabled="isFormFieldsDisabled"
                 :aria-label="$t('dialogs.manageTransaction.form.location.pickOnMap')"
                 @click="isLocationPickerOpen = true"
@@ -1696,10 +1714,27 @@ onUnmounted(() => {
           @apply-suggestion="applySuggestedOriginalAmount"
         />
       </FormRow>
+      <FormRow v-if="shownFields.excludeFromStats" data-optional-field="excludeFromStats">
+        <div class="flex items-center justify-between gap-3">
+          <div class="flex min-w-0 items-center gap-1.5">
+            <span class="text-sm font-medium">{{ $t('dialogs.manageTransaction.form.excludeFromStatsLabel') }}</span>
+            <HintIcon :content="$t('dialogs.manageTransaction.form.excludeFromStatsTooltip')" />
+          </div>
+          <Switch
+            v-model="form.excludeFromStats"
+            :disabled="isFormFieldsDisabled"
+            :aria-label="$t('dialogs.manageTransaction.form.excludeFromStatsLabel')"
+          />
+        </div>
+      </FormRow>
+
       <!-- Refund linking on accounts shared *with* the caller isn't supported by the
            backend yet — hide the field rather than offering a button that errors on
            submit. Owner-side shares (`share.isOwner === true`) keep full access. -->
-      <div v-if="isRefundAvailable" :class="cn(isRefundLinked && 'mb-3.5')">
+      <div
+        v-if="isRefundAvailable"
+        :class="cn((isRefundLinked || isRefundsLoadFailed || hasExternalRefundLink) && 'mb-3.5')"
+      >
         <MarkAsRefundField
           ref="refundFieldRef"
           v-model:refunds="form.refundsTx"
@@ -1707,13 +1742,16 @@ onUnmounted(() => {
           :transaction-id="transaction?.id"
           :is-record-creation="isFormCreation"
           :transaction-type="refundTransactionsTypeBasedOnFormType"
-          :disabled="isFormFieldsDisabled"
-          :is-there-original-refunds="Boolean(originalRefunds.length)"
-          :current-transaction-splits="transaction?.splits"
+          :disabled="isFormFieldsDisabled || isRefundsLoadFailed"
+          :is-load-failed="isRefundsLoadFailed"
+          :has-external-link="hasExternalRefundLink"
+          :is-there-original-refunds="hasInAppRefundLinks"
           :current-amount="form.amount ? Number(form.amount) : null"
           :current-currency-code="form.account?.currencyCode"
-          :current-category="form.category"
           :current-account-id="form.account?.id"
+          :current-time="form.time"
+          :saved-refund-shares="savedRefundShares"
+          :is-over-assigned="isRefundSharesOverAssigned"
         />
       </div>
       <div v-if="addFieldChips.length" class="flex flex-wrap items-center gap-1.5">
@@ -1725,8 +1763,8 @@ onUnmounted(() => {
           :key="chip.key"
           type="button"
           variant="outline"
-          size="sm"
-          class="h-8 gap-1.5 rounded-full px-3 text-sm"
+          size="xs"
+          class="gap-1.5 rounded-full text-sm"
           :disabled="isFormFieldsDisabled"
           @click="chip.onClick"
         >
@@ -1844,6 +1882,10 @@ onUnmounted(() => {
               <ReuseDateField v-if="isMobileView" />
             </div>
 
+            <p v-if="manualAfterLinkHint" class="text-muted-foreground -mt-1 px-1 text-xs">
+              {{ manualAfterLinkHint }}
+            </p>
+
             <p v-if="wouldOverdrawLoanSource" class="text-warning-text -mt-1 px-1 text-xs">
               {{ $t('dialogs.loanPayment.overdrawWarning', { account: form.account?.name ?? '' }) }}
             </p>
@@ -1865,6 +1907,8 @@ onUnmounted(() => {
               :main-transaction-id="transaction?.id"
               :disabled="isFormFieldsDisabled"
               :is-main-locked="!isEditableAsManual"
+              :is-main-account-locked="isRecordOnBankAccount"
+              :main-locked-hint="manualAfterLinkHint"
               :hint="paymentLegsHint"
               :main-amount-error="amountErrorMessage"
               :show-leg-errors="showLegErrors"
@@ -2118,10 +2162,7 @@ onUnmounted(() => {
           </div>
         </div>
 
-        <div
-          v-if="!isMobileView"
-          class="bg-muted border-border border-l px-6 py-6 [--color-input-background:var(--card)] dark:bg-black/20 dark:[--color-input-background:var(--input-background)]"
-        >
+        <div v-if="!isMobileView" class="bg-muted border-border border-l px-6 py-6 dark:bg-black/20">
           <ReuseMoreOptions />
         </div>
       </div>
@@ -2136,61 +2177,14 @@ onUnmounted(() => {
         variant="destructive"
         @click="isDeleteConfirmOpen = true"
       >
+        <Trash2Icon class="size-4" />
         {{ $t('dialogs.manageTransaction.form.deleteButton') }}
       </Button>
+      <p v-else-if="isDeleteBlockedByPayment" class="text-muted-foreground text-sm">
+        {{ $t('dialogs.manageTransaction.form.deleteBlockedByPayment') }}
+      </p>
       <ResponsiveAlertDialog
-        v-if="deletedPaymentParts.length"
-        v-model:open="isDeleteConfirmOpen"
-        :confirm-label="
-          deletedPaymentParts.length === 2
-            ? $t('dialogs.manageTransaction.form.paymentLegs.deleteBoth')
-            : $t('dialogs.manageTransaction.form.paymentLegs.deleteAll')
-        "
-        confirm-variant="destructive"
-        :confirm-disabled="isFormFieldsDisabled"
-        @confirm="deleteTransactionHandler"
-      >
-        <template #title>{{ $t('dialogs.manageTransaction.form.paymentLegs.deleteTitle') }}</template>
-        <template #description>
-          {{
-            hasLinkedPaymentParts
-              ? $t('dialogs.manageTransaction.form.paymentLegs.deleteLinkedDescription')
-              : $t('dialogs.manageTransaction.form.paymentLegs.deleteDescription', {
-                  count: deletedPaymentParts.length,
-                })
-          }}
-        </template>
-        <ul class="border-border divide-border divide-y rounded-lg border text-sm">
-          <li
-            v-for="part in deletedPaymentParts"
-            :key="part.transactionId"
-            class="flex items-center justify-between gap-3 px-3 py-2"
-          >
-            <span class="flex min-w-0 items-center gap-2">
-              <span class="truncate">{{ part.accountName }}</span>
-              <StatusBadge v-if="hasLinkedPaymentParts" :variant="part.isLinked ? 'success' : 'destructive'">
-                {{
-                  part.isLinked
-                    ? $t('dialogs.manageTransaction.form.paymentLegs.partKept')
-                    : $t('dialogs.manageTransaction.form.paymentLegs.partDeleted')
-                }}
-              </StatusBadge>
-            </span>
-            <span class="text-amount tabular-nums">
-              {{
-                formatUIAmount(part.signedAmount, {
-                  currency: part.currencyCode,
-                })
-              }}
-            </span>
-          </li>
-        </ul>
-        <p class="text-muted-foreground mt-2 text-xs">
-          {{ $t('dialogs.manageTransaction.form.paymentLegs.deleteSinglePartHint') }}
-        </p>
-      </ResponsiveAlertDialog>
-      <ResponsiveAlertDialog
-        v-else
+        v-if="canDelete"
         v-model:open="isDeleteConfirmOpen"
         :confirm-label="$t('dialogs.manageTransaction.form.deleteButton')"
         confirm-variant="destructive"

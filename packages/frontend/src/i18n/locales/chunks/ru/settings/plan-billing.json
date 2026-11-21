@@ -10,10 +10,10 @@
       "manageBilling": "Manage billing",
       "manageInAppStore": "Manage in the App Store",
       "currentPlan": "Current plan",
-      "recommended": "Рекомендуемые",
+      "recommended": "Recommended",
       "previousPlan": "Previous plan",
       "yourPlan": "Your plan",
-      "planned": "Запланированные",
+      "planned": "Planned",
       "voteOnRoadmap": "Vote on the roadmap",
       "roadmapNote": "No charge. Upvote it and we'll let you know when it ships.",
       "saveUpTo": "Save up to {percent}%",
@@ -32,6 +32,7 @@
       "current": {
         "lifetime": "{plan} · lifetime",
         "lifetimeMeta": "Everything in Plus. No renewal, no card on file.",
+        "lifetimePurchaseMeta": "No renewal, no card on file.",
         "earlyAdopterNote": "Thank you for being here early. Everything in Plus as it exists today is yours for life. Features we add from here on, and anything that costs us per user to run, belong to the paid plans. Want them? 50% off any plan, forever, applied automatically at checkout.",
         "seats": "1 household seat | {count} household seats",
         "subscription": "{tier} · {cycle}",
@@ -61,9 +62,9 @@
       },
       "status": {
         "pastDue": "Payment failed",
-        "active": "Активно",
-        "paused": "Приостановлено",
-        "readOnly": "Только чтение",
+        "active": "Active",
+        "paused": "Paused",
+        "readOnly": "Read-only",
         "trial": "Plus features",
         "processing": "Processing",
         "earlyAdopter": "Early adopter",
@@ -90,8 +91,8 @@
         "early_adopter": "Early Adopter"
       },
       "cycle": {
-        "month": "Ежемесячно",
-        "year": "Ежегодно"
+        "month": "Monthly",
+        "year": "Yearly"
       },
       "perCycle": {
         "month": "/month",

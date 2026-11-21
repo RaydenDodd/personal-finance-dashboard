@@ -8,6 +8,7 @@
     "allTransactions": "Todas as transações",
     "transactions": "Transações",
     "transactionGroups": "Grupos",
+    "trash": "Trash",
     "analytics": "Análises",
     "optimizations": "Otimizações",
     "automations": "Automações",
@@ -31,6 +32,7 @@
   "sidebar": {
     "collapse": "Recolher barra lateral",
     "expand": "Expandir barra lateral",
+    "resize": "Resize sidebar",
     "settings": {
       "title": "Configurações",
       "sections": {

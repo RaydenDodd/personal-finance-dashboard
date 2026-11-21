@@ -6,8 +6,8 @@
       "creditLimit": {
         "label": "Includi i limiti di credito nel saldo",
         "description": "Se abilitata, i limiti di credito vengono sottratti dai saldi dei conti nelle statistiche e nel grafico dell'andamento dei saldi. In questo modo viene mostrata la reale situazione finanziaria invece del credito disponibile.",
-        "successNotification": "Impostazioni aggiornate con successo",
-        "errorNotification": "Impossibile aggiornare le impostazioni"
+        "successNotification": "Impostazione aggiornata correttamente",
+        "errorNotification": "Impossibile aggiornare l'impostazione"
       },
       "payday": {
         "label": "Il ciclo dello stipendio inizia il",
@@ -84,6 +84,21 @@
         },
         "successNotification": "Impostazioni dei menu dei conti aggiornate",
         "errorNotification": "Impossibile aggiornare le impostazioni dei menu dei conti"
+      },
+      "iosAddExpense": {
+        "label": "Aggiungi spesa su iPhone",
+        "description": "Impostazioni della scorciatoia Aggiungi spesa su iPhone (Siri, Spotlight e tasto Azione).",
+        "showBankAccounts": {
+          "label": "Mostrare i conti con connessione bancaria",
+          "description": "Disattivato per impostazione predefinita: le transazioni dei conti con connessione bancaria arrivano tramite la sincronizzazione."
+        },
+        "hiddenCategories": {
+          "label": "Categorie nascoste",
+          "description": "Le categorie selezionate, con le relative sottocategorie, vengono nascoste dall'elenco delle categorie della scorciatoia.",
+          "placeholder": "Nessuna"
+        },
+        "successNotification": "Impostazioni di Aggiungi spesa su iPhone aggiornate",
+        "errorNotification": "Aggiornamento delle impostazioni di Aggiungi spesa su iPhone non riuscito"
       },
       "showUpcomingTransactions": {
         "label": "Mostra transazioni in scadenza",

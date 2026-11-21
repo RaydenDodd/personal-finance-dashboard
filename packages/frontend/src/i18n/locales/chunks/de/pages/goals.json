@@ -26,7 +26,7 @@
         "title": "Keine Treffer für \"{query}\"",
         "titleNoQuery": "Keine Ziele entsprechen diesen Filtern",
         "description": "Versuche einen anderen Namen oder schließe archivierte Ziele ein.",
-        "includeArchived": "Archivierte einschließen"
+        "includeArchived": "Archivierte einbeziehen"
       },
       "row": {
         "saved": "Gespart",
@@ -62,7 +62,7 @@
       "pause": "Pausieren",
       "resume": "Fortsetzen",
       "archive": "Archivieren",
-      "unarchive": "Wiederherstellen",
+      "unarchive": "Aus Archiv wiederherstellen",
       "delete": "Löschen"
     },
     "deleteDialog": {
@@ -82,7 +82,7 @@
       "trialDaysLeft": "Ziele-Testversion · noch {n} Tag | Ziele-Testversion · noch {n} Tage",
       "trialTitle": "Teste Ziele 14 Tage kostenlos",
       "trialDescription": "Das Erstellen und Bearbeiten von Zielen ist Teil von Essential. Starte eine Testversion, um dein erstes Ziel einzurichten.",
-      "startTrial": "Kostenlose Testphase starten",
+      "startTrial": "Kostenlose Testversion starten",
       "trialEnded": "Deine Ziele-Testversion ist abgelaufen. Deine Ziele bleiben sichtbar; führe ein Upgrade durch, um sie zu bearbeiten."
     },
     "details": {
@@ -106,12 +106,12 @@
         "target": "Ziel",
         "saved": "Gespart",
         "left": "Verbleibend",
-        "needs": "Erfordert",
+        "needs": "Bedarf",
         "pace": "Tempo",
         "reached": "Erreicht",
         "aboveTarget": "{amount} über Ziel",
         "notEnoughHistory": "nicht genügend Verlauf",
-        "around": "etwa {date}",
+        "around": "ca. {date}",
         "dueInDays": "fällig in {count} Tag | fällig in {count} Tagen",
         "overdue": "überfällig"
       },
@@ -134,7 +134,7 @@
         "emptyDescription": "Verknüpfe Konten unter \"Ziel bearbeiten\", um den Fortschritt zu verfolgen.",
         "columns": {
           "account": "Konto",
-          "share": "Teilen",
+          "share": "Anteil",
           "balance": "Saldo",
           "counted": "Angerechnet"
         },
@@ -152,10 +152,10 @@
       "progress": {
         "kpi": {
           "monthlyPace": "Monatliches Tempo",
-          "needs": "benötigt {amount}/Monat",
+          "needs": "benötigt {amount}/Mo.",
           "projectedFinish": "Prognostizierter Abschluss",
           "onTime": "pünktlich",
-          "early": "{count} Mon. früher",
+          "early": "{count} Mo. früher",
           "late": "{count} Mon. zu spät",
           "targetDate": "Ziel {date}",
           "savedIn": "Gespart in {count} Mon.",
@@ -164,7 +164,7 @@
           "leftDueInDays": "{amount} verbleibend, fällig in {count} Tag | {amount} verbleibend, fällig in {count} Tagen",
           "leftOverdue": "{amount} verbleibend, überfällig"
         },
-        "timeline": "Verlauf",
+        "timeline": "Zeitachse",
         "noHistory": "Noch kein Verlauf",
         "insufficient": {
           "title": "Noch nicht genügend Verlauf für ein Tempo",
@@ -180,7 +180,7 @@
         "chartAria": "Ziel-Ersparnisse im Zeitverlauf",
         "legend": {
           "saved": "Gespart",
-          "projection": "Hochrechnung",
+          "projection": "Prognose",
           "target": "Ziel"
         },
         "monthlyChange": "Monatliche Änderung"
@@ -220,9 +220,9 @@
         "planned": "Du planst, {amount} pro Monat zu sparen."
       },
       "thisGoal": "dieses Ziel",
-      "createSubmit": "{amount} budgetieren",
+      "createSubmit": "Ziel erstellen",
       "errors": {
-        "nameRequired": "Gib einen Namen ein",
+        "nameRequired": "Name eingeben",
         "amountRequired": "Gib einen Betrag über 0 ein",
         "dateNotFuture": "Wähle ein Datum nach dem heutigen Tag",
         "accountsRequired": "Füge mindestens ein Konto hinzu",
@@ -242,7 +242,7 @@
         "percent": "Prozent",
         "amount": "Betrag"
       },
-      "searchPlaceholder": "Konten suchen",
+      "searchPlaceholder": "Konten durchsuchen",
       "holder": "{share}% in {name}",
       "archived": "Archiviert",
       "fixedOnly": "Vollständig genutzt: {holders} · nur Festbetrag",
@@ -254,7 +254,7 @@
       "amountAriaLabel": "Festbetrag von {name}",
       "errors": {
         "invalid": "Gib einen Anteil über 0% ein",
-        "invalidAmount": "Gib einen Betrag über 0 ein",
+        "invalidAmount": "Betrag größer als 0 eingeben",
         "overMax": "Max. {max}%",
         "overMaxUsedBy": "Max. {max}% ({holders})",
         "noShareLeft": "Kein Anteil mehr übrig: {holders}. Verwende stattdessen einen Festbetrag."
@@ -285,7 +285,7 @@
       "short": "Das sind {amount} pro Monat zu wenig.",
       "showGoals": "Ziele anzeigen",
       "hideGoals": "Ziele ausblenden",
-      "perMonth": "{amount}/Monat",
+      "perMonth": "{amount}/Mo.",
       "goalFits": "Passt",
       "goalDoesNotFit": "Passt nicht",
       "footnote": "\"Typischerweise gespart\" ist der mediane monatliche Nettofluss der letzten 12 vollständigen Monate. Umbuchungen zwischen deinen eigenen Konten werden ausgenommen. Ziele werden nach dem nächstgelegenen Datum zuerst geprüft.",
@@ -308,7 +308,7 @@
       "shares": {
         "label": "Kontoanteile",
         "counted": "Rechnet {amount} an · {percent}%",
-        "whole": "Ganzes Konto · rechnet {amount} an",
+        "whole": "Gesamtes Konto · zählt {amount}",
         "fixed": "Festbetrag · zählt {amount}",
         "free": "{free}% frei · rechnet {amount} an",
         "inputLabel": "Anteil von {name}",
@@ -319,16 +319,16 @@
         "title": "Jetzt vs. Was wäre wenn",
         "from": "ab {date}",
         "now": "Jetzt",
-        "whatIf": "Was wäre wenn",
+        "whatIf": "Was wäre, wenn",
         "monthly": "Monatlich für das Ziel",
         "reached": "Erreicht etwa",
         "against": "Verglichen mit dem Ziel",
         "needed": "Benötigt pro Monat",
         "reachedAlready": "Erreicht",
         "offset": {
-          "early": "{count} Mon. früher",
+          "early": "{count} Mo. früher",
           "onTime": "Pünktlich",
-          "late": "{count} Mon. zu spät"
+          "late": "{count} Mo. später"
         }
       },
       "autoTag": "Auto",

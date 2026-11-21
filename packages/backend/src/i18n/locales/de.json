@@ -8,11 +8,11 @@
     "groupNotFound": "Gruppe oder Konto nicht gefunden",
     "accountNotFound": "Konto nicht gefunden!",
     "accountUpdateFailed": "Account-Aktualisierung ist nicht erfolgreich",
-    "accountNoExternalId": "Konto hat keine externe ID",
     "accountNoExternalIdMonobank": "Konto hat keine externe ID von Monobank",
     "accountNoExternalIdEnableBanking": "Konto hat keine externe ID von Enable Banking aktivieren",
     "accountNotFoundForTransaction": "Konto für diese Transaktion nicht gefunden",
     "deleteBlockedByLoanPayments": "Dieses Konto hat Kreditrückzahlungen. Löschen oder neu zuweisen, bevor das Konto gelöscht wird.",
+    "deleteBlockedByTrashedLoanPayments": "Dieses Konto enthält Kreditrückzahlungen im Papierkorb. Lösche diese unwiderruflich aus dem Papierkorb, bevor du das Konto löschst.",
     "loanBalanceUseUpdateLoan": "Passe den Restbetrag des Kredits direkt auf dessen Detailseite an, nicht in den Kontoeinstellungen.",
     "loanCategoryImmutable": "Die Kategorie eines Kreditkontos kann nicht geändert werden.",
     "dedicatedFlowCategoryNotAllowed": "Kredit- und Fahrzeugkonten müssen über ihre eigenen Endpunkte erstellt werden und nicht über den Endpunkt der allgemeinen Konten.",
@@ -39,6 +39,7 @@
     "systemCannotBeMoved": "Systemkategorien können nicht verschoben werden.",
     "parentNotFound": "Kategorie mit dieser parentId existiert nicht.",
     "systemParentForbidden": "Systemkategorien können nicht als übergeordnete Kategorie verwendet werden.",
+    "defaultCannotBeDeleted": "Diese Kategorie enthält nicht kategorisierte Transaktionen und kann nicht gelöscht werden.",
     "ownParent": "Eine Kategorie kann nicht ihre eigene übergeordnete Kategorie sein.",
     "underOwnSubcategory": "Eine Kategorie kann nicht unter ihre eigene Unterkategorie verschoben werden.",
     "nestingTooDeep": "Kategorien können nicht tiefer als {{max}} Ebenen verschachtelt werden."
@@ -56,7 +57,7 @@
     "idCannotBeChanged": "ID kann nicht geändert werden",
     "editReadonlyFields": "Versuch, schreibgeschützte Felder des externen Kontos zu bearbeiten",
     "changeTypeNotAllowed": "Es ist nicht erlaubt, den „transactionType“ eines Nicht-System-Kontos zu ändern",
-    "bothRefundFieldsNotAllowed": "Du kannst nicht gleichzeitig „refundedByTxIds“ und „refundsTxId“ verwenden. Bitte wähle eines von beiden.",
+    "bothRefundFieldsNotAllowed": "Du kannst nicht gleichzeitig \"refundedByTxIds\" und \"refundsTargets\" verwenden. Bitte entscheide dich für eines von beiden.",
     "oppositeTransactionNotFound": "Gegenbuchung zum Aktualisieren wurde nicht gefunden",
     "transactionIdNotExist": "Transaktion mit der angegebenen ID existiert nicht!",
     "notAuthorizedToEdit": "Du bist nicht berechtigt, diese Transaktion zu bearbeiten.",
@@ -100,6 +101,16 @@
     "paymentLinkNotAllowed": "Diese Transaktion kann nicht mit der Zahlung verknüpft werden. Es können nur eigene Einnahmen oder Ausgaben desselben Typs verknüpft werden – keine Umbuchung, Rückerstattung, Aufteilung, ausstehende Transaktion oder Teil einer anderen Zahlung.",
     "paymentLinkedAmountFixed": "Der Betrag einer verknüpften Transaktion kann nicht geändert werden.",
     "paymentLinkedTypeMismatch": "Verknüpfte Transaktionen müssen denselben Typ haben wie die Zahlung. Hebe die Verknüpfung zuerst auf.",
+    "refunds": {
+      "wholeLinkWithPartials": "Ein Link für eine vollständige Rückerstattung kann nicht mit Teil-Links kombiniert werden",
+      "externalLinkWithOthers": "Eine Rückerstattung für einen Kauf außerhalb der App kann nicht mit anderen Rückerstattungs-Links kombiniert werden",
+      "externalLinkWithAmount": "Eine Rückerstattung für eine Transaktion außerhalb der App kann keinen Teilbetrag haben; sie deckt immer die gesamte Rückerstattung ab.",
+      "totalExceedsRefund": "Die Summe der Rückerstattungs-Link-Beträge kann den Betrag der Rückerstattungstransaktion nicht überschreiten",
+      "totalExceedsSplit": "Der Gesamtrückerstattungsbetrag kann den Aufteilungsbetrag nicht überschreiten",
+      "totalExceedsOriginal": "Der Gesamtrückerstattungsbetrag kann den ursprünglichen Transaktionsbetrag nicht überschreiten",
+      "refundOfRefund": "Eine \"Rückerstattung\"-Transaktion kann nicht erstattet werden",
+      "duplicateLink": "Diese Rückerstattung ist bereits mit dieser Transaktion verknüpft"
+    },
     "splits": {
       "splitsOnTransfer": "Umbuchungstransaktionen können keine Aufteilungen hinzugefügt werden",
       "splitLimitExceeded": "Maximal {{max}} Aufteilungen pro Transaktion erlaubt",
@@ -113,8 +124,7 @@
       "exceedTotal": "Gesamter Aufteilungsbetrag ({{total}}) übersteigt den Transaktionsbetrag ({{transactionAmount}})",
       "invalidData": "Ungültige Aufteilungsdaten",
       "splitNotFound": "Aufteilung nicht gefunden",
-      "cannotDeleteWithRefunds": "Aufteilung, auf die sich Rückerstattungen beziehen, kann nicht gelöscht werden",
-      "cannotReduceBelowRefunded": "Für diese Aufteilung liegen Rückerstattungen in Höhe von insgesamt {{refundsText}} vor. Du kannst sie nicht unter den erstatteten Betrag reduzieren. Um sie weiter zu reduzieren, hebe zuerst die Verknüpfung der Rückerstattungen auf."
+      "cannotDeleteWithRefunds": "Aufteilung, auf die sich Rückerstattungen beziehen, kann nicht gelöscht werden"
     },
     "reconciliation": {
       "systemNotAllowed": "Nur mit der Bank verbundene Transaktionen können zusammengeführt oder entfernt werden.",
@@ -135,6 +145,13 @@
         "message_one": "1 Transaktion ist seit über einer Woche ausstehend. Überprüfe sie bei deiner Bank, damit dein Kontostand korrekt bleibt.",
         "message_other": "{{count}} Transaktionen sind seit über einer Woche ausstehend. Überprüfe sie bei deiner Bank, damit dein Kontostand korrekt bleibt."
       }
+    },
+    "trash": {
+      "paymentNotTrashable": "Entferne es zuerst von der Zahlung, um es zu löschen.",
+      "portfolioNotTrashable": "Trenne zuerst die Verknüpfung zum Portfolio, um es zu löschen.",
+      "ventureNotTrashable": "Trenne zuerst die Verknüpfung zur Beteiligung, um es zu löschen.",
+      "accountTypeChanged": "Diese Transaktion kann nicht wiederhergestellt werden, da sich ihr Kontotyp geändert hat.",
+      "loanPaymentLegMissing": "Diese Kreditrückzahlung kann nicht wiederhergestellt werden, da ihre andere Seite gelöscht wurde."
     }
   },
   "budgets": {
@@ -247,6 +264,7 @@
     "cannotDeleteHoldingWithActivePosition": "Eine Position mit aktivem Bestand kann nicht gelöscht werden. Bitte verkaufe oder übertrage zuerst alle Anteile.",
     "transactionAlreadyTransfer": "Transaktion ist bereits als Umbuchung markiert und kann nicht mit einem Portfolio verknüpft werden.",
     "transactionAlreadyLinkedToPortfolio": "Transaktion ist bereits mit einer Portfolio-Umbuchung verknüpft.",
+    "linkedTransactionMustBelongToDestinationAccount": "Die verknüpfte Transaktion muss zum Zielkonto gehören.",
     "transactionAlreadyLinkedToVenture": "Transaktion ist bereits mit einer Portfolio-Umbuchung verknüpft",
     "portfolioTransferNotFound": "Portfolio-Umbuchung nicht gefunden",
     "exchangeCurrenciesMustDiffer": "Währungen beim Umtausch müssen unterschiedlich sein",
@@ -279,7 +297,6 @@
     "connectionNotFound": "Verbindung nicht gefunden",
     "connectionNotFoundOrNotYours": "Verbindung nicht gefunden oder gehört dir nicht",
     "providerNoReauthorization": "Anbieter {{providerType}} unterstützt keine Re-Autorisierung",
-    "providerNotFoundInRegistry": "Anbieter {{providerType}} nicht in der Registrierung gefunden",
     "connectionIdNotFound": "Bankdatenanbieter-Verbindung {{connectionId}} nicht gefunden",
     "accountIdNotFound": "Konto {{accountId}} nicht gefunden",
     "providerTypeMismatch": "Verbindung {{connectionId}} gilt für Anbieter {{actualType}}, nicht {{expectedType}}",
@@ -318,7 +335,7 @@
     "periodLoadNotSupported": "Das Laden von Transaktionen für einen benutzerdefinierten Zeitraum wird von diesem Anbieter nicht unterstützt.",
     "transactionsLoadedCount": "{{count}} Transaktionen geladen.",
     "transactionsAllDuplicates": "{{count}} Transaktionen für diesen Zeitraum gefunden – alle wurden bereits importiert.",
-    "transactionsNoneInPeriod": "Der Anbieter hat für diesen Zeitraum keine Transaktionen zurückgemeldet.",
+    "transactionsNoneInPeriod": "Der Datenanbieter hat für diesen Zeitraum keine Transaktionen zurückgegeben.",
     "apiError": "{{provider}} API-Fehler: {{message}}",
     "simplefinUnreachable": "SimpleFIN ist vorübergehend nicht erreichbar. Bitte versuche es später erneut.",
     "currencySelectionRequired": "Für Konto \"{{account}}\" wurde von der Bank keine Währung übermittelt – wähle eine Währung aus, bevor du es verbindest.",
@@ -327,9 +344,7 @@
       "invalidCredentialsFormat": "Ungültiges Format der Zugangsdaten für Monobank",
       "invalidApiToken": "Ungültiger Monobank API-Schlüssel",
       "rateLimitExceeded": "Monobank API-Ratenbegrenzung überschritten. Bitte versuche es in einer Minute erneut.",
-      "accountNotFound": "Konto {{accountExternalId}} bei Monobank nicht gefunden",
       "accountReconnectRequired": "Dieses Konto ist bei Monobank nicht mehr verfügbar. Bitte verbinde deine Monobank-Verbindung erneut, um die Synchronisierung fortzusetzen.",
-      "webhookNotImplemented": "handleWebhook ist für Monobank noch nicht implementiert",
       "unknownCurrencyCode": "Unbekannter Währungscode: {{numericCode}}",
       "geoBlocked": "Monobank blockiert Anfragen von der IP dieses Servers. Deaktiviere VPN oder verwende eine ukrainische IP-Adresse.",
       "geoBlockedProduction": "Monobank-Synchronisierung ist vorübergehend nicht verfügbar. Wir wurden benachrichtigt und arbeiten daran. Bitte wende dich an den Support, falls dies dringend ist."
@@ -365,8 +380,7 @@
       "invalidTokens": "Ungültige Akahu-Token. Überprüfe den User Access Token und den App ID Token auf deiner Akahu-App-Seite.",
       "accountNoExternalId": "Konto hat keine externe ID für die Akahu-Synchronisierung.",
       "accountNotFound": "Akahu-Konto nicht gefunden.",
-      "rateLimited": "Akahu limitiert derzeit die Anfragen. Bitte versuche es in Kürze noch einmal.",
-      "missingCurrency": "Akahu hat für dieses Konto keine Währung zurückgegeben."
+      "rateLimited": "Akahu limitiert derzeit die Anfragen. Bitte versuche es in Kürze noch einmal."
     },
     "simplefin": {
       "invalidCredentialsFormat": "Ungültiges Format der SimpleFIN-Zugangsdaten.",
@@ -381,8 +395,7 @@
     "walutomat": {
       "invalidCredentialsFormat": "Ungültiges Format der Walutomat-Zugangsdaten. API-Schlüssel und privater Schlüssel sind erforderlich.",
       "invalidApiKey": "Ungültiger Walutomat API-Schlüssel oder privater Schlüssel.",
-      "accountNoExternalId": "Walutomat-Konto hat keine externe ID.",
-      "walletNotFound": "Walutomat-Wallet für Währung nicht gefunden: {{currency}}"
+      "accountNoExternalId": "Walutomat-Konto hat keine externe ID."
     }
   },
   "csvImport": {
@@ -478,6 +491,7 @@
     "aiRateLimited": "Ratenlimit des KI-Anbieters erreicht. Bitte versuche es in einigen Minuten erneut.",
     "aiExtractionFailed": "KI-Extrahierung fehlgeschlagen. Bitte versuche es erneut.",
     "ynab": {
+      "importAlreadyInProgress": "Ein YNAB-Import läuft bereits. Warte, bis dieser abgeschlossen ist, bevor du einen weiteren startest.",
       "parse": {
         "fileEmpty": "YNAB Register.csv ist leer.",
         "unparseable": "YNAB Register.csv konnte nicht als CSV-Datei verarbeitet werden.",
@@ -653,7 +667,6 @@
         "home-garden": "Haus & Garten",
         "pets-animals": "Haustiere",
         "electronics-accessories": "Elektronik & Zubehör",
-        "gifts-joy": "Geschenke & Freude",
         "stationery-tools": "Schreibwaren & Werkzeug",
         "free-time": "Freizeit",
         "drugstore-chemist": "Drogerie"
@@ -690,7 +703,8 @@
         "books-audio-subscriptions": "Bücher, Audio & Abos",
         "tv-streaming": "TV & Streaming",
         "holiday-trips-hotels": "Urlaub, Reisen & Hotels",
-        "charity-gifts": "Spenden & Geschenke",
+        "gifts": "Geschenke",
+        "charity": "Spenden",
         "alcohol-tobacco": "Alkohol & Tabak",
         "lottery-gambling": "Lotto & Glücksspiel"
       },
@@ -713,7 +727,7 @@
         "realty": "Immobilien",
         "vehicles-chattels": "Fahrzeuge & Sachwerte",
         "financial-investments": "Finanzinvestitionen",
-        "savings": "Sparen",
+        "savings": "Ersparnisse",
         "collections": "Sammlungen"
       },
       "income": {
@@ -746,6 +760,11 @@
         "requiresAccountField": "Automatische Erfassung erfordert ein Konto, auf das die Transaktion gebucht wird.",
         "requiresAmountField": "Automatische Erfassung erfordert \"expectedAmount\" und \"expectedCurrencyCode\".",
         "excludesMatchingField": "Automatische Erfassung und Abgleichsregeln schließen sich gegenseitig aus."
+      },
+      "customInterval": {
+        "required": "Ein benutzerdefinierter Zyklus benötigt eine Intervalleinheit und eine Anzahl.",
+        "presetConflict": "Eine Intervalleinheit und eine Anzahl können nur beim benutzerdefinierten Zyklus festgelegt werden.",
+        "countOutOfRange": "Die Anzahl des Intervalls muss für diese Einheit zwischen {{min}} und {{max}} liegen."
       }
     }
   },
@@ -757,8 +776,8 @@
     "accountMustBeSystem": "In einer Transaktionsvorlage können nur manuell verwaltete Konten verwendet werden.",
     "accountArchived": "Archivierte Konten können nicht in einer Vorlage verwendet werden.",
     "categoryNotFound": "Kategorie nicht gefunden oder gehört nicht zum Nutzer.",
-    "payeeNotFound": "Zahlungsempfänger nicht gefunden oder gehört nicht zum Nutzer.",
-    "tagsNotFound": "Ein oder mehrere Tags wurden nicht gefunden oder gehören nicht zum Nutzer."
+    "payeeNotFound": "Zahlungsempfänger nicht gefunden oder gehört nicht zum Benutzer.",
+    "tagsNotFound": "Ein oder mehrere Tags wurden nicht gefunden oder gehören nicht zum Benutzer."
   },
   "payees": {
     "aliasNameRequired": "Alias-Name ist erforderlich",
@@ -822,9 +841,9 @@
   "auth": {
     "errors": {
       "passwordAlreadySet": "Dein Konto hat bereits ein Passwort.",
-      "passwordTooShort": "Passwort ist zu kurz.",
-      "passwordTooLong": "Passwort ist zu lang.",
-      "reauthenticationRequired": "Zu deiner Sicherheit melde dich erneut an, um diese Änderung vorzunehmen.",
+      "passwordTooShort": "Das Passwort ist zu kurz.",
+      "passwordTooLong": "Das Passwort ist zu lang.",
+      "reauthenticationRequired": "Melde dich aus Sicherheitsgründen erneut an, um diese Änderung vorzunehmen.",
       "signupsDisabled": "Registrierungen wurden vom Administrator deaktiviert."
     }
   },

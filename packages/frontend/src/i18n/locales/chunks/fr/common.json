@@ -28,7 +28,9 @@
       "retry": "Réessayer",
       "copyInviteLink": "Copier le lien d'invitation",
       "moveTo": "Déplacer vers…",
-      "learnMore": "En savoir plus"
+      "learnMore": "En savoir plus",
+      "undo": "Undo",
+      "more": "More"
     },
     "ui": {
       "close": "Fermer",
@@ -104,7 +106,7 @@
       "mobilePayment": "Paiement mobile",
       "voucher": "Bon d'achat",
       "webPayment": "Paiement en ligne",
-      "none": "Aucune"
+      "none": "None"
     },
     "vehicleClasses": {
       "sedan": "Berline",
@@ -144,13 +146,15 @@
         "description": "Analyse les nouvelles opérations et suggère celles associées à un suivi intelligent."
       },
       "transferMatching": {
-        "name": "Rapprochement des virements",
+        "name": "Transfer matching",
         "description": "Vérifie les résultats de détection des transferts et conserve les paires qui semblent correspondre à de véritables transferts"
       }
     },
     "transactions": {
       "delete": {
         "success": "Suppression réussie",
+        "undoSuccess": "Restored",
+        "undoError": "Couldn't undo. You can still restore it from the Trash.",
         "error": "Échec de la suppression de l'opération !"
       },
       "submit": {
@@ -255,7 +259,7 @@
       "remove": "Supprimer le logo",
       "pickerDescription": "Pick a brand logo or use letters instead.",
       "updatedToast": "Logo updated",
-      "resetToast": "Logo supprimé",
+      "resetToast": "Logo removed",
       "updateError": "Couldn't update the logo. Try again.",
       "lettersLabel": "Lettres (1–2)",
       "lettersPlaceholder": "AB",
@@ -564,12 +568,12 @@
       "removeTransactionDescriptionNormal": "Voulez-vous vraiment retirer cette opération du groupe ?",
       "removeButtonText": "Retirer",
       "removeAndDeleteButtonText": "Retirer et supprimer le groupe",
-      "removeFromGroup": "Retirer du groupe",
+      "removeFromGroup": "Remove from group",
       "saveError": "Couldn't save the group",
       "removeError": "Couldn't remove the transaction from the group",
-      "manageTransactions": "Gérer",
+      "manageTransactions": "Manage",
       "showMoreNote": "Show more",
-      "showLessNote": "Voir moins",
+      "showLessNote": "Show less",
       "summary": {
         "transactions": "Opérations",
         "net": "Net",
@@ -579,6 +583,56 @@
     },
     "transactionGroupRecord": {
       "transactionCountLabel": "opérations"
+    }
+  },
+  "mcpToolsets": {
+    "core": {
+      "label": "Core",
+      "description": "Accounts, transactions, categories, tags, payees and reports"
+    },
+    "subscriptions": {
+      "label": "Recurring payments",
+      "description": "Recurring payments, their periods and planned transactions"
+    },
+    "budgetPlans": {
+      "label": "Budget plans",
+      "description": "Plans, lines, line goals and savings goals"
+    },
+    "trackers": {
+      "label": "Trackers",
+      "description": "Spending trackers and their suggestions"
+    },
+    "automations": {
+      "label": "Automations",
+      "description": "Rules, payee aliases, ignored payee names and tag reminders"
+    },
+    "review": {
+      "label": "Review and cleanup",
+      "description": "Transfer and refund matches, duplicates and stuck pending transactions"
+    },
+    "groupsTemplates": {
+      "label": "Groups and templates",
+      "description": "Transaction groups and transaction templates"
+    },
+    "investments": {
+      "label": "Investments",
+      "description": "Portfolios, holdings, securities and investment transactions"
+    },
+    "ventures": {
+      "label": "Ventures",
+      "description": "Venture platforms, deals and events"
+    },
+    "loansVehicles": {
+      "label": "Loans and vehicles",
+      "description": "Loans with their payments, and vehicles"
+    },
+    "currencies": {
+      "label": "Currencies",
+      "description": "Your currencies and exchange rates"
+    },
+    "imports": {
+      "label": "Imports and sharing",
+      "description": "Import batches (list, undo) and bank connections (status, unlink an account); sharing is read only."
     }
   }
 }

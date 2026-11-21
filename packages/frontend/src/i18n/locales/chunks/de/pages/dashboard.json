@@ -81,9 +81,17 @@
       },
       "expensesStructure": {
         "title": "Ausgabenstruktur",
+        "incomeTitle": "Einnahmenstruktur",
         "today": "Heute",
         "vsPreviousPeriod": "gegenüber vorherigem Zeitraum",
-        "viewButton": "Anzeigen"
+        "viewButton": "Anzeigen",
+        "back": "Zurück",
+        "openInAnalytics": "In Analysen öffnen",
+        "metric": {
+          "expenses": "Ausgaben",
+          "income": "Einnahmen"
+        },
+        "seeTransactions": "Transaktionen anzeigen"
       },
       "latestTransactions": {
         "title": "Neueste Transaktionen",
@@ -180,7 +188,7 @@
       },
       "cashAccounts": {
         "vsLastMonth": "vs. Vormonat",
-        "runwayUnit": "Mon.",
+        "runwayUnit": "Mo.",
         "runwayLabel": "an Ausgaben",
         "loadFailed": "Deine Konten konnten nicht geladen werden",
         "runwayHint": {
@@ -238,7 +246,7 @@
         },
         "hints": {
           "noHistory": "Der Vergleich erscheint nach deinem ersten vollen Monat.",
-          "plannedFailed": "Couldn't load planned transactions. The forecast may not include them.",
+          "plannedFailed": "Geplante Transaktionen konnten nicht geladen werden. Die Prognose enthält sie möglicherweise nicht.",
           "fewMonths": "Durchschnitt des {n} vollen Monats, den du bisher hast. | Durchschnitt der {n} vollen Monate, die du bisher hast."
         },
         "loadFailed": "Deine Ausgaben konnten nicht geladen werden.",
@@ -265,9 +273,9 @@
         "vsTrailingRate": "{delta} Prozentpunkte ggü. 12-Monats-Satz {rate}",
         "average": "Ø {amount}",
         "amount": "Steuern",
-        "shareOfIncome": "Anteil an Einnahmen",
+        "shareOfIncome": "Anteil am Einkommen",
         "shareOfTaxes": "Steueranteil",
-        "other": "Sonstiges",
+        "other": "Sonstige",
         "moreCategories": "{count} weitere",
         "viewDetails": "Cashflow anzeigen",
         "loadFailed": "Steuerdaten konnten nicht geladen werden.",
@@ -314,6 +322,28 @@
         "empty": "Noch keine Tracker",
         "ended": "Beendet",
         "create": "Tracker erstellen"
+      },
+      "tagAnalysis": {
+        "title": "Tag-Analyse",
+        "noTagsTitle": "Keine Tags ausgewählt",
+        "noTagsDescription": "Wähle in den Widget-Einstellungen die zu vergleichenden Tags aus.",
+        "ofIncome": "des Einkommens",
+        "remaining": "Nicht zugewiesen",
+        "targetTooltip": "Ziel: {value}%",
+        "settings": {
+          "tagsLabel": "Tags",
+          "tagsPlaceholder": "Tags auswählen",
+          "targetsLabel": "Ziele, %",
+          "targetsNoneSet": "Keine festgelegt",
+          "targetsSetCount": "{set} von {total} festgelegt",
+          "targetsEmpty": "Füge zuerst Tags hinzu, um deren Ziele festzulegen",
+          "targetPlaceholder": "Keine",
+          "percentBaseLabel": "Prozent von",
+          "percentBaseTags": "Ausgewählte Tags",
+          "percentBaseIncome": "Einkommen",
+          "includeTransfersLabel": "Transfers einbeziehen",
+          "includeTransfersDescription": "Transfers auf eigene Konten und Portfolios als Ausgaben werten"
+        }
       },
       "emptyState": "Keine Daten im ausgewählten Zeitintervall vorhanden.",
       "registry": {
@@ -399,6 +429,10 @@
             "showReached": "Erreichte Ziele anzeigen"
           },
           "reachedSection": "Erreicht"
+        },
+        "tagAnalysis": {
+          "name": "Tag-Analyse",
+          "description": "Sieh dir an, wie sich deine Ausgaben auf ausgewählte Tags wie Bedürfnisse, Wünsche und Ersparnisse verteilen"
         }
       }
     },
@@ -418,6 +452,8 @@
       "payAction": "Bezahlt",
       "listTitle": "Bevorstehend",
       "dueCount": "{count} fällig",
+      "daysLate": "{count}d late",
+      "overdueCount": "{count} overdue",
       "nothingDue": "Nichts fällig in 3 Tagen",
       "overdueHint": "Überfällig seit {date}",
       "dueSoonHint": "Fällig in den nächsten 3 Tagen",

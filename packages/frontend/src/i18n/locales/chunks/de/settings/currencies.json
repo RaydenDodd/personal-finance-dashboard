@@ -57,7 +57,7 @@
           "types": {
             "account": "Konten",
             "portfolio": "Portfolio-Anzeigewährung",
-            "holding": "Positionen",
+            "holding": "Bestände",
             "portfolioCash": "Cash-Bestände",
             "portfolioTransfer": "Portfolio-Umbuchungen",
             "investmentTransaction": "Investitionstransaktionen",

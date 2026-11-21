@@ -38,6 +38,8 @@ interface GainsTransactionRow {
   /** DECIMAL(20,10) strings. */
   price: string;
   fees: string;
+  /** DECIMAL(20,10) string. Cash moved in the holding's currency; net of fees for dividends. */
+  amount: string;
 }
 
 interface HoldingValue {
@@ -59,12 +61,14 @@ interface HoldingValue {
   unrealizedGainPercent?: string;
   realizedGainValue?: string;
   realizedGainPercent?: string;
+  dividendIncome: string;
   // Present only when the portfolio has a displayCurrencyCode; percent fields are ratios and need no conversion
   displayCurrencyCode?: string;
   displayCostBasis?: string;
   displayMarketValue?: string;
   displayUnrealizedGainValue?: string;
   displayRealizedGainValue?: string;
+  displayDividendIncome?: string;
   // Internal: holding→base rate already resolved here; not part of the holdings API response
   baseRate?: number;
   costBasisKnown?: boolean;
@@ -119,7 +123,7 @@ const getHoldingValuesImpl = async ({ portfolioId, date, userId }: GetHoldingVal
       ['date', 'ASC'],
       ['createdAt', 'ASC'],
     ],
-    attributes: ['securityId', 'date', 'category', 'quantity', 'price', 'fees'],
+    attributes: ['securityId', 'date', 'category', 'quantity', 'price', 'fees', 'amount'],
     raw: true,
   })) as unknown as GainsTransactionRow[];
 
@@ -334,6 +338,12 @@ const getHoldingValuesImpl = async ({ portfolioId, date, userId }: GetHoldingVal
       securityTransactions,
     );
 
+    const dividendIncome = securityTransactions
+      .filter((tx) => tx.category === INVESTMENT_TRANSACTION_CATEGORY.dividend)
+      .reduce((sum, tx) => sum.add(Money.fromDecimal(tx.amount)), Money.zero())
+      .toNumber()
+      .toFixed(2);
+
     const displayRate = await getDisplayRate(holding.currencyCode);
 
     holdingValues.push({
@@ -358,6 +368,7 @@ const getHoldingValuesImpl = async ({ portfolioId, date, userId }: GetHoldingVal
       unrealizedGainPercent: gains.unrealizedGainPercent.toFixed(2),
       realizedGainValue: gains.realizedGainValue.toFixed(2),
       realizedGainPercent: gains.realizedGainPercent.toFixed(2),
+      dividendIncome,
       ...(baseRate !== null && { baseRate }),
       ...(displayRate !== null && {
         displayCurrencyCode,
@@ -368,6 +379,7 @@ const getHoldingValuesImpl = async ({ portfolioId, date, userId }: GetHoldingVal
         displayMarketValue: toDisplay({ decimal: marketValue, rate: displayRate }),
         displayUnrealizedGainValue: toDisplay({ decimal: gains.unrealizedGainValue.toFixed(2), rate: displayRate }),
         displayRealizedGainValue: toDisplay({ decimal: gains.realizedGainValue.toFixed(2), rate: displayRate }),
+        displayDividendIncome: toDisplay({ decimal: dividendIncome, rate: displayRate }),
       }),
     });
   }

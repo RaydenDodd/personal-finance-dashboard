@@ -36,6 +36,28 @@ export function slimAccountsForMcp(accounts: AccountApiResponse[]) {
   }));
 }
 
+/**
+ * The detail view of one account: the list fields plus what a single-account read, a write
+ * result or a bank unlink needs (opening balance, bank link, logo, currency precision, share).
+ */
+export function slimAccountDetailForMcp(account: AccountApiResponse) {
+  const [slim] = slimAccountsForMcp([account]);
+  return {
+    ...slim,
+    defaultPaymentType: account.defaultPaymentType,
+    initialBalance: account.initialBalance,
+    refInitialBalance: account.refInitialBalance,
+    bankDataProviderConnectionId: account.bankDataProviderConnectionId,
+    bankProviderType: account.bankProviderType,
+    bankSeamAt: account.bankSeamAt,
+    needsRelink: account.needsRelink,
+    logoDomain: account.logoDomain,
+    logoInitials: account.logoInitials,
+    logoColor: account.logoColor,
+    share: account.share,
+  };
+}
+
 export function slimPortfolioTransferForMcp(transfer: PortfolioTransfers) {
   return {
     id: transfer.id,
@@ -64,27 +86,49 @@ export function slimPortfolioTransferForMcp(transfer: PortfolioTransfers) {
   };
 }
 
-export function slimTransactionsForMcp(txs: TransactionApiResponse[]) {
-  return txs.map((tx) => ({
-    id: tx.id,
-    time: tx.time,
-    amount: tx.amount,
-    refAmount: tx.refAmount,
-    currencyCode: tx.currencyCode,
-    note: tx.note,
-    transactionType: tx.transactionType,
-    transferNature: tx.transferNature,
-    accountId: tx.accountId,
-    categoryId: tx.categoryId,
-    isPlanned: tx.isPlanned,
-    ...(tx.tags && { tags: tx.tags.map((t) => ({ id: t.id, name: t.name })) }),
-    ...(tx.splits && {
-      splits: tx.splits.map((s) => ({ categoryId: s.categoryId, amount: s.amount, note: s.note })),
-    }),
-    ...(tx.transactionGroups && { transactionGroups: tx.transactionGroups }),
-    ...(tx.paymentParts && { paymentParts: tx.paymentParts }),
-    ...(tx.paymentTotal !== undefined && { paymentTotal: tx.paymentTotal }),
-  }));
+/**
+ * A transaction as an assistant reads it. `payeeNames` maps the caller's payee ids to names
+ * (`getPayeeNames`); a transaction with no payee, or one whose payee is not the caller's, gets
+ * `payee: null`. It is required so no tool serializes a transaction without its payee.
+ *
+ * `transferId` is shared by the two legs of a linked transfer, so an assistant can see which rows
+ * are paired and read both legs with `get_transactions_by_id`.
+ */
+export function slimTransactionsForMcp({
+  transactions,
+  payeeNames,
+}: {
+  transactions: TransactionApiResponse[];
+  payeeNames: ReadonlyMap<string, string>;
+}) {
+  return transactions.map((tx) => {
+    const payeeName = tx.payeeId ? payeeNames.get(tx.payeeId) : undefined;
+
+    return {
+      id: tx.id,
+      time: tx.time,
+      amount: tx.amount,
+      refAmount: tx.refAmount,
+      currencyCode: tx.currencyCode,
+      note: tx.note,
+      transactionType: tx.transactionType,
+      transferNature: tx.transferNature,
+      transferId: tx.transferId,
+      accountId: tx.accountId,
+      categoryId: tx.categoryId,
+      isPlanned: tx.isPlanned,
+      excludeFromStats: tx.excludeFromStats,
+      payeeId: tx.payeeId,
+      payee: tx.payeeId && payeeName !== undefined ? { id: tx.payeeId, name: payeeName } : null,
+      ...(tx.tags && { tags: tx.tags.map((t) => ({ id: t.id, name: t.name })) }),
+      ...(tx.splits && {
+        splits: tx.splits.map((s) => ({ categoryId: s.categoryId, amount: s.amount, note: s.note })),
+      }),
+      ...(tx.transactionGroups && { transactionGroups: tx.transactionGroups }),
+      ...(tx.paymentParts && { paymentParts: tx.paymentParts }),
+      ...(tx.paymentTotal !== undefined && { paymentTotal: tx.paymentTotal }),
+    };
+  });
 }
 
 /**
@@ -101,6 +145,8 @@ export type SubscriptionDetailForMcp = Pick<
   | 'name'
   | 'type'
   | 'frequency'
+  | 'intervalUnit'
+  | 'intervalCount'
   | 'startDate'
   | 'endDate'
   | 'isActive'
@@ -133,6 +179,8 @@ export function slimSubscriptionDetailForMcp(sub: SubscriptionDetailForMcp) {
     expectedAmount: sub.expectedAmount,
     expectedCurrencyCode: sub.expectedCurrencyCode,
     frequency: sub.frequency,
+    intervalUnit: sub.intervalUnit,
+    intervalCount: sub.intervalCount,
     startDate: sub.startDate,
     endDate: sub.endDate,
     isActive: sub.isActive,

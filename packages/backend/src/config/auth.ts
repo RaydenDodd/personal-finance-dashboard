@@ -2,7 +2,7 @@ import { expo } from '@better-auth/expo';
 import { oauthProvider } from '@better-auth/oauth-provider';
 import { passkey } from '@better-auth/passkey';
 import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from '@bt/shared/const/auth';
-import { OAUTH_PROVIDER } from '@bt/shared/types';
+import { OAUTH_PROVIDER, type SocialOAuthProvider } from '@bt/shared/types';
 import { EnvVar, isEnvConfigured } from '@common/utils/env';
 import { getAppleClientSecretFromEnv } from '@config/apple-client-secret';
 import { createSessionHooks } from '@config/auth-hooks/session-hooks';
@@ -26,6 +26,8 @@ import { APIError, betterAuth } from 'better-auth';
 import { genericOAuth, jwt } from 'better-auth/plugins';
 import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
+
+import { OAUTH_PROVIDER_SCOPES } from '../services/mcp/oauth-scopes';
 
 // Fail-fast: AUTH_ORIGIN must be set in production. Without it, OAuth error
 // redirects, login/consent pages, and trusted origins all fall back to
@@ -81,6 +83,20 @@ const DEV_TRUSTED_ORIGINS =
 // ponytail: signed once at boot and valid for 6 months; a process running longer breaks web Apple sign-in.
 // Re-sign on a timer if deploys ever get that rare.
 const appleClientSecret = getAppleClientSecretFromEnv();
+export const ENABLED_SOCIAL_PROVIDERS = (
+  [OAUTH_PROVIDER.google, OAUTH_PROVIDER.github, OAUTH_PROVIDER.apple] as SocialOAuthProvider[]
+).filter((provider) =>
+  provider === OAUTH_PROVIDER.apple
+    ? Boolean(appleClientSecret)
+    : isEnvConfigured(
+        provider === OAUTH_PROVIDER.google ? EnvVar.GOOGLE_CLIENT_ID : EnvVar.GITHUB_CLIENT_ID,
+        provider === OAUTH_PROVIDER.google ? process.env.GOOGLE_CLIENT_ID : process.env.GITHUB_CLIENT_ID,
+      ) &&
+      isEnvConfigured(
+        provider === OAUTH_PROVIDER.google ? EnvVar.GOOGLE_CLIENT_SECRET : EnvVar.GITHUB_CLIENT_SECRET,
+        provider === OAUTH_PROVIDER.google ? process.env.GOOGLE_CLIENT_SECRET : process.env.GITHUB_CLIENT_SECRET,
+      ),
+);
 
 const createAuthProfile = (publicOrigin: string | null) => {
   const profileBaseURL = publicOrigin || process.env.BETTER_AUTH_URL || 'https://localhost:8081';
@@ -111,7 +127,7 @@ const createAuthProfile = (publicOrigin: string | null) => {
       modelName: 'ba_session',
       expiresIn: 60 * 60 * 24 * 7, // 7 days
       updateAge: 60 * 60 * 24, // Refresh session daily
-      // Required by @better-auth/oauth-provider – sessions must be persisted in DB
+      // Required by @better-auth/oauth-provider â€“ sessions must be persisted in DB
       storeSessionInDatabase: true,
       // Cache session data in a signed cookie to avoid DB lookups on every request.
       // Reduces ba_user queries from ~3.7k/week to ~100-200 (once per 5min per session).
@@ -329,14 +345,14 @@ const createAuthProfile = (publicOrigin: string | null) => {
         // See: https://github.com/anthropics/claude-ai-mcp/issues/111
         // finance:write and finance:delete gate mutation tools. They're accepted by the
         // consent flow but not advertised in public metadata until the first tool using
-        // them ships – see oauth-metadata.route.ts and the static .well-known mirrors.
-        scopes: ['finance:read', 'finance:write', 'finance:delete', 'profile:read', 'offline_access', 'claudeai'],
+        // them ships â€“ see oauth-metadata.route.ts and the static .well-known mirrors.
+        scopes: [...OAUTH_PROVIDER_SCOPES],
         accessTokenExpiresIn: 72 * 60 * 60, // 72 hours
         refreshTokenExpiresIn: 60 * 24 * 60 * 60, // 60 days
         allowDynamicClientRegistration: true,
         allowUnauthenticatedClientRegistration: true,
         grantTypes: ['authorization_code', 'refresh_token'],
-        // Use opaque tokens stored in DB (not JWTs) – our MCP auth verifies via DB lookup
+        // Use opaque tokens stored in DB (not JWTs) â€“ our MCP auth verifies via DB lookup
         disableJwtPlugin: true,
         resources: OAUTH_RESOURCE_IDENTIFIERS,
         // Clients self-register (Claude.ai etc.) and get no ba_oauth_client_resource links,
@@ -398,7 +414,7 @@ const createAuthProfile = (publicOrigin: string | null) => {
       // cookie. Each worktree sets a distinct prefix (see scripts/docker-dev.sh) so
       // their session cookies coexist.
       cookiePrefix: `${process.env.BETTER_AUTH_COOKIE_PREFIX || 'bt_auth'}${publicOrigin ? '_public' : ''}`,
-      // Secure cookies only when the app is actually served over https – a
+      // Secure cookies only when the app is actually served over https â€“ a
       // production build served over plain http (self-host trial on a LAN IP)
       // would otherwise have its session cookie silently dropped by the
       // browser. Rationale in shouldUseSecureCookies.
@@ -446,22 +462,22 @@ const createAuthProfile = (publicOrigin: string | null) => {
           //
           //   1. App-user creation fails (no Users row at all). The user is
           //      unusable: they can't retry signup (email taken in ba_user) and
-          //      can't sign in (no app user → 401). We delete the orphan
+          //      can't sign in (no app user â†’ 401). We delete the orphan
           //      ba_user (cascades to ba_account/ba_session) and re-throw so
           //      the signup endpoint returns 5xx and the client can retry.
           //
           //   2. Default seeding fails AFTER the user row exists. The account
           //      is usable; categories/tags can be reconciled manually. We log
-          //      to Sentry and return – better than locking out a working
+          //      to Sentry and return â€“ better than locking out a working
           //      account because of a non-critical seed step.
           after: async (user) => {
             // Trim user.name at the source so whitespace-only values (e.g. " ")
-            // are treated as missing – without this they're truthy and skip
+            // are treated as missing â€“ without this they're truthy and skip
             // the email-prefix fallback, producing a generic "user" slug.
             const trimmedName = typeof user.name === 'string' ? user.name.trim() : '';
             // `username` becomes the slug; `fullName` becomes firstName/lastName.
             // We deliberately don't pass the email-prefix or "user" fallbacks as
-            // fullName – those aren't real human names and would clutter the
+            // fullName â€“ those aren't real human names and would clutter the
             // display fields.
             const usernameSource = trimmedName || user.email?.split('@')[0] || 'user';
             let appUser: Awaited<ReturnType<typeof createAppUserWithUniqueUsername>>;
@@ -477,7 +493,7 @@ const createAuthProfile = (publicOrigin: string | null) => {
               logger.info(`Successfully created app user profile with id: ${appUser.id}`);
             } catch (error) {
               logger.error({
-                message: 'Failed to create app user – rolling back ba_user',
+                message: 'Failed to create app user â€“ rolling back ba_user',
                 error: error as Error,
               });
               captureException({

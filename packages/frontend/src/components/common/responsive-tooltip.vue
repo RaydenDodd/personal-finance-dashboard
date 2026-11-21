@@ -4,7 +4,7 @@ import * as Popover from '@/components/lib/ui/popover';
 import * as Tooltip from '@/components/lib/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { createReusableTemplate, useMediaQuery } from '@vueuse/core';
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useChartInteraction } from '@/composable/charts/use-chart-interaction';
 
 defineOptions({ inheritAttrs: false });
@@ -38,6 +38,14 @@ const props = withDefaults(
 const contentClass = computed(() =>
   cn(props.variant === 'chart' && [CHART_TOOLTIP_SURFACE_CLASS, CHART_TOOLTIP_SIZING_CLASS], props.contentClassName),
 );
+
+// `disabled` closes the tooltip instead of unmounting it, so a focused trigger keeps focus.
+watch(
+  () => props.disabled,
+  (disabled) => {
+    if (disabled) open.value = false;
+  },
+);
 </script>
 
 <template>
@@ -48,11 +56,9 @@ const contentClass = computed(() =>
       </slot>
     </UseTemplate>
 
-    <slot v-if="disabled" />
-
     <!-- Touch devices: Popover (tap to open) -->
-    <template v-else-if="isTouch">
-      <Popover.Popover v-model:open="open">
+    <template v-if="isTouch">
+      <Popover.Popover :open="open" @update:open="(value) => (open = value && !disabled)">
         <Popover.PopoverTrigger as-child :class="$attrs.class">
           <slot />
         </Popover.PopoverTrigger>
@@ -66,7 +72,7 @@ const contentClass = computed(() =>
     <!-- Non-touch devices: Tooltip (hover to show) -->
     <template v-else>
       <Tooltip.TooltipProvider :delay-duration="delayDuration">
-        <Tooltip.Tooltip>
+        <Tooltip.Tooltip v-model:open="open" :disabled="disabled">
           <Tooltip.TooltipTrigger as-child :class="$attrs.class">
             <slot />
           </Tooltip.TooltipTrigger>

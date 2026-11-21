@@ -122,7 +122,9 @@ interface UpdateTransactionBasePayload {
     destinationAccountId?: string;
     destinationTransactionId?: string;
     refundsTxId?: string | null;
-    refundedByTxIds?: string[] | null;
+    refundsSplitId?: string | null;
+    refundedByTxIds?: (string | { txId: string; amount?: number | null })[] | null;
+    refundsTargets?: { txId: string; splitId?: string | null; amount?: number | null }[] | null;
     splits?: SplitInput[] | null;
     originalAmount?: number | null;
     originalCurrencyCode?: string | null;
@@ -264,18 +266,10 @@ export function getTransactionsByIds<R extends boolean | undefined = undefined>(
   });
 }
 
-export function getTransactionById<R extends boolean | undefined = undefined>({
-  id,
-  includeSplits,
-  raw,
-}: {
-  id: string;
-  includeSplits?: boolean;
-  raw?: R;
-}) {
+export function getTransactionById<R extends boolean | undefined = undefined>({ id, raw }: { id: string; raw?: R }) {
   return makeRequest<TransactionApiResponse | null, R>({
     method: 'get',
-    url: `/transactions/${id}${includeSplits ? '?includeSplits=true' : ''}`,
+    url: `/transactions/${id}`,
     raw,
   });
 }
@@ -307,6 +301,7 @@ export function bulkUpdateTransactions<R extends boolean | undefined = undefined
 interface BulkDeleteResult {
   deletedCount: number;
   deletedIds: string[];
+  skippedIds: string[];
 }
 
 export function bulkDeleteTransactions<R extends boolean | undefined = undefined>({

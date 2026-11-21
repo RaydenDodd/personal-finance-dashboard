@@ -35,7 +35,7 @@
       "duplicateSecurity": "Dasselbe Wertpapier ist in einer anderen Zeile ausgewählt",
       "willMerge": "Wird mit bestehender Position zusammengeführt",
       "txns": "{count} Transaktion | {count} Transaktionen",
-      "expand": "Ausklappen",
+      "expand": "Aufklappen",
       "collapse": "Einklappen",
       "deleteHolding": "Position löschen",
       "deleteTransaction": "Transaktion löschen",

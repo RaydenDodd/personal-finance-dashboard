@@ -12,6 +12,7 @@ import type { TransactionApiResponse } from '@root/serializers/transactions.seri
 
 import {
   type SubscriptionDetailForMcp,
+  slimAccountDetailForMcp,
   slimAccountsForMcp,
   slimGoalsForMcp,
   slimSubscriptionDetailForMcp,
@@ -37,6 +38,7 @@ const fullAccount: AccountApiResponse = {
   excludeFromStats: false,
   bankDataProviderConnectionId: 'conn-1',
   bankProviderType: null,
+  bankSeamAt: '2026-11-01T00:00:00.000Z',
   logoDomain: null,
   logoInitials: null,
   logoColor: null,
@@ -73,6 +75,7 @@ const fullTransaction: TransactionApiResponse = {
   originalId: 'orig-1',
   refundLinked: false,
   isPlanned: false,
+  excludeFromStats: false,
   plannedMerge: null,
   isPending: false,
   payeeId: null,
@@ -115,6 +118,7 @@ describe('MCP serializers', () => {
         'externalId',
         'bankDataProviderConnectionId',
         'bankProviderType',
+        'bankSeamAt',
         'needsRelink',
         'share',
         'initialBalance',
@@ -125,37 +129,70 @@ describe('MCP serializers', () => {
     });
   });
 
+  describe('slimAccountDetailForMcp', () => {
+    it('adds the opening balance, bank link and logo to the list fields', () => {
+      const slim = slimAccountDetailForMcp(fullAccount);
+      expect(slim).toMatchObject({
+        id: 'acc-1',
+        currentBalance: 250.5,
+        initialBalance: 100,
+        refInitialBalance: 100,
+        bankDataProviderConnectionId: 'conn-1',
+        bankSeamAt: '2026-11-01T00:00:00.000Z',
+        needsRelink: true,
+        logoDomain: null,
+      });
+    });
+
+    it('drops the owner id and the external id', () => {
+      const slim = slimAccountDetailForMcp(fullAccount) as unknown as Record<string, unknown>;
+      for (const dropped of ['userId', 'externalId']) {
+        expect(slim).not.toHaveProperty(dropped);
+      }
+    });
+  });
+
   describe('slimTransactionsForMcp', () => {
+    const noPayees = new Map<string, string>();
+
     it('keeps only AI-relevant transaction fields', () => {
-      const slim = slimTransactionsForMcp([fullTransaction])[0]!;
+      const slim = slimTransactionsForMcp({ transactions: [fullTransaction], payeeNames: noPayees })[0]!;
       expect(Object.keys(slim).toSorted()).toEqual(
         [
           'accountId',
           'amount',
           'categoryId',
           'currencyCode',
+          'excludeFromStats',
           'id',
           'isPlanned',
           'note',
+          'payee',
+          'payeeId',
           'refAmount',
           'splits',
           'tags',
           'time',
           'transactionGroups',
           'transactionType',
+          'transferId',
           'transferNature',
         ].toSorted(),
       );
     });
 
     it('drops fee, internal, audit and bank-blob fields', () => {
-      const slim = (slimTransactionsForMcp([fullTransaction]) as unknown as Record<string, unknown>[])[0]!;
+      const slim = (
+        slimTransactionsForMcp({ transactions: [fullTransaction], payeeNames: noPayees }) as unknown as Record<
+          string,
+          unknown
+        >[]
+      )[0]!;
       for (const dropped of [
         'userId',
         'paymentType',
         'accountType',
         'refCurrencyCode',
-        'transferId',
         'originalId',
         'commissionRate',
         'refCommissionRate',
@@ -169,7 +206,7 @@ describe('MCP serializers', () => {
     });
 
     it('slims embedded tags to id+name and splits to category/amount/note', () => {
-      const slim = slimTransactionsForMcp([fullTransaction])[0]!;
+      const slim = slimTransactionsForMcp({ transactions: [fullTransaction], payeeNames: noPayees })[0]!;
       expect(slim.tags).toEqual([{ id: 'tag-1', name: 'food' }]);
       expect(slim.splits).toEqual([{ categoryId: 'cat-2', amount: 12.34, note: 'half' }]);
     });
@@ -179,7 +216,12 @@ describe('MCP serializers', () => {
       void tags;
       void splits;
       void transactionGroups;
-      const slim = (slimTransactionsForMcp([noCollections]) as unknown as Record<string, unknown>[])[0]!;
+      const slim = (
+        slimTransactionsForMcp({ transactions: [noCollections], payeeNames: noPayees }) as unknown as Record<
+          string,
+          unknown
+        >[]
+      )[0]!;
       expect(slim).not.toHaveProperty('tags');
       expect(slim).not.toHaveProperty('splits');
       expect(slim).not.toHaveProperty('transactionGroups');
@@ -206,9 +248,42 @@ describe('MCP serializers', () => {
           isLinked: true,
         },
       ];
-      const slim = slimTransactionsForMcp([{ ...fullTransaction, paymentParts, paymentTotal: 20.5 }])[0]!;
+      const slim = slimTransactionsForMcp({
+        transactions: [{ ...fullTransaction, paymentParts, paymentTotal: 20.5 }],
+        payeeNames: new Map(),
+      })[0]!;
       expect(slim.paymentParts).toEqual(paymentParts);
       expect(slim.paymentTotal).toBe(20.5);
+    });
+
+    it('carries the payee id and name when the payee is known', () => {
+      const slim = slimTransactionsForMcp({
+        transactions: [{ ...fullTransaction, payeeId: 'payee-1' }],
+        payeeNames: new Map([['payee-1', 'Starbucks']]),
+      })[0]!;
+
+      expect(slim.payeeId).toBe('payee-1');
+      expect(slim.payee).toEqual({ id: 'payee-1', name: 'Starbucks' });
+    });
+
+    it('has a null payee when the transaction has none', () => {
+      const slim = slimTransactionsForMcp({
+        transactions: [{ ...fullTransaction, payeeId: null }],
+        payeeNames: new Map([['payee-1', 'Starbucks']]),
+      })[0]!;
+
+      expect(slim.payeeId).toBeNull();
+      expect(slim.payee).toBeNull();
+    });
+
+    it('has a null payee, with the id kept, when the payee is not among the caller own', () => {
+      const slim = slimTransactionsForMcp({
+        transactions: [{ ...fullTransaction, payeeId: 'payee-other' }],
+        payeeNames: noPayees,
+      })[0]!;
+
+      expect(slim.payeeId).toBe('payee-other');
+      expect(slim.payee).toBeNull();
     });
   });
 
@@ -222,7 +297,9 @@ describe('MCP serializers', () => {
       type: 'subscription',
       expectedAmount: 15.99,
       expectedCurrencyCode: 'USD',
-      frequency: 'monthly',
+      frequency: 'custom',
+      intervalUnit: 'day',
+      intervalCount: 30,
       startDate: '2026-01-01',
       endDate: null,
       accountId: 'acc-1',
@@ -264,6 +341,11 @@ describe('MCP serializers', () => {
       }
       expect(slim.category).toEqual({ id: 'cat-1', name: 'Entertainment' });
       expect(slim.account).toEqual({ id: 'acc-1', name: 'Checking', currencyCode: 'USD' });
+    });
+
+    it('keeps the frequency and its custom step', () => {
+      const slim = slimSubscriptionDetailForMcp(fullSubscription);
+      expect(slim).toMatchObject({ frequency: 'custom', intervalUnit: 'day', intervalCount: 30 });
     });
 
     it('slims each linked transaction and surfaces junction match metadata', () => {

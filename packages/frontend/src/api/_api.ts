@@ -47,7 +47,7 @@ interface ApiCall {
    * Takes precedence over `data`.
    */
   rawBody?: BodyInit;
-  /** Request headers merged over the defaults (Content-Type, session, locale). */
+  /** Request headers merged over the defaults (Content-Type, session, locale, timezone). */
   headers?: Record<string, string>;
   options?: {
     needRaw?: boolean;
@@ -236,6 +236,7 @@ class ApiCaller {
         'Content-Type': 'application/json',
         'X-Session-ID': window.sessionStorage?.getItem(SESSION_ID_KEY) || '',
         'Accept-Language': getCurrentLocale(), // Send current locale to backend
+        'X-Timezone': Intl.DateTimeFormat().resolvedOptions().timeZone,
         ...opts.headers,
       },
       // Include credentials (cookies) for session-based authentication
@@ -328,12 +329,17 @@ class ApiCaller {
 
     try {
       parsed = await result.json();
-    } catch {
-      // Response body is not JSON. Happens for raw infrastructure errors that
-      // never reach our `apiResponseMiddleware` envelope – e.g. body-parser's
-      // 413 Payload Too Large (plain text) or a gateway HTML 5xx page.
-      // Without this, `result.json()` throws a SyntaxError that escapes to the
-      // caller and surfaces as "Unexpected token <".
+    } catch (e) {
+      if (e instanceof DOMException && e.name === 'AbortError') throw e;
+      // Our backend always answers 2xx with JSON, so an unreadable 2xx body was cut off in transit.
+      if (result.ok || !(e instanceof SyntaxError)) {
+        const message = t('errors.api.failedToFetch', 'Failed to connect to server');
+        if (!isSilent) {
+          addNotification({ id: 'api-fetching-error', text: message, type: NotificationType.error });
+        }
+        throw new errors.NetworkError(message);
+      }
+      // A non-JSON error body (body-parser's plain-text 413, a gateway HTML 5xx) becomes an API error.
       const message =
         result.status === 413
           ? t('errors.api.payloadTooLarge', 'The request is too large. Please try importing fewer items at a time')

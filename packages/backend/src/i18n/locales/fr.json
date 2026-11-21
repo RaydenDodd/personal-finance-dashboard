@@ -8,11 +8,11 @@
     "groupNotFound": "Groupe ou compte introuvable",
     "accountNotFound": "Compte introuvable !",
     "accountUpdateFailed": "Échec de la mise à jour du compte",
-    "accountNoExternalId": "Le compte n'a pas d'identifiant externe",
     "accountNoExternalIdMonobank": "Le compte n'a pas d'identifiant externe Monobank",
     "accountNoExternalIdEnableBanking": "Le compte n'a pas d'identifiant externe Enable Banking",
     "accountNotFoundForTransaction": "Compte introuvable pour cette opération",
     "deleteBlockedByLoanPayments": "Ce compte est associé à des remboursements de prêt. Supprimez-les ou réaffectez-les avant de supprimer le compte.",
+    "deleteBlockedByTrashedLoanPayments": "This account has loan payments in Trash. Delete them permanently from Trash before deleting the account.",
     "loanBalanceUseUpdateLoan": "Modifiez le capital restant dû d'un prêt depuis sa page dédiée, et non depuis les paramètres du compte.",
     "loanCategoryImmutable": "La catégorie d'un compte de prêt ne peut pas être modifiée.",
     "dedicatedFlowCategoryNotAllowed": "Les comptes de prêt et de véhicule doivent être créés via leurs parcours dédiés, et non via le parcours de compte classique.",
@@ -39,6 +39,7 @@
     "systemCannotBeMoved": "Les catégories système ne peuvent pas être déplacées.",
     "parentNotFound": "Aucune catégorie ne correspond à ce parentId.",
     "systemParentForbidden": "Les catégories système ne peuvent pas être utilisées comme catégorie parente.",
+    "defaultCannotBeDeleted": "This category holds uncategorized transactions and cannot be deleted.",
     "ownParent": "Une catégorie ne peut pas être sa propre catégorie parente.",
     "underOwnSubcategory": "Une catégorie ne peut pas être déplacée sous sa propre sous-catégorie.",
     "nestingTooDeep": "Les catégories ne peuvent pas être imbriquées sur plus de {{max}} niveaux."
@@ -100,6 +101,16 @@
     "paymentLinkNotAllowed": "This transaction can't be linked to the payment. Only your own income or expense of the same type can be linked – not a transfer, refund, split, pending transaction or part of another payment.",
     "paymentLinkedAmountFixed": "The amount of a linked transaction can't be changed.",
     "paymentLinkedTypeMismatch": "Linked transactions must have the same type as the payment. Unlink them first.",
+    "refunds": {
+      "wholeLinkWithPartials": "A whole-refund link cannot be combined with partial links",
+      "externalLinkWithOthers": "A refund for a purchase outside the app cannot be combined with other refund links",
+      "externalLinkWithAmount": "A refund of a transaction outside the app cannot have a partial amount; it always covers the whole refund.",
+      "totalExceedsRefund": "Total refund link amounts cannot be greater than the refund transaction amount",
+      "totalExceedsSplit": "Total refund amount cannot be greater than the split amount",
+      "totalExceedsOriginal": "Total refund amount cannot be greater than the original transaction amount",
+      "refundOfRefund": "Cannot refund a \"refund\" transaction",
+      "duplicateLink": "This refund is already linked to that transaction"
+    },
     "splits": {
       "splitsOnTransfer": "Impossible de ventiler un virement",
       "splitLimitExceeded": "Maximum de {{max}} ventilations autorisé par opération",
@@ -113,8 +124,7 @@
       "exceedTotal": "Le montant total ventilé ({{total}}) dépasse le montant de l'opération ({{transactionAmount}})",
       "invalidData": "Données de ventilation non valides",
       "splitNotFound": "Ventilation introuvable",
-      "cannotDeleteWithRefunds": "Impossible de supprimer une ventilation associée à des remboursements",
-      "cannotReduceBelowRefunded": "Cette ventilation comporte des remboursements totalisant {{refundsText}}. Vous ne pouvez pas réduire son montant en dessous du total remboursé. Pour le réduire davantage, dissociez d'abord les remboursements."
+      "cannotDeleteWithRefunds": "Impossible de supprimer une ventilation associée à des remboursements"
     },
     "reconciliation": {
       "systemNotAllowed": "Seules les opérations synchronisées avec la banque peuvent être fusionnées ou supprimées.",
@@ -135,6 +145,13 @@
         "message_one": "1 opération est en attente depuis plus d'une semaine. Vérifiez-la auprès de votre banque pour garder un solde exact.",
         "message_other": "{{count}} opérations sont en attente depuis plus d'une semaine. Vérifiez-les auprès de votre banque pour garder un solde exact."
       }
+    },
+    "trash": {
+      "paymentNotTrashable": "Remove it from the payment first to delete it.",
+      "portfolioNotTrashable": "Unlink it from the portfolio first to delete it.",
+      "ventureNotTrashable": "Unlink it from the venture first to delete it.",
+      "accountTypeChanged": "This transaction can't be restored because its account type has changed.",
+      "loanPaymentLegMissing": "This loan payment can't be restored because its other side was deleted."
     }
   },
   "budgets": {
@@ -247,6 +264,7 @@
     "cannotDeleteHoldingWithActivePosition": "Impossible de supprimer une ligne avec une position active. Veuillez d'abord vendre ou transférer toutes les actions.",
     "transactionAlreadyTransfer": "L'opération est déjà marquée comme virement et ne peut pas être liée à un portefeuille.",
     "transactionAlreadyLinkedToPortfolio": "L'opération est déjà liée à un transfert de portefeuille.",
+    "linkedTransactionMustBelongToDestinationAccount": "The linked transaction must belong to the destination account.",
     "transactionAlreadyLinkedToVenture": "L'opération est déjà liée à un investissement venture",
     "portfolioTransferNotFound": "Transfert de portefeuille introuvable",
     "exchangeCurrenciesMustDiffer": "Les devises de change doivent être différentes",
@@ -279,7 +297,6 @@
     "connectionNotFound": "Connexion introuvable",
     "connectionNotFoundOrNotYours": "Connexion introuvable ou non associée à votre compte",
     "providerNoReauthorization": "Le fournisseur {{providerType}} ne prend pas en charge la réautorisation",
-    "providerNotFoundInRegistry": "Fournisseur {{providerType}} introuvable dans le registre",
     "connectionIdNotFound": "Connexion au fournisseur de données bancaires {{connectionId}} introuvable",
     "accountIdNotFound": "Compte {{accountId}} introuvable",
     "providerTypeMismatch": "La connexion {{connectionId}} correspond au fournisseur {{actualType}}, et non {{expectedType}}",
@@ -327,9 +344,7 @@
       "invalidCredentialsFormat": "Format des identifiants Monobank non valide",
       "invalidApiToken": "Jeton d'API Monobank non valide",
       "rateLimitExceeded": "Limite de requêtes atteinte pour l'API Monobank. Veuillez réessayer dans une minute.",
-      "accountNotFound": "Compte {{accountExternalId}} introuvable sur Monobank",
       "accountReconnectRequired": "Ce compte n'est plus disponible sur Monobank. Veuillez reconnecter votre compte Monobank pour reprendre la synchronisation.",
-      "webhookNotImplemented": "handleWebhook n'est pas encore implémenté pour Monobank",
       "unknownCurrencyCode": "Code devise inconnu : {{numericCode}}",
       "geoBlocked": "Monobank bloque les requêtes provenant de l'adresse IP de ce serveur. Désactivez votre VPN ou utilisez une adresse IP ukrainienne.",
       "geoBlockedProduction": "La synchronisation Monobank est temporairement indisponible. Nous avons été informés et y travaillons. Veuillez contacter l'assistance en cas d'urgence."
@@ -365,8 +380,7 @@
       "invalidTokens": "Invalid Akahu tokens. Check the User Access Token and App ID Token from your Akahu app page.",
       "accountNoExternalId": "Account has no external ID for Akahu sync.",
       "accountNotFound": "Akahu account not found.",
-      "rateLimited": "Akahu is rate-limiting requests right now. Please try again shortly.",
-      "missingCurrency": "Akahu did not return a currency for this account."
+      "rateLimited": "Akahu is rate-limiting requests right now. Please try again shortly."
     },
     "simplefin": {
       "invalidCredentialsFormat": "Format des identifiants SimpleFIN invalide.",
@@ -381,8 +395,7 @@
     "walutomat": {
       "invalidCredentialsFormat": "Format des identifiants Walutomat non valide. La clé API et la clé privée sont requises.",
       "invalidApiKey": "Clé API ou clé privée Walutomat non valide.",
-      "accountNoExternalId": "Le compte Walutomat n'a pas d'identifiant externe.",
-      "walletNotFound": "Portefeuille Walutomat introuvable pour la devise : {{currency}}"
+      "accountNoExternalId": "Le compte Walutomat n'a pas d'identifiant externe."
     }
   },
   "csvImport": {
@@ -478,6 +491,7 @@
     "aiRateLimited": "Limite de requêtes du service d'IA atteinte. Veuillez réessayer dans quelques minutes.",
     "aiExtractionFailed": "Échec de l'extraction par l'IA. Veuillez réessayer.",
     "ynab": {
+      "importAlreadyInProgress": "A YNAB import is already running. Wait for it to finish before starting another one.",
       "parse": {
         "fileEmpty": "Le fichier YNAB Register.csv est vide.",
         "unparseable": "Impossible d'analyser le fichier YNAB Register.csv au format CSV.",
@@ -653,7 +667,6 @@
         "home-garden": "Maison, jardin",
         "pets-animals": "Animaux de compagnie",
         "electronics-accessories": "High-tech, accessoires",
-        "gifts-joy": "Cadeaux, plaisir",
         "stationery-tools": "Papeterie, bricolage",
         "free-time": "Temps libre",
         "drugstore-chemist": "Pharmacie, parapharmacie"
@@ -690,7 +703,8 @@
         "books-audio-subscriptions": "Livres, audio, abonnements",
         "tv-streaming": "TV, streaming",
         "holiday-trips-hotels": "Vacances, voyages, hôtels",
-        "charity-gifts": "Dons, cadeaux",
+        "gifts": "Gifts",
+        "charity": "Charity",
         "alcohol-tobacco": "Alcool, tabac",
         "lottery-gambling": "Loterie, jeux de hasard"
       },
@@ -746,6 +760,11 @@
         "requiresAccountField": "L'enregistrement automatique nécessite un compte sur lequel imputer l'opération.",
         "requiresAmountField": "L'enregistrement automatique nécessite expectedAmount et expectedCurrencyCode.",
         "excludesMatchingField": "L'enregistrement automatique et les règles de rapprochement s'excluent mutuellement."
+      },
+      "customInterval": {
+        "required": "A custom frequency needs an interval unit and count.",
+        "presetConflict": "An interval unit and count can only be set with the custom frequency.",
+        "countOutOfRange": "The interval count must be between {{min}} and {{max}} for this unit."
       }
     }
   },
@@ -861,7 +880,7 @@
   },
   "goals": {
     "goalNotFound": "Objectif introuvable.",
-    "accountNotFound": "L'un des comptes sélectionnés est introuvable.",
+    "accountNotFound": "One of the selected accounts was not found.",
     "accountNotEligible": "{{accountName}} ne peut pas contribuer à un objectif. Choisissez un compte courant, d'épargne, d'investissement, de cryptomonnaies ou un compte de liquidités.",
     "shareCapacityExceeded": "Il reste {{free}} % disponibles sur {{accountName}} : vous demandez {{requested}} %, et les autres objectifs utilisent déjà {{usedByOtherGoals}} %.",
     "fixedAmountsBelowTarget": "Les montants fixes totalisent {{total}} {{currencyCode}}, soit moins que la cible de {{target}} {{currencyCode}}. Augmentez un montant ou attribuez un pourcentage d'un compte.",

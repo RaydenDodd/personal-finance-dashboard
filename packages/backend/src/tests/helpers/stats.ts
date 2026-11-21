@@ -56,14 +56,15 @@ export async function getBalanceHistory<R extends boolean | undefined = undefine
   return result;
 }
 
-const dateKey = (date: string | Date) => (typeof date === 'string' ? date.slice(0, 10) : format(date, 'yyyy-MM-dd'));
+export const dateKey = ({ date }: { date: string | Date }) =>
+  (typeof date === 'string' ? date : date.toISOString()).slice(0, 10);
 
 /** What the chart reads on `date`: the latest row dated on or before it, in cents. */
 export const balanceCentsOn = ({ rows, date }: { rows: { date: string | Date; amount: unknown }[]; date: Date }) => {
   const key = format(date, 'yyyy-MM-dd');
   const latest = rows
-    .filter((row) => dateKey(row.date) <= key)
-    .toSorted((a, b) => dateKey(a.date).localeCompare(dateKey(b.date)))
+    .filter((row) => dateKey({ date: row.date }) <= key)
+    .toSorted((a, b) => dateKey({ date: a.date }).localeCompare(dateKey({ date: b.date })))
     .at(-1);
 
   return latest ? Math.round(Number(latest.amount) * 100) : 0;
@@ -345,6 +346,7 @@ export async function getPivotReport<R extends boolean | undefined = undefined>(
   accountIds,
   categoryIds,
   payeeIds,
+  includeTransfers,
   raw,
 }: {
   from: string;
@@ -355,6 +357,7 @@ export async function getPivotReport<R extends boolean | undefined = undefined>(
   accountIds?: string[];
   categoryIds?: string[];
   payeeIds?: string[];
+  includeTransfers?: boolean;
   raw?: R;
 }) {
   const params = new URLSearchParams();
@@ -366,6 +369,7 @@ export async function getPivotReport<R extends boolean | undefined = undefined>(
   if (accountIds && accountIds.length > 0) params.append('accountIds', accountIds.join(','));
   if (categoryIds && categoryIds.length > 0) params.append('categoryIds', categoryIds.join(','));
   if (payeeIds && payeeIds.length > 0) params.append('payeeIds', payeeIds.join(','));
+  if (includeTransfers) params.append('includeTransfers', 'true');
 
   const result = await helpers.makeRequest<GetPivotReportResponse, R>({
     method: 'get',

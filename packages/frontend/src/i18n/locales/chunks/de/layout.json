@@ -8,6 +8,7 @@
     "allTransactions": "Alle Transaktionen",
     "transactions": "Transaktionen",
     "transactionGroups": "Gruppen",
+    "trash": "Papierkorb",
     "analytics": "Analysen",
     "optimizations": "Optimierungen",
     "automations": "Automatisierungen",
@@ -30,7 +31,8 @@
   },
   "sidebar": {
     "collapse": "Seitenleiste einklappen",
-    "expand": "Seitenleiste ausklappen",
+    "expand": "Seitenleiste aufklappen",
+    "resize": "Seitenleiste anpassen",
     "settings": {
       "title": "Einstellungen",
       "sections": {

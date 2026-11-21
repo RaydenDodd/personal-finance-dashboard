@@ -1,7 +1,7 @@
 <template>
   <div
     :class="[
-      'group/row hover:bg-muted/50 grid w-full cursor-pointer rounded-md px-2 py-1 transition-colors [content-visibility:auto]',
+      'group/row hover:bg-hover grid w-full cursor-pointer rounded-md px-2 py-1 transition-colors [content-visibility:auto]',
       showCheckbox
         ? 'grid-cols-[auto_minmax(0,1fr)_max-content] items-center gap-2'
         : (shouldShowGroupedTransfer && !compact) || isLoadingGroupedTransfer
@@ -29,7 +29,8 @@
     <div class="flex items-center gap-2 overflow-x-clip">
       <template v-if="!isTransferTransaction && !linkTarget && category">
         <div class="relative shrink-0">
-          <CategoryCircle :category="category" />
+          <BrandLogo v-if="payeeLogo" v-bind="payeeLogo" class="size-6 rounded-full" />
+          <CategoryCircle v-else :category="category" />
           <ResponsiveTooltip v-if="showAccount && accountFrom" :content="accountFrom.name" :delay-duration="100">
             <!-- Backing tracks the row's hover fill so the badge's cut-out never shows as a halo. -->
             <span
@@ -121,7 +122,7 @@
             <span class="line-clamp-1 text-sm tracking-wider">
               {{ accountFrom?.name }}
             </span>
-            <ArrowRight :size="14" :class="['shrink-0 opacity-60', linkTarget.flowsToAccount && 'rotate-180']" />
+            <ArrowRight :size="14" :class="['shrink-0 opacity-60', ownLegIsIncome && 'rotate-180']" />
             <BrandLogo
               v-if="linkTarget.logoSelection"
               v-bind="toLogoDisplayProps({ selection: linkTarget.logoSelection })"
@@ -189,6 +190,7 @@
               <UsersIcon class="text-muted-foreground size-3.5 shrink-0 cursor-help" :aria-label="addedByTooltip" />
             </ResponsiveTooltip>
             <PlannedIndicator v-if="!(hidePlannedMarker && transaction.isPlanned)" :transaction="transaction" />
+            <ExcludeFromStatsIndicator :transaction="transaction" />
             <SplitIndicator :transaction="transaction" />
             <PaymentIndicator :transaction="transaction" />
             <RefundIndicator v-if="!hideRefundMarker" :transaction="transaction" />
@@ -308,6 +310,7 @@ import { useOppositeTxRecord } from '@/composable/data-queries/opposite-tx-recor
 import type { BulkUnselectableReason } from '@/composable/transaction-selection';
 import { useTransactionPortfolioLink } from '@/composable/data-queries/portfolio-transfers';
 import { useTransactionVentureLink } from '@/composable/data-queries/venture/events';
+import { usePayeeLogos } from '@/composable/use-payee-logos';
 import {
   getPaymentMainCurrencyCode,
   getPaymentRowAmounts,
@@ -340,6 +343,7 @@ import { storeToRefs } from 'pinia';
 import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 
+import ExcludeFromStatsIndicator from './indicators/exclude-from-stats-indicator.vue';
 import PlannedIndicator from './indicators/planned-indicator.vue';
 import AttachmentIndicator from './indicators/attachment-indicator.vue';
 import PaymentIndicator from './indicators/payment-indicator.vue';
@@ -376,6 +380,11 @@ const props = withDefaults(
     showAccount?: boolean;
     /** Marks a row smart tracking linked; the reason shows in its tooltip. */
     aiMatchReason?: string;
+    /**
+     * Opposite transfer leg known up front, e.g. a trashed leg the API no longer returns.
+     * `undefined` fetches it; `null` means there is none.
+     */
+    oppositeTx?: TransactionModel | null;
   }>(),
   {
     asButton: true,
@@ -409,7 +418,12 @@ const isTransferTransaction = computed(
     transaction.value.transferNature === TRANSACTION_TRANSFER_NATURE.transfer_out_wallet,
 );
 
-const { data: oppositeTransferTransaction, isLoading: isLoadingOpposite } = useOppositeTxRecord(() => props.tx);
+const { data: fetchedOppositeTx, isLoading: isLoadingOpposite } = useOppositeTxRecord(() => props.tx, {
+  enabled: () => props.oppositeTx === undefined,
+});
+const oppositeTransferTransaction = computed(() =>
+  props.oppositeTx === undefined ? fetchedOppositeTx.value : props.oppositeTx,
+);
 
 const isPortfolioLinked = computed(
   () => transaction.value.transferNature === TRANSACTION_TRANSFER_NATURE.transfer_to_portfolio,
@@ -429,7 +443,6 @@ const linkTarget = computed(() => {
       name: portfolioName.value,
       isDeleted: isPortfolioDeleted.value,
       isLoading: isLoadingPortfolioLink.value,
-      flowsToAccount: false,
     };
   }
   if (transaction.value.transferNature === TRANSACTION_TRANSFER_NATURE.transfer_to_venture) {
@@ -439,8 +452,6 @@ const linkTarget = computed(() => {
       name: ventureLinkData.value?.dealName ?? '',
       isDeleted: ventureLinkData.value?.isDealDeleted ?? false,
       isLoading: isLoadingVentureLink.value,
-      // Distributions and exits pay out of the deal into the account.
-      flowsToAccount: transaction.value.transactionType === TRANSACTION_TYPES.income,
     };
   }
   return null;
@@ -462,6 +473,8 @@ const isLoadingGroupedTransfer = computed(() => {
 const isCompactInline = computed(() => props.compact && !isLoadingGroupedTransfer.value);
 
 const category = computed(() => categoriesMap.value[transaction.value.categoryId]);
+const { getPayeeLogo } = usePayeeLogos();
+const payeeLogo = computed(() => getPayeeLogo({ payeeId: transaction.value.payeeId }));
 const externalLinkHref = computed(() =>
   transaction.value.externalUrl && isHttpUrl(transaction.value.externalUrl) ? transaction.value.externalUrl : null,
 );

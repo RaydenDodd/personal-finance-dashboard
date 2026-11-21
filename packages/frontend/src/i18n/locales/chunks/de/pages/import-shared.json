@@ -27,7 +27,7 @@
   "importShared": {
     "action": {
       "createNew": "Neu erstellen",
-      "linkExisting": "Verknüpfen",
+      "linkExisting": "Mit bestehendem verknüpfen",
       "skip": "Überspringen"
     },
     "selectAction": "Aktion auswählen",
@@ -65,7 +65,7 @@
         "account": "Konto",
         "before": "Vorher",
         "after": "Nachher",
-        "delta": "Ändern",
+        "delta": "Änderung",
         "newRows": "Neue Zeilen",
         "backfillRows": "Nachträgliche Zeilen"
       },

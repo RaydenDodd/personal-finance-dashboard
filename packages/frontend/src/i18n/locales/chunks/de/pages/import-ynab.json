@@ -15,7 +15,7 @@
           "stepTitle": "Ziehe deine Register.csv hierher",
           "description": "YNAB → Budget → Budget exportieren → entpacken → verwende die Datei Register.csv.",
           "maxSize": "Bis zu 10 MB.",
-          "parsing": "Verarbeite…",
+          "parsing": "Analysiere...",
           "continueToPreview": "Weiter",
           "errors": {
             "invalidFormat": "Bitte lade eine .csv-Datei hoch."
@@ -50,7 +50,7 @@
           "starting": "Starte den Import…",
           "progressCount": "{processed} / {total}",
           "statusQueued": "In Warteschlange",
-          "statusRunning": "Importieren…",
+          "statusRunning": "Importiere...",
           "statusCompleted": "Fertig",
           "statusFailed": "Fehlgeschlagen",
           "failed": "Der Import konnte nicht abgeschlossen werden."

@@ -1,7 +1,7 @@
 <template>
   <!-- Borders live on cells, not the row: the table uses border-separate, where <tr> borders don't render -->
   <tr
-    :class="['group/row hover:bg-muted/50 h-10 cursor-pointer divide-x transition-colors', isPlannedRow && 'bg-muted']"
+    :class="['group/row hover:bg-hover h-10 cursor-pointer divide-x transition-colors', isPlannedRow && 'bg-muted']"
     aria-haspopup="true"
     :data-index="index"
     @click="onRowClick"
@@ -29,6 +29,7 @@
         </label>
 
         <PlannedIndicator v-if="!isPlannedRow" compact hide-confirmed :transaction="tx" />
+        <ExcludeFromStatsIndicator compact :transaction="tx" />
       </div>
     </td>
 
@@ -79,7 +80,7 @@
             <span class="text-muted-foreground">{{ $t('transactions.table.outOfWallet') }}</span>
           </template>
           <template v-else-if="isPortfolioLinked">
-            <ArrowRightIcon :size="13" class="shrink-0 opacity-60" />
+            <ArrowRightIcon :size="13" :class="['shrink-0 opacity-60', ownLegIsIncome && 'rotate-180']" />
             <BrandLogo
               v-if="portfolioLogoSelection"
               v-bind="toLogoDisplayProps({ selection: portfolioLogoSelection })"
@@ -154,15 +155,22 @@
 
       <!-- Tags -->
       <template v-else-if="column.id === TABLE_COLUMN.tags">
-        <DesktopOnlyTooltip v-if="txTags.length" :disabled="txTags.length <= 1">
+        <DesktopOnlyTooltip v-if="txTags.length" :disabled="hiddenTagsCount === 0">
           <div class="flex items-center gap-1">
-            <span
-              class="inline-block truncate rounded-full px-2 py-0.5 text-xs font-medium text-white/90"
-              :style="{ backgroundColor: txTags[0]!.color }"
+            <!-- Chips that don't fit wrap onto a clipped second line. -->
+            <div :ref="setTagsListRef" class="flex h-5 min-w-0 flex-wrap gap-1 overflow-hidden">
+              <span
+                v-for="tag in txTags"
+                :key="tag.id"
+                class="inline-block max-w-full truncate rounded-full px-2 py-0.5 text-xs font-medium text-white/90"
+                :style="{ backgroundColor: tag.color }"
+              >
+                {{ tag.name }}
+              </span>
+            </div>
+            <span v-if="hiddenTagsCount > 0" class="text-muted-foreground shrink-0 text-xs"
+              >+{{ hiddenTagsCount }}</span
             >
-              {{ txTags[0]!.name }}
-            </span>
-            <span v-if="hiddenTagsCount > 0" class="text-muted-foreground text-xs">+{{ hiddenTagsCount }}</span>
           </div>
           <template #content>
             <ScrollArea class="max-h-75">
@@ -251,6 +259,7 @@ import { DesktopOnlyTooltip } from '@/components/lib/ui/tooltip';
 import { getPaymentRowAmounts } from '@/components/dialogs/manage-transaction/utils/payment-legs';
 import AttachmentIndicator from '@/components/transactions-list/indicators/attachment-indicator.vue';
 import PaymentIndicator from '@/components/transactions-list/indicators/payment-indicator.vue';
+import ExcludeFromStatsIndicator from '@/components/transactions-list/indicators/exclude-from-stats-indicator.vue';
 import PlannedIndicator from '@/components/transactions-list/indicators/planned-indicator.vue';
 import RefundIndicator from '@/components/transactions-list/indicators/refund-indicator.vue';
 import SplitIndicator from '@/components/transactions-list/indicators/split-indicator.vue';
@@ -260,6 +269,7 @@ import { useTransactionPortfolioLink } from '@/composable/data-queries/portfolio
 import { useTransactionVentureLink } from '@/composable/data-queries/venture/events';
 import { useFormatCurrency } from '@/composable/formatters';
 import { useAccountAccess } from '@/composable/use-account-access';
+import { useFittingChips } from '@/composable/use-fitting-chips';
 import { formatUIAmount } from '@/js/helpers';
 import { isPlanMatchWindowExpired } from '@/common/utils/planned-transactions';
 import { cn } from '@/lib/utils';
@@ -298,8 +308,6 @@ import {
   isInlineEditableColumn,
 } from './inline-cell-mode';
 import { type InlineCellSaveState, inlineCellKey } from './use-inline-transaction-edit';
-
-const MAX_VISIBLE_TAGS = 1;
 
 const CELL_MODE_CLASSES: Record<InlineCellMode, string> = {
   edit: 'cursor-text hover:inset-ring hover:inset-ring-ring touch:active:bg-accent touch:active:duration-0',
@@ -414,7 +422,7 @@ const formattedOriginalAmount = computed(() => {
 });
 
 const txTags = computed(() => props.tx.tags ?? []);
-const hiddenTagsCount = computed(() => Math.max(0, txTags.value.length - MAX_VISIBLE_TAGS));
+const { setListRef: setTagsListRef, hiddenCount: hiddenTagsCount } = useFittingChips({ items: txTags });
 
 const groupName = computed(() => props.tx.transactionGroups?.[0]?.name);
 
@@ -436,6 +444,7 @@ const cellModes = computed<Partial<Record<TABLE_COLUMN, InlineCellMode>>>(() =>
         tx: props.tx,
         column: column.id,
         account: accountFrom.value,
+        oppositeTx: oppositeTx.value ?? undefined,
         oppositeAccount: transferDestinationAccount.value,
         canEdit: canEdit.value,
       }),

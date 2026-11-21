@@ -1,15 +1,15 @@
 {
   "common": {
-    "loading": "Đang tải...",
+    "loading": "Loading...",
     "new": "New",
     "actions": {
-      "loading": "Đang tải...",
+      "loading": "Loading...",
       "signUp": "Sign up",
-      "save": "Lưu",
-      "cancel": "Hủy",
+      "save": "Save",
+      "cancel": "Cancel",
       "back": "Back",
       "accept": "Accept",
-      "delete": "Xóa",
+      "delete": "Delete",
       "edit": "Edit",
       "addSubcategory": "Add subcategory",
       "settings": "Settings",
@@ -28,13 +28,15 @@
       "retry": "Try again",
       "copyInviteLink": "Copy invite link",
       "moveTo": "Move to…",
-      "learnMore": "Learn more"
+      "learnMore": "Learn more",
+      "undo": "Undo",
+      "more": "More"
     },
     "ui": {
       "close": "Close",
       "actions": "Actions",
       "chooseAction": "Choose an action",
-      "other": "Khác",
+      "other": "Other",
       "refund": "Refund",
       "split": "Split",
       "deletedBadge": "Deleted"
@@ -93,7 +95,7 @@
       "loan": "Loan",
       "mortgage": "Mortgage",
       "overdraft": "Overdraft",
-      "crypto": "Tiền mã hóa",
+      "crypto": "Crypto",
       "vehicle": "Vehicle"
     },
     "paymentTypes": {
@@ -113,7 +115,7 @@
       "luxury": "Luxury",
       "ev": "Electric vehicle",
       "motorcycle": "Motorcycle",
-      "other": "Khác"
+      "other": "Other"
     },
     "depreciationPresets": {
       "classDefault": "Class default",
@@ -150,7 +152,9 @@
     },
     "transactions": {
       "delete": {
-        "success": "Successfully removed",
+        "success": "Moved to Trash",
+        "undoSuccess": "Restored",
+        "undoError": "Couldn't undo. You can still restore it from the Trash.",
         "error": "Failed to delete transaction!"
       },
       "submit": {
@@ -360,7 +364,7 @@
     },
     "tagReminder": {
       "thresholdMessage": "spent {amount} (threshold: {threshold})",
-      "existenceMessage": "{count} giao dịch | {count} giao dịch"
+      "existenceMessage": "{count} transaction | {count} transactions"
     },
     "share": {
       "sendFailedHint": "Open the sharing panel to resend."
@@ -548,37 +552,87 @@
   "transactionGroups": {
     "groupDialog": {
       "editTitle": "Edit group",
-      "nameLabel": "Tên",
+      "nameLabel": "Name",
       "noteLabel": "Note (optional)",
       "notePlaceholder": "Optional note...",
-      "loadingText": "Đang tải...",
-      "savingAction": "Lưu",
-      "cancelButton": "Hủy",
+      "loadingText": "Loading...",
+      "savingAction": "Save",
+      "cancelButton": "Cancel",
       "editAction": "Edit",
-      "deleteAction": "Xóa nhóm",
-      "transactionsLabel": "Giao dịch",
-      "deleteGroupTitle": "Xóa nhóm",
+      "deleteAction": "Delete group",
+      "transactionsLabel": "Transactions",
+      "deleteGroupTitle": "Delete group",
       "deleteGroupDescription": "Are you sure you want to delete \"{groupName}\"? The transactions will not be deleted.",
       "removeTransactionTitle": "Remove transaction from group",
       "removeTransactionDescription": "This will leave fewer than 2 transactions in the group, so the group will be deleted. Continue?",
       "removeTransactionDescriptionNormal": "Are you sure you want to remove this transaction from the group?",
       "removeButtonText": "Remove",
       "removeAndDeleteButtonText": "Remove & delete group",
-      "removeFromGroup": "Bỏ khỏi nhóm",
+      "removeFromGroup": "Remove from group",
       "saveError": "Couldn't save the group",
       "removeError": "Couldn't remove the transaction from the group",
-      "manageTransactions": "Quản lý",
+      "manageTransactions": "Manage",
       "showMoreNote": "Show more",
-      "showLessNote": "Thu gọn",
+      "showLessNote": "Show less",
       "summary": {
-        "transactions": "Giao dịch",
-        "net": "Thu chi ròng",
+        "transactions": "Transactions",
+        "net": "Net",
         "moneyIn": "Money in",
         "moneyOut": "Money out"
       }
     },
     "transactionGroupRecord": {
       "transactionCountLabel": "transactions"
+    }
+  },
+  "mcpToolsets": {
+    "core": {
+      "label": "Core",
+      "description": "Accounts, transactions, categories, tags, payees and reports"
+    },
+    "subscriptions": {
+      "label": "Recurring payments",
+      "description": "Recurring payments, their periods and planned transactions"
+    },
+    "budgetPlans": {
+      "label": "Budget plans",
+      "description": "Plans, lines, line goals and savings goals"
+    },
+    "trackers": {
+      "label": "Trackers",
+      "description": "Spending trackers and their suggestions"
+    },
+    "automations": {
+      "label": "Automations",
+      "description": "Rules, payee aliases, ignored payee names and tag reminders"
+    },
+    "review": {
+      "label": "Review and cleanup",
+      "description": "Transfer and refund matches, duplicates and stuck pending transactions"
+    },
+    "groupsTemplates": {
+      "label": "Groups and templates",
+      "description": "Transaction groups and transaction templates"
+    },
+    "investments": {
+      "label": "Investments",
+      "description": "Portfolios, holdings, securities and investment transactions"
+    },
+    "ventures": {
+      "label": "Ventures",
+      "description": "Venture platforms, deals and events"
+    },
+    "loansVehicles": {
+      "label": "Loans and vehicles",
+      "description": "Loans with their payments, and vehicles"
+    },
+    "currencies": {
+      "label": "Currencies",
+      "description": "Your currencies and exchange rates"
+    },
+    "imports": {
+      "label": "Imports and sharing",
+      "description": "Import batches (list, undo) and bank connections (status, unlink an account); sharing is read only."
     }
   }
 }

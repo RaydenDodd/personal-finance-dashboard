@@ -8,11 +8,11 @@
     "groupNotFound": "Skupina alebo účet sa nenašli",
     "accountNotFound": "Účet sa nenašiel!",
     "accountUpdateFailed": "Aktualizácia účtu nebola úspešná",
-    "accountNoExternalId": "Účet nemá externé ID",
     "accountNoExternalIdMonobank": "Účet nemá externé ID z Monobank",
     "accountNoExternalIdEnableBanking": "Účet nemá externé ID z Enable Banking",
     "accountNotFoundForTransaction": "Pre túto transakciu sa nenašiel účet",
     "deleteBlockedByLoanPayments": "Tento účet má splátky pôžičky. Pred zmazaním účtu ich zmažte alebo preraďte.",
+    "deleteBlockedByTrashedLoanPayments": "Tento účet má splátky úveru v koši. Pred odstránením účtu ich natrvalo odstráňte z koša.",
     "loanBalanceUseUpdateLoan": "Nesplatený zostatok pôžičky zmeňte na jej stránke, nie v nastaveniach účtu.",
     "loanCategoryImmutable": "Kategóriu účtu pôžičky nemožno zmeniť.",
     "dedicatedFlowCategoryNotAllowed": "Účty pôžičiek a vozidiel sa musia vytvárať cez svoje vyhradené rozhrania, nie cez všeobecné rozhranie účtov.",
@@ -39,6 +39,7 @@
     "systemCannotBeMoved": "Systémové kategórie nemožno presúvať.",
     "parentNotFound": "Kategória s týmto nadradeným ID neexistuje.",
     "systemParentForbidden": "Systémové kategórie nemožno použiť ako nadradené.",
+    "defaultCannotBeDeleted": "Táto kategória obsahuje nekategorizované transakcie a nemožno ju odstrániť.",
     "ownParent": "Kategória nemôže byť sama sebe nadradená.",
     "underOwnSubcategory": "Kategóriu nemožno presunúť pod jej vlastnú podkategóriu.",
     "nestingTooDeep": "Kategórie nemožno vnárať hlbšie než na {{max}} úrovní."
@@ -56,7 +57,7 @@
     "idCannotBeChanged": "ID nemožno zmeniť",
     "editReadonlyFields": "Pokus o úpravu polí externého účtu, ktoré sú len na čítanie",
     "changeTypeNotAllowed": "Zmena „transactionType\" pri nesystémovom účte nie je povolená",
-    "bothRefundFieldsNotAllowed": "Nemožno použiť súčasne „refundedByTxIds\" aj „refundsTxId\". Vyberte jedno z nich, prosím.",
+    "bothRefundFieldsNotAllowed": "Nemožno použiť súčasne „refundedByTxIds\" aj „refundsTargets\". Vyberte jedno z nich, prosím.",
     "oppositeTransactionNotFound": "Opačnú transakciu na aktualizáciu sa nepodarilo nájsť",
     "transactionIdNotExist": "Transakcia so zadaným id neexistuje!",
     "notAuthorizedToEdit": "Nemáte oprávnenie upravovať túto transakciu.",
@@ -100,6 +101,16 @@
     "paymentLinkNotAllowed": "Táto transakcia sa nedá prepojiť s platbou. Prepojiť možno len vlastný príjem alebo výdavok rovnakého typu – nie prevod, vrátenie platby, rozdelenú transakciu, nezaúčtovanú transakciu ani súčasť inej platby.",
     "paymentLinkedAmountFixed": "Sumu prepojenej transakcie nemožno zmeniť.",
     "paymentLinkedTypeMismatch": "Prepojené transakcie musia mať rovnaký typ ako platba. Najprv ich odpojte.",
+    "refunds": {
+      "wholeLinkWithPartials": "Prepojenie celého vrátenia platby nemožno kombinovať s čiastočnými prepojeniami",
+      "externalLinkWithOthers": "Vrátenie platby za nákup mimo aplikácie nemožno kombinovať s inými prepojeniami vrátenia",
+      "externalLinkWithAmount": "Vrátenie platby za transakciu mimo aplikácie nemôže mať čiastočnú sumu; vždy pokrýva celé vrátenie.",
+      "totalExceedsRefund": "Súčet súm prepojení vrátenia nemôže byť vyšší ako suma transakcie vrátenia",
+      "totalExceedsSplit": "Celková suma vrátenia nemôže byť vyššia ako suma rozdelenej časti",
+      "totalExceedsOriginal": "Celková suma vrátenia nemôže byť vyššia ako suma pôvodnej transakcie",
+      "refundOfRefund": "Transakciu typu „vrátenie platby“ nemožno vrátiť",
+      "duplicateLink": "Toto vrátenie platby je už prepojené s touto transakciou"
+    },
     "splits": {
       "splitsOnTransfer": "K prevodovým transakciám nemožno pridať rozdelenie",
       "splitLimitExceeded": "Povolený je najviac {{max}} rozdelení na transakciu",
@@ -113,8 +124,7 @@
       "exceedTotal": "Celková suma rozdelenia ({{total}}) prevyšuje sumu transakcie ({{transactionAmount}})",
       "invalidData": "Neplatné údaje rozdelenia",
       "splitNotFound": "Rozdelenie sa nenašlo",
-      "cannotDeleteWithRefunds": "Rozdelenie, na ktoré mieria vrátenia platby, nemožno zmazať",
-      "cannotReduceBelowRefunded": "Toto rozdelenie má vrátenia platby v celkovej výške {{refundsText}}. Nemôžete ho znížiť pod vrátenú sumu. Ak ho chcete znížiť viac, najprv odpojte vrátenia platby."
+      "cannotDeleteWithRefunds": "Rozdelenie, na ktoré mieria vrátenia platby, nemožno zmazať"
     },
     "reconciliation": {
       "systemNotAllowed": "Zlučovať alebo odstraňovať možno len transakcie prepojené s bankou.",
@@ -135,6 +145,13 @@
         "message_one": "1 transakcia čaká už viac než týždeň. Overte ju v banke, aby bol váš zostatok presný.",
         "message_other": "{{count}} transakcií čaká už viac než týždeň. Overte ich v banke, aby bol váš zostatok presný."
       }
+    },
+    "trash": {
+      "paymentNotTrashable": "Najprv ju odstráňte z platby, aby ju bolo možné odstrániť.",
+      "portfolioNotTrashable": "Najprv ju odpojte od portfólia, aby ju bolo možné odstrániť.",
+      "ventureNotTrashable": "Najprv ju odpojte od venture, aby ju bolo možné odstrániť.",
+      "accountTypeChanged": "Túto transakciu nemožno obnoviť, pretože sa zmenil typ jej účtu.",
+      "loanPaymentLegMissing": "Túto splátku úveru nemožno obnoviť, pretože jej druhá strana bola odstránená."
     }
   },
   "budgets": {
@@ -247,6 +264,7 @@
     "cannotDeleteHoldingWithActivePosition": "Pozíciu s aktívnym podielom nemožno zmazať. Najprv predajte alebo previeďte všetky akcie, prosím.",
     "transactionAlreadyTransfer": "Transakcia je už označená ako prevod a nemožno ju prepojiť s portfóliom.",
     "transactionAlreadyLinkedToPortfolio": "Transakcia je už prepojená s prevodom do portfólia.",
+    "linkedTransactionMustBelongToDestinationAccount": "Prepojená transakcia musí patriť do cieľového účtu.",
     "transactionAlreadyLinkedToVenture": "Transakcia je už prepojená s obchodom v rizikovom kapitáli",
     "portfolioTransferNotFound": "Prevod do portfólia sa nenašiel",
     "exchangeCurrenciesMustDiffer": "Meny pri výmene musia byť rôzne",
@@ -279,7 +297,6 @@
     "connectionNotFound": "Pripojenie sa nenašlo",
     "connectionNotFoundOrNotYours": "Pripojenie sa nenašlo alebo vám nepatrí",
     "providerNoReauthorization": "Poskytovateľ {{providerType}} nepodporuje opätovnú autorizáciu",
-    "providerNotFoundInRegistry": "Poskytovateľ {{providerType}} sa v registri nenašiel",
     "connectionIdNotFound": "Pripojenie poskytovateľa bankových údajov {{connectionId}} sa nenašlo",
     "accountIdNotFound": "Účet {{accountId}} sa nenašiel",
     "providerTypeMismatch": "Pripojenie {{connectionId}} je pre poskytovateľa {{actualType}}, nie {{expectedType}}",
@@ -318,7 +335,7 @@
     "periodLoadNotSupported": "Tento poskytovateľ nepodporuje načítavanie transakcií za vlastné obdobie.",
     "transactionsLoadedCount": "Načítaných {{count}} transakcií.",
     "transactionsAllDuplicates": "Za toto obdobie sa našlo {{count}} transakcií — všetky boli už importované.",
-    "transactionsNoneInPeriod": "Poskytovateľ za toto obdobie nevrátil žiadne transakcie.",
+    "transactionsNoneInPeriod": "Poskytovateľ údajov za toto obdobie nevrátil žiadne transakcie.",
     "apiError": "Chyba {{provider}} API: {{message}}",
     "simplefinUnreachable": "SimpleFIN je dočasne nedostupný. Skúste to znova neskôr, prosím.",
     "currencySelectionRequired": "Účet „{{account}}\" nemá od banky uvedenú menu — pred pripojením mu menu vyberte.",
@@ -327,9 +344,7 @@
       "invalidCredentialsFormat": "Neplatný formát prístupových údajov pre Monobank",
       "invalidApiToken": "Neplatný API token pre Monobank",
       "rateLimitExceeded": "Prekročený limit požiadaviek API Monobank. Skúste to znova o minútu, prosím.",
-      "accountNotFound": "Účet {{accountExternalId}} sa v Monobank nenašiel",
       "accountReconnectRequired": "Tento účet už v Monobank nie je dostupný. Ak chcete obnoviť synchronizáciu, pripojte svoje pripojenie Monobank znova, prosím.",
-      "webhookNotImplemented": "handleWebhook pre Monobank zatiaľ nie je implementovaný",
       "unknownCurrencyCode": "Neznámy kód meny: {{numericCode}}",
       "geoBlocked": "Monobank blokuje požiadavky z IP adresy tohto servera. Vypnite VPN, alebo použite ukrajinskú IP adresu.",
       "geoBlockedProduction": "Synchronizácia s Monobank je dočasne nedostupná. Boli sme upozornení a pracujeme na tom. Ak je to naliehavé, kontaktujte podporu, prosím."
@@ -365,8 +380,7 @@
       "invalidTokens": "Nesprávne tokeny Akahu. Skontrolujte User Access Token a App ID Token na stránke vašej aplikácie Akahu.",
       "accountNoExternalId": "Účet nemá externé ID pre synchronizáciu s Akahu.",
       "accountNotFound": "Akahu účet sa nenašiel.",
-      "rateLimited": "Akahu momentálne obmedzuje počet požiadaviek. Skúste to o chvíľu znova, prosím.",
-      "missingCurrency": "Akahu nevrátilo pre tento účet žiadnu menu."
+      "rateLimited": "Akahu momentálne obmedzuje počet požiadaviek. Skúste to o chvíľu znova, prosím."
     },
     "simplefin": {
       "invalidCredentialsFormat": "Neplatný formát prístupových údajov pre SimpleFIN.",
@@ -381,8 +395,7 @@
     "walutomat": {
       "invalidCredentialsFormat": "Neplatný formát prístupových údajov pre Walutomat. API kľúč aj súkromný kľúč sú povinné.",
       "invalidApiKey": "Neplatný API kľúč alebo súkromný kľúč pre Walutomat.",
-      "accountNoExternalId": "Účet Walutomat nemá externé ID.",
-      "walletNotFound": "Peňaženka Walutomat pre menu {{currency}} sa nenašla"
+      "accountNoExternalId": "Účet Walutomat nemá externé ID."
     }
   },
   "csvImport": {
@@ -478,6 +491,7 @@
     "aiRateLimited": "Dosiahnutý limit požiadaviek poskytovateľa AI. Skúste to znova o pár minút, prosím.",
     "aiExtractionFailed": "Vyťaženie pomocou AI zlyhalo. Skúste to znova, prosím.",
     "ynab": {
+      "importAlreadyInProgress": "Import z YANB už prebieha. Pred spustením ďalšieho počkajte, kým sa dokončí.",
       "parse": {
         "fileEmpty": "Súbor YNAB Register.csv je prázdny.",
         "unparseable": "Súbor YNAB Register.csv sa nepodarilo spracovať ako súbor CSV.",
@@ -653,7 +667,6 @@
         "home-garden": "Domácnosť, záhrada",
         "pets-animals": "Domáce zvieratá",
         "electronics-accessories": "Elektronika, príslušenstvo",
-        "gifts-joy": "Darčeky, radosti",
         "stationery-tools": "Kancelária, náradie",
         "free-time": "Voľný čas",
         "drugstore-chemist": "Drogéria, lekáreň"
@@ -690,7 +703,8 @@
         "books-audio-subscriptions": "Knihy, audio, predplatné",
         "tv-streaming": "TV, streamovanie",
         "holiday-trips-hotels": "Dovolenka, výlety, hotely",
-        "charity-gifts": "Charita, dary",
+        "gifts": "Dary",
+        "charity": "Charita",
         "alcohol-tobacco": "Alkohol, tabak",
         "lottery-gambling": "Lotéria, hazardné hry"
       },
@@ -746,6 +760,11 @@
         "requiresAccountField": "Automatické zaznamenávanie vyžaduje účet, na ktorý sa transakcia zaúčtuje.",
         "requiresAmountField": "Automatické zaznamenávanie vyžaduje expectedAmount a expectedCurrencyCode.",
         "excludesMatchingField": "Automatické zaznamenávanie a priraďovacie pravidlá sa navzájom vylučujú."
+      },
+      "customInterval": {
+        "required": "Vlastná frekvencia vyžaduje jednotku a počet intervalu.",
+        "presetConflict": "Jednotku a počet intervalu možno nastaviť len pri vlastnej frekvencii.",
+        "countOutOfRange": "Počet intervalov musí byť pre túto jednotku v rozsahu {{min}} až {{max}}."
       }
     }
   },
