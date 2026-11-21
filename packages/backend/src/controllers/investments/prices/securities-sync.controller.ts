@@ -168,6 +168,7 @@ function createPricesSyncController(ownerScoped = false) {
             });
           }
         }
+        if (body.missingOnly) return { data: { timestamp: new Date().toISOString(), historical: results, discovery } };
         const current = await Promise.allSettled([
           securitiesIntradaySyncCron.triggerManualSync(currentOptions),
           cryptoPricesSyncCron.triggerManualSync(currentOptions),

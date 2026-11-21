@@ -9,7 +9,7 @@ module.exports = {
  previous=CASE WHEN TG_OP='INSERT' THEN NULL ELSE to_jsonb(OLD) END;
  sid=CASE WHEN TG_TABLE_NAME='Securities' THEN (r->>'id')::uuid ELSE (r->>'securityId')::uuid END;
  IF TG_TABLE_NAME='SecurityPricings' THEN
-  IF TG_OP='UPDATE' AND r->'date'=previous->'date' AND r->'priceClose'=previous->'priceClose' AND r->'unadjustedClose' IS NOT DISTINCT FROM previous->'unadjustedClose' AND r->'priceAsOf' IS NOT DISTINCT FROM previous->'priceAsOf' THEN RETURN NULL;END IF;
+  IF TG_OP='UPDATE' AND r->'date'=previous->'date' AND r->'priceClose'=previous->'priceClose' AND r->'unadjustedClose' IS NOT DISTINCT FROM previous->'unadjustedClose' AND r->'priceAsOf' IS NOT DISTINCT FROM previous->'priceAsOf' AND r->'previousClose' IS NOT DISTINCT FROM previous->'previousClose' THEN RETURN NULL;END IF;
   d=CASE WHEN r->>'priceAsOf' IS NULL THEN (r->>'date')::date ELSE ((r->>'priceAsOf')::timestamptz AT TIME ZONE 'America/New_York')::date END;
   IF TG_OP='UPDATE' THEN d=LEAST(d,(previous->>'date')::date-1);END IF;
  ELSE d='1900-01-01'::date;END IF;
