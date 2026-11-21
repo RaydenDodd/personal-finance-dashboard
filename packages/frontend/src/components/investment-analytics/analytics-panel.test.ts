@@ -35,6 +35,7 @@ const base = (): InvestmentAnalytics => ({
   refresh: { supported: false, lastSuccess: null, schedule: 'Existing schedule', provider: 'Existing providers' },
 });
 const stubs = {
+  DialogContent: true,
   ExpenseDonut: true,
   SeriesChart: true,
   HoldingsTable: true,
