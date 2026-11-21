@@ -126,6 +126,16 @@ export function buildHistory({
     }),
   );
   const securityById = new Map<string, Securities>(securities.map((s) => [s.id, s]));
+  const sessionPriceDates = new Map<string, string>();
+  const stockPriceDay = (date: string) => {
+    let day = sessionPriceDates.get(date);
+    if (!day) {
+      day = usEquitySession(date).tradingDay ? date : previousUsEquitySession(date);
+      sessionPriceDates.set(date, day);
+    }
+    return day;
+  };
+  const livePriorClose = previousUsEquitySession(liveDay);
   for (const id of ids) {
     const broker = byBroker.get(id);
     const values = new Map<string, string | null>();
@@ -163,11 +173,10 @@ export function buildHistory({
       securitiesById: new Map(securities.map((s) => [s.id, s])),
       findPriceForDate: (securityId, date) => {
         const security = securityById.get(securityId);
-        const expected =
-          security?.assetClass === 'crypto' || usEquitySession(date).tradingDay ? date : previousUsEquitySession(date);
+        const expected = security?.assetClass === 'crypto' ? date : stockPriceDay(date);
         // Today's account value retains a real prior close until a regular quote arrives.
         // This is a valuation fallback, never a new price observation or a historical gap fill.
-        const prior = previousUsEquitySession(date);
+        const prior = livePriorClose;
         const price = observed.has(`${securityId}:${expected}`)
           ? findPrice(securityId, date)
           : date === liveDay && security?.assetClass !== 'crypto' && observed.has(`${securityId}:${prior}`)
