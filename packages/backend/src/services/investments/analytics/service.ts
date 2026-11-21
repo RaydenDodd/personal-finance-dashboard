@@ -45,6 +45,8 @@ import type { TransactionRow } from '@services/stats/get-combined-balance-histor
 import Big from 'big.js';
 import { Op, literal } from 'sequelize';
 
+import { getAccountGainSources } from './account-gain-sources';
+import { reconcileAccountGains } from './account-gains';
 import { compactAnalytics } from './compact-response';
 import { dailyPositionChange } from './daily-performance';
 import { getFundSnapshots, latestFundSnapshots } from './fund-snapshots';
@@ -290,10 +292,18 @@ async function getAnalyticsImpl({
         ]),
     );
     if (cash === null) missing.push('Cash balance: import a current account statement.');
-    if (recordedFunding === null || (broker && !broker.data.historyComplete))
+    if (recordedFunding === null)
       missing.push('Lifetime funding: reconcile deposits, withdrawals and opening balance with broker history.');
     return {
       calculation: {
+        valueAsOf:
+          positions
+            .map((a) => a.updatedAt)
+            .filter((d): d is string => !!d)
+            .sort()
+            .at(-1) ??
+          snapshot?.asOf ??
+          today,
         securitiesValue,
         pricedValue,
         gainValue,
@@ -309,10 +319,7 @@ async function getAnalyticsImpl({
             ? new Big(securitiesValue).minus(recordedFunding).toString()
             : null,
         accountGain:
-          securitiesValue !== null &&
-          cash !== null &&
-          recordedFunding !== null &&
-          (!broker || broker.data.historyComplete)
+          securitiesValue !== null && cash !== null && recordedFunding !== null
             ? new Big(securitiesValue).plus(cash).minus(recordedFunding).toString()
             : null,
         missing,
@@ -1116,7 +1123,51 @@ async function getAnalyticsImpl({
     );
     p.calculation!.dailyChange = knownDaily.length ? sum(knownDaily.map((a) => a.dailyChange!)) : null;
   }
+  const holdingDaily = { gain: metrics.dailyChange?.value ?? null, percent: metrics.dailyChangePercent?.value ?? null };
+  const gainSources = await getAccountGainSources(userId);
+  gainSources.valuations.push(
+    ...brokers.flatMap((b) =>
+      b.data.snapshots
+        .filter((s) => s.totalValue !== null)
+        .map((s) => ({
+          accountId: `portfolio:${b.portfolioId}`,
+          portfolioId: b.portfolioId,
+          name: portfolioById.get(b.portfolioId)?.name ?? '',
+          date: s.asOf.slice(0, 10),
+          value: s.totalValue!,
+          source: s.source,
+        })),
+    ),
+  );
+  gainSources.valuations.sort((a, b) => a.date.localeCompare(b.date));
+  const accountValueAdjustments = reconcileAccountGains({
+    portfolios,
+    allPortfolioNames: allPortfolios.map((p) => p.name),
+    metrics,
+    sources: gainSources,
+    today,
+    funding: new Map(
+      portfolios.map((p) => [
+        p.id,
+        transfers
+          .filter((t) => (t.toPortfolioId === p.id || t.fromPortfolioId === p.id) && !t.isAdjustment)
+          .map((t) => ({
+            id: t.id,
+            date: t.date,
+            amount: nativeExternalFlow(t, new Set([p.id])),
+            source: 'Imported portfolio transfer',
+            description: t.description ?? '',
+          })),
+      ]),
+    ),
+    trades: transactions.map((t) => ({
+      portfolioId: t.portfolioId,
+      category: t.category,
+      amount: decimal(t.refAmount),
+    })),
+  });
   const result: InvestmentAnalytics = {
+    accountValueAdjustments,
     performanceTotals: (() => {
       const totals: NonNullable<InvestmentAnalytics['performanceTotals']> = {};
       const pairs = new Map<string, { portfolioId: string; securityId: string }>();
@@ -1187,8 +1238,8 @@ async function getAnalyticsImpl({
           total: eligible.get(period) ?? 0,
         };
       totals.daily = {
-        gain: metrics.dailyChange?.value ?? null,
-        percent: metrics.dailyChangePercent?.value ?? null,
+        gain: holdingDaily.gain,
+        percent: holdingDaily.percent,
         covered: dailyHoldings.length + closedChanges.length,
         total: holdings.length + closedChanges.length,
       };

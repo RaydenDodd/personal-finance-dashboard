@@ -91,13 +91,13 @@ const metricLabels: Record<string, string> = {
   unrealizedPercent: 'Unrealized return',
   realizedGain: 'Realized gain / loss',
   combinedGain: 'Combined investment gains',
-  netInvested: 'Net invested capital',
-  contributions: 'Historical contributions',
+  netInvested: 'Reconciled net principal',
+  contributions: 'Imported cash deposits',
   withdrawals: 'Withdrawals',
   dividends: 'Recorded dividend income',
   interest: 'Recorded interest income',
   fees: 'Investment fees',
-  dailyChange: 'Daily market change',
+  dailyChange: 'Daily account change',
   dailyChangePercent: 'Daily change',
   ytdReturn: 'YTD return',
   lifetimeReturn: 'Lifetime return',
@@ -126,12 +126,12 @@ const percentMetrics = new Set([
 ]);
 const metricKeys = computed(() =>
   props.kind === 'gains'
-    ? ['unrealizedGain', 'realizedGain', 'combinedGain', 'dividends', 'interest', 'fees', 'costBasis']
+    ? ['accountGain', 'unrealizedGain', 'realizedGain', 'combinedGain', 'dividends', 'interest', 'fees', 'costBasis']
     : props.kind === 'risk'
       ? ['volatility', 'maxDrawdown', 'twr', 'annualizedReturn']
       : props.kind === 'concentration'
         ? ['topFiveConcentration', 'topTenConcentration']
-        : ['marketValue', 'accountGain', 'unrealizedGain', 'dailyChange'],
+        : ['accountGain', 'marketValue', 'unrealizedGain', 'dailyChange'],
 );
 function displayedMetric(key: string) {
   const full = props.analytics.metrics[key];
@@ -762,6 +762,7 @@ const health = computed(() =>
               key.toLowerCase().includes('gain') || key === 'dailyChange' ? signed(displayedMetric(key).value) : ''
             "
           >
+            <span v-if="analytics.metrics[key]?.estimated" aria-label="Estimated">≈ </span>
             {{ percentMetrics.has(key) ? pct(displayedMetric(key).value) : money(displayedMetric(key).value) }}
           </button>
           <p
@@ -769,7 +770,7 @@ const health = computed(() =>
             class="text-xs tabular-nums"
             :class="signed(analytics.metrics.dailyChange?.value)"
           >
-            {{ pct(analytics.metrics.dailyChangePercent.value) }} · covered positions
+            {{ pct(analytics.metrics.dailyChangePercent.value) }}
           </p>
         </div>
       </div>

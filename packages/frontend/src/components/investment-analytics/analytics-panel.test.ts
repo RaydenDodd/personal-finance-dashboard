@@ -89,7 +89,7 @@ describe('shared investment panels', () => {
     expect(wrapper.text()).not.toContain('One unvalued position');
     expect(wrapper.text()).not.toContain('Partial ·');
     expect(wrapper.text()).toContain('Unavailable');
-    await wrapper.get('button[aria-haspopup="dialog"]').trigger('click');
+    await wrapper.get('button[aria-label^="Known investment value"]').trigger('click');
     expect(wrapper.findComponent({ name: 'MetricBreakdown' }).props()).toMatchObject({
       metric: 'marketValue',
       value: '1000',

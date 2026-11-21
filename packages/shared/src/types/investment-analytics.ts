@@ -2,6 +2,7 @@
 export type InvestmentDecimal = string | null;
 export type InvestmentQualityStatus = 'verified' | 'partial' | 'stale' | 'unavailable';
 export interface InvestmentMetric {
+  estimated?: boolean;
   value: InvestmentDecimal;
   status: InvestmentQualityStatus;
   reason?: string;
@@ -19,6 +20,44 @@ export interface InvestmentClassification {
 }
 export interface InvestmentPortfolio {
   calculation?: {
+    currentValue?: InvestmentDecimal;
+    valueSource?: string;
+    valueAsOf?: string;
+    estimated?: boolean;
+    principal?: InvestmentDecimal;
+    principalSource?: string;
+    financeAccountId?: string;
+    importedDeposits?: string;
+    importedWithdrawals?: string;
+    principalDifference?: InvestmentDecimal;
+    fundingRecords?: {
+      id: string;
+      date: string;
+      amount: string;
+      source: string;
+      description: string;
+      excluded?: string;
+    }[];
+    principalRecords?: { id: string; date: string; amount: string; type: string; description: string }[];
+    purchaseCostEstimate?: {
+      purchases: string;
+      sales: string;
+      netTradingCapital: string;
+      remainingBasis: InvestmentDecimal;
+      holdingGain: InvestmentDecimal;
+    };
+    daily?: {
+      currentValue: string;
+      previousValue: string;
+      currentDate: string;
+      previousDate: string;
+      deposits: string;
+      withdrawals: string;
+      change: string;
+      percent: InvestmentDecimal;
+      method: string;
+      estimated: boolean;
+    };
     securitiesValue: InvestmentDecimal;
     pricedValue: string;
     gainValue: string;
@@ -315,6 +354,19 @@ export interface InvestmentDataHealth {
   asOf?: string | null;
 }
 export interface InvestmentAnalytics {
+  accountValueAdjustments?: {
+    applied?: boolean;
+    label: string;
+    portfolioIds: string[];
+    value: string;
+    componentsValue: string;
+    difference: string;
+    source: string;
+    asOf: string;
+    dailyDifference?: string;
+    dailyChange?: string;
+    previousValue?: string;
+  }[];
   performanceTotals?: Record<
     string,
     { gain: InvestmentDecimal; percent: InvestmentDecimal; covered: number; total: number }

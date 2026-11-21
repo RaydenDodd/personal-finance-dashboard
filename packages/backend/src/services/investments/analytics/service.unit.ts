@@ -42,6 +42,9 @@ jest.mock('./fund-snapshots', () => ({
   latestFundSnapshots: () => [],
 }));
 jest.mock('./history', () => ({ buildHistory: jest.fn().mockReturnValue([]) }));
+jest.mock('./account-gain-sources', () => ({
+  getAccountGainSources: jest.fn().mockResolvedValue({ accounts: [], flows: [], valuations: [] }),
+}));
 
 import { easternDate } from '@bt/shared/types/investment-market';
 import BrokerPortfolioData from '@models/investments/broker-portfolio-data.model';
@@ -148,7 +151,7 @@ describe('owner-scoped native portfolio analytics adapter', () => {
     expect(getPortfolioSummary).toHaveBeenCalledTimes(2);
     expect(getHoldingValues).toHaveBeenCalledTimes(2);
   });
-  it('withholds incomplete totals but exposes explicit known partial subtotals and leaves native source records alone', async () => {
+  it('exposes supported holdings plus known cash as an estimate without discarding native source records', async () => {
     jest
       .mocked(getPortfolioSummary)
       .mockImplementation(
@@ -156,7 +159,7 @@ describe('owner-scoped native portfolio analytics adapter', () => {
           ({ ...summary(portfolioId), cashKnown: portfolioId !== 'b', marketValueKnown: portfolioId !== 'b' }) as never,
       );
     const result = await getInvestmentAnalytics({ userId: 1 });
-    expect(result.metrics.marketValue?.value).toBeNull();
+    expect(result.metrics.marketValue).toMatchObject({ value: '105', estimated: true, status: 'partial' });
     expect(result.metrics.knownMarketValue).toMatchObject({ value: '105', status: 'partial' });
     expect(result.metrics.unknownCashCount?.value).toBe('1');
     expect(result.holdings[0]?.weight).toBe('95.238095');
@@ -191,7 +194,7 @@ describe('owner-scoped native portfolio analytics adapter', () => {
     const result = await getInvestmentAnalytics({ userId: 1 });
     expect(result.metrics.accountGain?.value).toBeNull();
     expect(result.portfolios[0]?.calculation?.accountGain).toBeNull();
-    expect(result.portfolios[0]?.calculation?.missing.join(' ')).toContain('Lifetime funding');
+    expect(result.portfolios[0]?.calculation?.missing.join(' ')).toContain('Lifetime principal');
     expect(result.portfolios[0]?.calculation?.unrealizedGain).toBe('15');
   });
   it('rejects foreign portfolio selections before fetching holdings or financial data', async () => {
