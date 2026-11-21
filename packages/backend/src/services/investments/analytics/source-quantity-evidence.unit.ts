@@ -7,6 +7,23 @@ describe('retained source quantity evidence', () => {
   const row = { action: 'REC', date: '2021-04-28', symbol: 'VXRT', quantity: '1', sourceRowId: 'a'.repeat(64) };
   const securities = [{ id: 's', symbol: 'VXRT' }];
   const data = (events: object[]) => ({ sourceEvents: events }) as BrokerData;
+  it('replays a retained original purchase and its evidenced cancellation without source writes', () => {
+    const buy = { ...row, action: 'Buy', kind: 'trade', cashAmount: '-8.12', quantity: '0.026899' };
+    const cancel = { ...buy, action: 'BCXL', kind: 'review', sourceRowId: 'b'.repeat(64), cashAmount: '8.12' };
+    const source = { ...data([buy, cancel]), broker: 'robinhood' } as BrokerData;
+    const before = JSON.stringify(source);
+    expect(
+      sourceQuantityEvidence('p', source, securities, []).rows.map((r) => ({
+        category: r.category,
+        quantity: r.quantity,
+        amount: r.refAmount,
+      })),
+    ).toEqual([
+      { category: 'buy', quantity: '0.026899', amount: '8.12' },
+      { category: 'sell', quantity: '0.026899', amount: '8.12' },
+    ]);
+    expect(JSON.stringify(source)).toBe(before);
+  });
   it('reuses a documented stock receipt without creating a purchase or cash flow', () => {
     expect(sourceQuantityEvidence('p', data([row, row]), securities, []).rows).toMatchObject([
       { category: 'transfer', transactionType: 'income', quantity: '1', refAmount: '0', settlementAmount: '0' },

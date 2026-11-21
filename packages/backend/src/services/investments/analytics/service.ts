@@ -64,6 +64,7 @@ import { nativeExternalFlow } from './native-transfer';
 import { consolidatedReturns, normalizeComparableSeries, recordedPriceReturns } from './performance';
 import { positionPeriodDates, positionPeriodReturns } from './position-performance';
 import { currentHoldingsPriceRisk } from './price-risk';
+import { sourceQuantityEvidence } from './source-quantity-evidence';
 
 const decimal = (m: Money | string | number): string => (Money.isMoney(m) ? m.toDecimalString(18) : String(m));
 const dateString = (d: Date | string | null | undefined) => (d ? new Date(d).toISOString() : null);
@@ -694,6 +695,31 @@ async function getAnalyticsImpl({
   const positionBaselines = new Map<string, string>();
   const positionQuantities = new Map<string, string | null>();
   const shareUnitFactor = createShareUnitFactor(prices, investmentPriceDate);
+  const nativeRows = transactions.map((t) => ({
+    portfolioId: t.portfolioId,
+    securityId: t.securityId,
+    category: t.category,
+    transactionType: t.transactionType,
+    description: t.name,
+    date: t.date,
+    quantity: decimal(t.quantity),
+    refAmount: decimal(t.refAmount),
+    currencyCode: t.currencyCode,
+    settlementAmount: decimal(t.settlementAmount),
+    settlementCurrencyCode: t.settlementCurrencyCode,
+  })) as TransactionRow[];
+  const historyRows = [
+    ...nativeRows,
+    ...brokers.flatMap(
+      (b) =>
+        sourceQuantityEvidence(
+          b.portfolioId,
+          b.data,
+          securities,
+          nativeRows.filter((t) => t.portfolioId === b.portfolioId),
+        ).rows,
+    ),
+  ].sort((a, b) => +a.date - +b.date);
   const history = buildHistory({
     onHoldingQuantity: (row) => {
       if (baselineDays.has(row.date))
@@ -715,19 +741,7 @@ async function getAnalyticsImpl({
     balances,
     securities,
     prices,
-    transactions: transactions.map((t) => ({
-      portfolioId: t.portfolioId,
-      securityId: t.securityId,
-      category: t.category,
-      transactionType: t.transactionType,
-      description: t.name,
-      date: t.date,
-      quantity: decimal(t.quantity),
-      refAmount: decimal(t.refAmount),
-      currencyCode: t.currencyCode,
-      settlementAmount: decimal(t.settlementAmount),
-      settlementCurrencyCode: t.settlementCurrencyCode,
-    })) as TransactionRow[],
+    transactions: historyRows,
   });
   const firstSecurityEvidence = new Map<string, string>();
   const evidence = (portfolioId: string, securityId: string, date: string) => {
@@ -735,7 +749,7 @@ async function getAnalyticsImpl({
     const old = firstSecurityEvidence.get(key);
     if (!old || date < old) firstSecurityEvidence.set(key, date);
   };
-  for (const t of transactions.filter((t) => ['buy', 'sell'].includes(t.category)))
+  for (const t of historyRows.filter((t) => ['buy', 'sell', 'transfer'].includes(t.category)))
     evidence(t.portfolioId, t.securityId, investmentPriceDate(t.date));
   for (const b of brokers)
     for (const snapshot of b.data.snapshots)
@@ -761,7 +775,7 @@ async function getAnalyticsImpl({
         if (quantity === '0') return '0';
         return positionBaselines.get(`${portfolioId}:${securityId}:${date}`) ?? null;
       },
-      trades: transactions.map((t) => ({
+      trades: historyRows.map((t) => ({
         portfolioId: t.portfolioId,
         securityId: t.securityId,
         date: investmentPriceDate(t.date),
@@ -1106,7 +1120,7 @@ async function getAnalyticsImpl({
     performanceTotals: (() => {
       const totals: NonNullable<InvestmentAnalytics['performanceTotals']> = {};
       const pairs = new Map<string, { portfolioId: string; securityId: string }>();
-      for (const t of transactions.filter((t) => ['buy', 'sell', 'transfer'].includes(t.category)))
+      for (const t of historyRows.filter((t) => ['buy', 'sell', 'transfer'].includes(t.category)))
         pairs.set(t.portfolioId + ':' + t.securityId, { portfolioId: t.portfolioId, securityId: t.securityId });
       for (const b of brokers)
         for (const s of b.data.snapshots)
@@ -1116,7 +1130,7 @@ async function getAnalyticsImpl({
         gains = new Map<string, Big>(),
         covered = new Map<string, number>();
       const eligible = new Map<string, number>();
-      const txs = transactions.map((t) => ({
+      const txs = historyRows.map((t) => ({
         portfolioId: t.portfolioId,
         securityId: t.securityId,
         date: investmentPriceDate(t.date),
@@ -1222,8 +1236,8 @@ async function getAnalyticsImpl({
       compositionDates: [...new Set(fundSnapshots.map((s) => s.asOf))].sort(),
       methodology: [
         'Current positions, basis and gains reuse the native portfolio calculation service.',
-        'Historical values reuse native holdings/cash replay; its whole-dollar holding rounding remains unchanged. Missing price/FX fallbacks are withheld.',
-        'Incomplete broker histories use actual complete dated observations only; unsupported periods remain gaps.',
+        'Historical values reuse native holdings/cash replay and dated broker quantity evidence at full precision. Missing prices and quantities remain unknown.',
+        'Supported partial holdings values remain visible independently of account-history completeness; recorded cash is included on evidenced dates.',
         'Fund geography uses imported issuer country; exchange location and fund domicile are not substituted.',
         'Unknown fund weights remain unreported exposure; fund wrappers are excluded from underlying totals.',
         'Hidden portfolios are excluded from shared analytics, including explicit selections. Net-worth exclusion remains a separate setting.',

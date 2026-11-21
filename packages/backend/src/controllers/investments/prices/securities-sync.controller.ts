@@ -97,7 +97,7 @@ function createPricesSyncController(ownerScoped = false) {
             ...new Set(
               records.flatMap((r) =>
                 r.data.sourceEvents
-                  .filter((e) => ['REC', 'SXCH'].includes(String(e.action)))
+                  .filter((e) => ['REC', 'SXCH', 'Buy', 'Sell'].includes(String(e.action)))
                   .map((e) => String(e.symbol ?? '')),
               ),
             ),

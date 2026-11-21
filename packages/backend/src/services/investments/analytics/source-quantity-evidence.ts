@@ -1,8 +1,9 @@
 import type { TransactionRow } from '@services/stats/get-combined-balance-history/types';
+import Big from 'big.js';
 
 import type { BrokerData } from '../broker-records/schema';
 
-/** Read-only bridge from retained broker receipts into the native share replay.
+/** Read-only bridge from retained broker records into the native share replay.
  * Never creates trades, cash, basis, or lots. Published splits remain in the native price normalization.
  */
 export function sourceQuantityEvidence(
@@ -19,7 +20,8 @@ export function sourceQuantityEvidence(
       date = String(e.date ?? ''),
       symbol = String(e.symbol ?? ''),
       key = String(e.sourceRowId ?? '');
-    if (!['REC', 'SXCH', 'SPR', 'BCXL'].includes(action) || !/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+    const trade = data.broker === 'robinhood' && ['Buy', 'Sell'].includes(action) && e.kind === 'trade';
+    if ((!trade && !['REC', 'SXCH', 'SPR', 'BCXL'].includes(action)) || !/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
     if (!key || seen.has(key) || transactions.some((t) => t.description?.includes(`[broker-row:${key}]`))) continue;
     seen.add(key);
     const cusip = String(e.description ?? '').match(/CUSIP:\s*([A-Z0-9]+)/)?.[1];
@@ -33,18 +35,43 @@ export function sourceQuantityEvidence(
         !(data.sourceEvents ?? []).some(
           (other) => other !== e && other.action === 'SXCH' && other.date === date && other.symbol === symbol,
         ));
-    if (receipt && matches.length === 1 && e.quantity != null && Number(e.quantity) > 0) {
+    const cancellation =
+      action === 'BCXL' &&
+      e.cashAmount != null &&
+      Number(e.cashAmount) > 0 &&
+      (data.sourceEvents ?? []).some(
+        (original) =>
+          original.action === 'Buy' &&
+          original.date === date &&
+          original.symbol === symbol &&
+          original.quantity === e.quantity &&
+          Number(original.cashAmount) === -Number(e.cashAmount),
+      );
+    const validTrade =
+      trade &&
+      e.cashAmount != null &&
+      Number.isFinite(Number(e.cashAmount)) &&
+      (action === 'Buy' ? Number(e.cashAmount) < 0 : Number(e.cashAmount) > 0);
+    if (
+      (receipt || validTrade || cancellation) &&
+      matches.length === 1 &&
+      e.quantity != null &&
+      Number(e.quantity) > 0
+    ) {
+      const side = validTrade ? (action === 'Buy' ? 'buy' : 'sell') : cancellation ? 'sell' : 'transfer';
+      const amount = side === 'transfer' ? '0' : new Big(String(e.cashAmount)).abs().toString();
       rows.push({
         portfolioId,
         securityId: matches[0]!.id,
         date: new Date(date + 'T12:00:00Z'),
-        category: 'transfer',
-        transactionType: 'income',
+        category: side,
+        transactionType: side === 'buy' ? 'expense' : 'income',
+        description: `[broker-row:${key}] retained ${action}`,
         quantity: String(e.quantity),
-        refAmount: '0',
+        refAmount: amount,
         currencyCode: 'USD',
         settlementCurrencyCode: 'USD',
-        settlementAmount: '0',
+        settlementAmount: amount,
       } as TransactionRow);
     } else if (!matches.length || action === 'BCXL') {
       issues.push({

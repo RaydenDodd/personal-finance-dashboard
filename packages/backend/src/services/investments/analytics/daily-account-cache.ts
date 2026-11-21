@@ -14,7 +14,7 @@ import { QueryTypes, Op, type Transaction } from 'sequelize';
 import { usesUsEquitySession } from '../securities-price/regular-session';
 import { buildHistory } from './history';
 import { sourceQuantityEvidence } from './source-quantity-evidence';
-export const ACCOUNT_HISTORY_VERSION = 2;
+export const ACCOUNT_HISTORY_VERSION = 3;
 
 export const sqlRows = <T extends object>(sql: string, replacements: Record<string, unknown> = {}) =>
   connection.sequelize.query(sql, { replacements, type: QueryTypes.SELECT }) as Promise<T[]>;
@@ -88,7 +88,7 @@ export async function refreshNextAccountHistory(userId?: number) {
   const sourceSymbols = [
     ...new Set(
       (broker?.data.sourceEvents ?? [])
-        .filter((e) => ['REC', 'SXCH', 'SPR'].includes(String(e.action)))
+        .filter((e) => ['REC', 'SXCH', 'SPR', 'Buy', 'Sell'].includes(String(e.action)))
         .map((e) => String(e.symbol ?? '')),
     ),
   ];
@@ -170,10 +170,11 @@ export async function refreshNextAccountHistory(userId?: number) {
     ]),
   );
   const firstBuy = new Map<string, string>();
-  for (const t of transactions)
+  const valuationTrades = [...transactions, ...sourceEvidence.rows].sort((a, b) => +a.date - +b.date);
+  for (const t of valuationTrades)
     if (t.category === 'buy' && !firstBuy.has(t.securityId)) firstBuy.set(t.securityId, investmentPriceDate(t.date));
   const saleDays = new Set(
-    transactions.filter((t) => t.category === 'sell').map((t) => nextDay(investmentPriceDate(t.date), -1)),
+    valuationTrades.filter((t) => t.category === 'sell').map((t) => nextDay(investmentPriceDate(t.date), -1)),
   );
   const history = buildHistory({
     ids: [portfolio.id],
@@ -247,6 +248,7 @@ export async function refreshNextAccountHistory(userId?: number) {
         : []),
     ],
     sourceTradeCount: transactions.length,
+    retainedSourceQuantityRows: sourceEvidence.rows.length,
     sourceSnapshotCount: snapshots.length,
   };
   // Commit small batches; progress survives a restart. Concurrent source changes retain their dirty generation.
