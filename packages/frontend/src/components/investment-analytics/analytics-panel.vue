@@ -515,7 +515,7 @@ const chartPoints = computed<InvestmentChartPoint[]>(() => {
             ]),
           ),
         },
-        note: 'Normalized at ' + common + '; gaps mean no comparable observation.',
+        note: 'Compared from ' + common,
       }));
   }
   if (props.kind === 'risk') {
@@ -526,7 +526,7 @@ const chartPoints = computed<InvestmentChartPoint[]>(() => {
         return {
           date: row.date,
           values: { drawdown: null },
-          note: 'Cash-flow-adjusted return unavailable.',
+          note: 'Missing funding history',
         };
       const index = 1 + v / 100;
       peak = Math.max(peak, index);
@@ -541,7 +541,7 @@ const chartPoints = computed<InvestmentChartPoint[]>(() => {
     return comparablePortfolioPoints.value.map((row) => ({
       date: row.date,
       values: { returnPercent: rebase(chartNumber(row.returnPercent), base) },
-      note: props.analytics.priceRisk!.methodology,
+      note: `Current holdings · price only · ${pct(props.analytics.priceRisk!.coveragePercent)} coverage`,
     }));
   }
   return allHistory.value.map((row) => ({
@@ -558,8 +558,7 @@ const chartPoints = computed<InvestmentChartPoint[]>(() => {
         : Object.fromEntries(
             activeSeries.value.map((key) => [key, chartNumber(row[key as keyof InvestmentHistoryPoint])]),
           ),
-    note:
-      row.coverage < 100 ? `Partial recorded values; some account cash/history is unknown. ${row.source}` : row.source,
+    note: row.coverage < 100 ? 'Partial recorded value' : undefined,
   }));
 });
 const plottedPoints = computed(() => {
