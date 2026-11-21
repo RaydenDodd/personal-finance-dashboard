@@ -61,12 +61,7 @@ function contribution(p: (typeof rows.value)[number]) {
       </DialogHeader>
       <ScrollArea class="min-h-0 flex-1">
         <div class="space-y-3 pr-3">
-          <p
-            v-if="
-              reason && !['unrealizedGain', 'accountGain', 'marketValue', 'costBasis', 'netInvested'].includes(metric)
-            "
-            class="text-muted-foreground text-xs"
-          >
+          <p v-if="reason && metric !== 'accountGain'" class="text-muted-foreground text-xs">
             {{ reason }}
           </p>
           <details v-for="p in rows" :key="p.id" class="rounded-md border p-3" :data-portfolio-id="p.id">

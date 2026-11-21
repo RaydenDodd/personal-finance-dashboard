@@ -46,12 +46,20 @@ const panel = (kind: string, analytics = base(), settings: Record<string, unknow
   mount(AnalyticsPanel, { props: { kind, analytics, settings: { dateRange: 'MAX', ...settings } }, global: { stubs } });
 
 describe('shared investment panels', () => {
-  it('labels a partial valuation as known value and preserves the missing coverage reason', () => {
+  it('opens the actual metric breakdown and keeps explanations out of the overview', async () => {
     const wrapper = panel('overview');
     expect(wrapper.text()).toContain('Known investment value');
     expect(wrapper.text()).toContain('$1,000.00');
-    expect(wrapper.text()).toContain('One unvalued position');
+    expect(wrapper.text()).not.toContain('One unvalued position');
+    expect(wrapper.text()).not.toContain('Partial ·');
     expect(wrapper.text()).toContain('Unavailable');
+    await wrapper.get('button[aria-haspopup="dialog"]').trigger('click');
+    expect(wrapper.findComponent({ name: 'MetricBreakdown' }).props()).toMatchObject({
+      metric: 'marketValue',
+      value: '1000',
+      reason: 'One unvalued position',
+    });
+    wrapper.unmount();
   });
   it('separates unknown dividend treatment from actual cash and reinvestment', () => {
     const analytics = base();
