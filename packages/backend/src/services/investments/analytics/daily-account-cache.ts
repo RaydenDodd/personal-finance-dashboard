@@ -108,7 +108,10 @@ export async function refreshNextAccountHistory(userId?: number) {
   const first = evidenceDates[0] ?? easternDate(),
     today = easternDate();
   const continuing =
-    String(work.pendingRevision) === String(work.revision) && work.currencyCode === currency && work.nextDate;
+    work.audit?.version === ACCOUNT_HISTORY_VERSION &&
+    String(work.pendingRevision) === String(work.revision) &&
+    work.currencyCode === currency &&
+    work.nextDate;
   const from = continuing
     ? work.nextDate!
     : work.currencyCode && work.currencyCode !== currency
