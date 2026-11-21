@@ -4,7 +4,7 @@ import { securitiesPricesCryptoSync } from '@root/services/investments/securitie
 
 import { createScheduledSync } from './lib/create-scheduled-sync';
 
-const DEFAULT_INTERVAL_MINUTES = 15;
+const DEFAULT_INTERVAL_MINUTES = 5;
 
 interface ResolvedSchedule {
   intervalMinutes: number;
@@ -25,7 +25,7 @@ const resolveSchedule = (): ResolvedSchedule => {
   const raw = process.env.CRYPTO_PRICES_SYNC_INTERVAL_MINUTES;
   if (!raw) return fallback;
 
-  const parsed = Number.parseInt(raw, 10);
+  const parsed = Math.min(Number.parseInt(raw, 10), 5);
   const cronExpression = minutesToCronExpression({ minutes: parsed });
   if (!cronExpression) {
     logger.warn(
@@ -39,7 +39,7 @@ const resolveSchedule = (): ResolvedSchedule => {
   return { intervalMinutes: parsed, cronExpression };
 };
 
-const { intervalMinutes, cronExpression } = resolveSchedule();
+const { intervalMinutes } = resolveSchedule();
 
 /**
  * Crypto intraday price sync (UTC).
@@ -52,8 +52,8 @@ const { intervalMinutes, cronExpression } = resolveSchedule();
  */
 export const cryptoPricesSyncCron = createScheduledSync({
   name: 'crypto prices sync',
-  cronExpression,
-  timeZone: 'UTC',
-  scheduleDescription: `runs every ${intervalMinutes} minutes (UTC)`,
-  run: securitiesPricesCryptoSync,
+  cronExpression: `*/${intervalMinutes} 9-16 * * 1-5`,
+  timeZone: 'America/New_York',
+  scheduleDescription: `runs every ${intervalMinutes} minutes during regular US market sessions`,
+  run: (options?: { force?: boolean }) => securitiesPricesCryptoSync(options),
 });

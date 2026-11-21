@@ -68,6 +68,7 @@ interface HoldingValue {
   // Internal: holding→base rate already resolved here; not part of the holdings API response
   baseRate?: number;
   costBasisKnown?: boolean;
+  reportedAverageCost?: string;
   marketValueKnown?: boolean;
   realizedGainKnown?: boolean;
   valuationSource?: string;
@@ -284,11 +285,13 @@ const getHoldingValuesImpl = async ({ portfolioId, date, userId }: GetHoldingVal
     let refMarketValue = '0';
     let latestPrice: string | undefined;
     let priceDate: Date | undefined;
+    let valuationSource: string | undefined;
     let baseRate: number | null = null;
 
     if (price) {
       latestPrice = price.priceClose.toDecimalString(INVESTMENT_DECIMAL_SCALE);
-      priceDate = price.date;
+      priceDate = price.priceAsOf ?? price.date;
+      valuationSource = price.source ?? holding.security?.providerName;
       const priceClose = price.priceClose.toBig();
       marketValue = quantity.times(priceClose).toFixed(10);
 
@@ -303,9 +306,15 @@ const getHoldingValuesImpl = async ({ portfolioId, date, userId }: GetHoldingVal
       }
     }
     // Broker quotes stay scoped to this account: never overwrite shared market pricing.
-    if (position && new Big(position.quantity).gt(0) && (!priceDate || new Date(snapshot!.asOf) >= priceDate)) {
+    if (
+      position &&
+      position.marketValue !== null &&
+      new Big(position.quantity).gt(0) &&
+      (!priceDate || new Date(snapshot!.asOf) >= priceDate)
+    ) {
       latestPrice = position.lastPrice ?? new Big(position.marketValue).div(position.quantity).toFixed(10);
       priceDate = new Date(snapshot!.asOf);
+      valuationSource = snapshot!.source;
       marketValue = quantity.eq(position.quantity) ? position.marketValue : quantity.times(latestPrice).toFixed(10);
       baseRate = await getBaseRate(holding.currencyCode);
       if (baseRate !== null)
@@ -337,9 +346,10 @@ const getHoldingValuesImpl = async ({ portfolioId, date, userId }: GetHoldingVal
       excluded: holding.excluded,
       security: holding.security,
       costBasisKnown: basisKnown,
+      reportedAverageCost: position?.reportedAverageCost,
       marketValueKnown: !broker || !!priceDate || quantity.eq(0),
       realizedGainKnown: !broker || broker.data.historyComplete,
-      valuationSource: position ? snapshot?.source : undefined,
+      valuationSource,
       latestPrice,
       priceDate,
       marketValue,

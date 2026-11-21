@@ -22,7 +22,9 @@ export const brokerSnapshotSchema = z
           symbol: z.string().min(1).max(50),
           quantity: positive,
           costBasis: positive.nullable(),
-          marketValue: positive,
+          reportedAverageCost: positive.optional(),
+          // Position/basis exports establish shares without reporting a quote.
+          marketValue: positive.nullable(),
           lastPrice: positive.optional(),
         }),
       )
@@ -32,7 +34,11 @@ export const brokerSnapshotSchema = z
   })
   .superRefine((s, ctx) => {
     if (s.complete && s.cash !== null && s.totalValue !== null) {
-      const sum = s.positions.reduce((n, p) => n.plus(p.marketValue), new Big(s.cash));
+      if (s.positions.some((p) => p.marketValue === null)) {
+        ctx.addIssue({ code: 'custom', message: 'A reported account valuation requires every position value.' });
+        return;
+      }
+      const sum = s.positions.reduce((n, p) => n.plus(p.marketValue!), new Big(s.cash));
       if (sum.minus(s.totalValue).abs().gt('0.02'))
         ctx.addIssue({ code: 'custom', message: 'Reported account total does not reconcile with positions and cash.' });
     }

@@ -1,21 +1,30 @@
+import { investmentPriceDate } from '@bt/shared/types/investment-market';
 import Big from 'big.js';
 import xirr from 'xirr';
 
 /** Price-only changes from persisted closes; sparse/stale baselines remain unavailable. */
 export function recordedPriceReturns(points: { date: string; price: string }[], now = new Date()) {
-  const result: Record<'daily' | 'weekly' | 'monthly' | 'ytd' | '1y', string | null> = {
+  const result: Record<
+    'daily' | 'weekly' | 'monthly' | '3m' | '6m' | 'ytd' | '1y' | '2y' | '5y' | 'all',
+    string | null
+  > = {
     daily: null,
     weekly: null,
     monthly: null,
     ytd: null,
     '1y': null,
+    '3m': null,
+    '6m': null,
+    '2y': null,
+    '5y': null,
+    all: null,
   };
   const sorted = points.toSorted((a, b) => a.date.localeCompare(b.date));
   const latest = sorted.at(-1);
   if (!latest || now.getTime() - new Date(latest.date).getTime() > 4 * 86400000) return result;
-  const end = new Date(latest.date);
-  const day = end.toISOString().slice(0, 10);
-  const previous = sorted.findLast((p) => p.date.slice(0, 10) < day);
+  const day = investmentPriceDate(latest.date);
+  const end = new Date(day + 'T00:00:00Z');
+  const previous = sorted.findLast((p) => investmentPriceDate(p.date) < day);
   const change = (p: typeof latest | undefined) =>
     !p || new Big(p.price).lte(0) ? null : new Big(latest.price).div(p.price).minus(1).times(100).toFixed(6);
   if (previous && end.getTime() - new Date(previous.date).getTime() <= 4 * 86400000) result.daily = change(previous);
@@ -40,6 +49,19 @@ export function recordedPriceReturns(points: { date: string; price: string }[], 
     if (base && cutoff.getTime() - new Date(base.date).getTime() <= 4 * 86400000)
       result[key as keyof typeof result] = change(base);
   }
+  for (const [key, months] of [
+    ['3m', 3],
+    ['6m', 6],
+    ['2y', 24],
+    ['5y', 60],
+  ] as const) {
+    const cutoff = new Date(end);
+    cutoff.setUTCMonth(cutoff.getUTCMonth() - months);
+    const target = cutoff.toISOString().slice(0, 10),
+      base = sorted.findLast((p) => investmentPriceDate(p.date) <= target);
+    if (base && cutoff.getTime() - new Date(base.date).getTime() <= 4 * 86400000) result[key] = change(base);
+  }
+  if (sorted.length > 1) result.all = change(sorted[0]);
   return result;
 }
 

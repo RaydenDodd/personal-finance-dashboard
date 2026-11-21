@@ -33,6 +33,7 @@ export interface InvestmentPortfolio {
   review: string[];
 }
 export interface InvestmentHoldingAccount {
+  reportedAverageCost?: InvestmentDecimal;
   portfolioId: string;
   portfolioName: string;
   quantity: string;
@@ -65,8 +66,13 @@ export interface InvestmentHolding extends InvestmentClassification {
   dividends: InvestmentDecimal;
   dailyChange: InvestmentDecimal;
   dailyChangePercent: InvestmentDecimal;
+  dailyChangeReason?: string;
+  previousCloseDate?: string | null;
+  quoteStatus?: 'delayed' | 'closing' | 'historical' | 'unavailable';
   /** Price-only changes from recorded historical prices, never account returns or current quotes copied backwards. */
-  periodReturns?: Partial<Record<'daily' | 'weekly' | 'monthly' | 'ytd' | '1y', InvestmentDecimal>>;
+  periodReturns?: Partial<
+    Record<'daily' | 'weekly' | 'monthly' | '3m' | '6m' | 'ytd' | '1y' | '2y' | '5y' | 'all', InvestmentDecimal>
+  >;
   weight: InvestmentDecimal;
   portfolioCount: number;
   isFund: boolean;
@@ -86,6 +92,10 @@ export interface InvestmentHistoryPoint {
   portfolios: Record<string, InvestmentDecimal>;
   coverage: number;
   source: string;
+  /** Supported subtotals are separate from full portfolio values. */
+  knownMarketValue?: InvestmentDecimal;
+  knownNetInvested?: InvestmentDecimal;
+  knownPortfolios?: Record<string, InvestmentDecimal>;
 }
 export interface InvestmentEvent {
   id: string;
@@ -283,6 +293,16 @@ export interface InvestmentDataHealth {
   asOf?: string | null;
 }
 export interface InvestmentAnalytics {
+  /** Historical prices of a fixed basket of today's priced holdings; never a reconstructed account return. */
+  priceRisk?: {
+    points: { date: string; returnPercent: string; drawdown: string }[];
+    coveragePercent: string;
+    included: number;
+    excluded: string[];
+    volatility: InvestmentDecimal;
+    maxDrawdown: InvestmentDecimal;
+    methodology: string;
+  };
   generatedAt: string;
   currencyCode: string;
   selectedPortfolioIds: string[];

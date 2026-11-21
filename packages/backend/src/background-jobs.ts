@@ -18,7 +18,11 @@ import { personalFinancePrincipalJob } from './crons/personal-finance-principal'
 import { personalFinanceSheetsCron } from './crons/personal-finance-sheets';
 import { publicPortfolioSyncCron } from './crons/public-portfolio-sync';
 import { purgeDeletedPortfoliosCron } from './crons/purge-deleted-portfolios';
-import { securitiesDailySyncCron } from './crons/securities-daily-sync';
+import {
+  securitiesDailySyncCron,
+  securitiesIntradaySyncCron,
+  securitiesClosingSyncCron,
+} from './crons/securities-daily-sync';
 import { shareInvitationsExpireCron } from './crons/share-invitations-expire';
 import { shareResourceOrphanCleanupCron } from './crons/share-resource-orphan-cleanup';
 import { stuckPendingCheckCron } from './crons/stuck-pending-check';
@@ -34,6 +38,8 @@ const allEnvCrons = [demoCleanupCron, demoTemplateRefreshCron];
 
 const prodOnlyCrons = [
   securitiesDailySyncCron,
+  securitiesIntradaySyncCron,
+  securitiesClosingSyncCron,
   fundCompositionRefreshCron,
   publicPortfolioSyncCron,
   cryptoPricesSyncCron,

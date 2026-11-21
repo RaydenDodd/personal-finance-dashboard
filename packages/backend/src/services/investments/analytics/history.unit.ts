@@ -67,4 +67,39 @@ describe('native historical valuation adapter', () => {
     // The existing native replay is used when an actual price exists.
     expect(points[2]?.marketValue).not.toBeNull();
   });
+  it('shows supported securities after a real position anchor without fabricating earlier positions or cash', () => {
+    const points = buildHistory({
+      ids: ['a'],
+      currencyCode: 'USD',
+      brokers: [
+        {
+          portfolioId: 'a',
+          data: {
+            historyComplete: false,
+            snapshots: [
+              {
+                asOf: '2026-11-18T00:00:00Z',
+                complete: true,
+                currencyCode: 'USD',
+                cash: null,
+                totalValue: null,
+                positions: [{ securityId: 's', quantity: '2', costBasis: '100', marketValue: null }],
+              },
+            ],
+          },
+        },
+      ] as never,
+      transactions: [],
+      transfers: [],
+      balances: [],
+      securities: [{ id: 's', currencyCode: 'USD', assetClass: 'stocks' }] as never,
+      prices: [
+        { securityId: 's', date: new Date('2026-11-18'), priceClose: '80' },
+        { securityId: 's', date: new Date('2026-11-20'), priceClose: '90' },
+      ] as never,
+    });
+    expect(points.every((p) => p.marketValue === null)).toBe(true);
+    expect(points.at(-1)?.knownPortfolios?.a).toBe('180');
+    expect(points.at(-1)?.netInvested).toBeNull();
+  });
 });

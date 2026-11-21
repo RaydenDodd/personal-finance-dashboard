@@ -158,7 +158,7 @@ describe('owner-scoped native portfolio analytics adapter', () => {
     expect(result.metrics.marketValue?.value).toBeNull();
     expect(result.metrics.knownMarketValue).toMatchObject({ value: '105', status: 'partial' });
     expect(result.metrics.unknownCashCount?.value).toBe('1');
-    expect(result.holdings[0]?.weight).toBeNull();
+    expect(result.holdings[0]?.weight).toBe('95.238095');
   });
   it('rejects foreign portfolio selections before fetching holdings or financial data', async () => {
     await expect(getInvestmentAnalytics({ userId: 1, portfolioIds: ['foreign'] })).rejects.toThrow('unavailable');
@@ -221,7 +221,8 @@ describe('owner-scoped native portfolio analytics adapter', () => {
     expect(result.coverage.historyStart).toBe('2019-12-12');
     expect(result.coverage.historyEnd).toBe('2026-11-20');
     expect(result.history).toHaveLength(2);
-    expect(result.history.every((point) => point.marketValue === null)).toBe(true);
+    expect(result.history[0]?.marketValue).toBeNull();
+    expect(result.history.at(-1)?.marketValue).toBe(result.metrics.marketValue?.value);
     expect(result.history[0]?.portfolios.a).toBe('100');
   });
 });

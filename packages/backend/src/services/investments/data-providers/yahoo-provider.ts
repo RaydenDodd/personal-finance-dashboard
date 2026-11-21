@@ -155,10 +155,8 @@ export class YahooDataProvider extends BaseSecurityDataProvider {
       }
 
       const priceClose = toMajorUnit({ price: quote.regularMarketPrice, currency: quote.currency });
-      if (!quote.regularMarketTime) {
-        logger.info(`Missing regularMarketTime for ${providerSymbol}, using current time as fallback`);
-      }
-      const marketTime = quote.regularMarketTime ? new Date(quote.regularMarketTime) : new Date();
+      if (!quote.regularMarketTime) throw new Error(`Missing quote observation time for ${providerSymbol}`);
+      const marketTime = new Date(quote.regularMarketTime);
 
       const result: PriceData = {
         providerSymbol: toProviderSymbol(quote.symbol ?? providerSymbol),
@@ -191,8 +189,9 @@ export class YahooDataProvider extends BaseSecurityDataProvider {
       const period2 = endDate ?? new Date();
 
       const chartResult = await this.client.chart(providerSymbol, {
-        period1: period1.toISOString().split('T')[0]!,
-        period2: period2.toISOString().split('T')[0]!,
+        period1: options?.interval === '5m' ? period1 : period1.toISOString().split('T')[0]!,
+        period2: options?.interval === '5m' ? period2 : period2.toISOString().split('T')[0]!,
+        ...(options?.interval && { interval: options.interval }),
       });
 
       if (!chartResult.quotes || chartResult.quotes.length === 0) {

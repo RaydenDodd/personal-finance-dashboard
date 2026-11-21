@@ -71,6 +71,7 @@ export interface SearchOptions {
 }
 
 export interface HistoricalPriceOptions {
+  interval?: '5m' | '1d';
   startDate?: Date;
   endDate?: Date;
   /**
@@ -112,6 +113,8 @@ export interface SecurityPriceFetchInput {
  */
 export interface BulkPriceFetchOptions {
   startDate?: Date;
+  /** Current quotes use provider observation times, rather than historical daily bars. */
+  currentQuotes?: boolean;
 }
 
 export abstract class BaseSecurityDataProvider {

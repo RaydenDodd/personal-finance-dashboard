@@ -21,6 +21,7 @@ import type { TrackerScanStatusPayload } from './trackers';
  * SSE Event Types - event names sent via Server-Sent Events
  */
 export const SSE_EVENT_TYPES = {
+  INVESTMENT_PRICES_UPDATED: 'investment_prices_updated',
   AI_CATEGORIZATION_PROGRESS: 'ai_categorization_progress',
   SYNC_STATUS_CHANGED: 'bank_connections_sync_status_changed',
   YNAB_IMPORT_PROGRESS: 'ynab_import_progress',
@@ -131,6 +132,7 @@ export interface SyncStatusChangedPayload {
  * Union type for all SSE event payloads
  */
 export type SSEEventPayload =
+  | { updatedAt: string }
   | AiCategorizationProgressPayload
   | SyncStatusChangedPayload
   | YnabImportProgress
@@ -152,6 +154,7 @@ export type SSEEventPayload =
  * entry.
  */
 export interface SSEEventPayloadMap {
+  [SSE_EVENT_TYPES.INVESTMENT_PRICES_UPDATED]: { updatedAt: string };
   [SSE_EVENT_TYPES.AI_CATEGORIZATION_PROGRESS]: AiCategorizationProgressPayload;
   [SSE_EVENT_TYPES.SYNC_STATUS_CHANGED]: SyncStatusChangedPayload;
   [SSE_EVENT_TYPES.YNAB_IMPORT_PROGRESS]: YnabImportProgress;

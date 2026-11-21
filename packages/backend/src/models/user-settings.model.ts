@@ -222,6 +222,11 @@ const ZodTransactionFormSettingsSchema = z.object({
 // UI-state preferences (table layouts, view modes). Functional settings keep
 // their own top-level keys; this namespace is only for presentation state.
 const ZodPageLayoutsSchema = z.object({
+  investmentsOverview: z.object({ widgets: z.array(ZodDashboardWidgetSchema).max(100).optional() }).optional(),
+  investmentsPerformance: z.object({ widgets: z.array(ZodDashboardWidgetSchema).max(100).optional() }).optional(),
+  investmentsHoldings: z.object({ widgets: z.array(ZodDashboardWidgetSchema).max(100).optional() }).optional(),
+  investmentsAllocation: z.object({ widgets: z.array(ZodDashboardWidgetSchema).max(100).optional() }).optional(),
+  investmentsDividends: z.object({ widgets: z.array(ZodDashboardWidgetSchema).max(100).optional() }).optional(),
   income: z.object({ widgets: z.array(ZodDashboardWidgetSchema).max(100).optional() }).optional(),
   actualIncome: z.object({ widgets: z.array(ZodDashboardWidgetSchema).max(100).optional() }).optional(),
   personalFinance: z.object({ widgets: z.array(ZodDashboardWidgetSchema).max(100).optional() }).optional(),

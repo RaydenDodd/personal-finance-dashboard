@@ -7,7 +7,8 @@ import { withLock } from '@services/common/lock';
 import { withTransaction } from '@services/common/with-transaction';
 import { dataProviderFactory } from '@services/investments/data-providers';
 import { PriceData, toProviderSymbol } from '@services/investments/data-providers/base-provider';
-import { subYears } from 'date-fns';
+import { fetchCoinbaseHistory } from '@services/investments/data-providers/coinbase-quotes';
+import { subYears, subDays } from 'date-fns';
 
 import { bucketByUtcDay } from './pricing-anchor';
 
@@ -17,7 +18,7 @@ import { bucketByUtcDay } from './pricing-anchor';
 const STOCK_BACKFILL_YEARS = 5;
 const CRYPTO_BACKFILL_YEARS = 1;
 
-const syncHistoricalPricesImpl = async (securityId: string): Promise<{ count: number }> => {
+const syncHistoricalPricesImpl = async (securityId: string, intraday = false): Promise<{ count: number }> => {
   logger.info(`Starting historical price sync for securityId: ${securityId}`);
 
   const security = await Securities.findByPk(securityId);
@@ -27,7 +28,7 @@ const syncHistoricalPricesImpl = async (securityId: string): Promise<{ count: nu
 
   const endDate = new Date();
   const yearsBack = security.assetClass === ASSET_CLASS.crypto ? CRYPTO_BACKFILL_YEARS : STOCK_BACKFILL_YEARS;
-  const startDate = subYears(endDate, yearsBack);
+  const startDate = intraday ? subDays(endDate, 7) : subYears(endDate, yearsBack);
 
   // Use composite provider which automatically handles US vs non-US routing and fallbacks
   const compositeProvider = dataProviderFactory.getProvider();
@@ -42,11 +43,30 @@ const syncHistoricalPricesImpl = async (securityId: string): Promise<{ count: nu
     `Fetching historical prices for ${security.symbol ?? security.providerSymbol} (${security.assetClass}, ${yearsBack}yr)${routedVia} using composite provider`,
   );
 
-  const prices: PriceData[] = await compositeProvider.getHistoricalPrices(toProviderSymbol(querySymbol), {
-    startDate,
-    endDate,
-    assetClass: security.assetClass,
-  });
+  let prices: PriceData[];
+  try {
+    prices = await compositeProvider.getHistoricalPrices(toProviderSymbol(querySymbol), {
+      startDate,
+      endDate,
+      assetClass: security.assetClass,
+      ...(intraday && security.assetClass !== ASSET_CLASS.crypto && { interval: '5m' as const }),
+    });
+  } catch (error) {
+    if (security.assetClass !== ASSET_CLASS.crypto) throw error;
+    prices = [];
+  }
+  if (!prices.length && security.assetClass === ASSET_CLASS.crypto)
+    prices = await fetchCoinbaseHistory(
+      {
+        securityId: security.id,
+        symbol: security.symbol ?? '',
+        providerSymbol: toProviderSymbol(security.providerSymbol),
+        assetClass: security.assetClass,
+      },
+      startDate,
+      endDate,
+      intraday ? 3600 : 86400,
+    );
 
   if (prices.length === 0) {
     // When the row has an explicit `priceSourceSymbol` and the provider still
@@ -58,12 +78,13 @@ const syncHistoricalPricesImpl = async (securityId: string): Promise<{ count: nu
     return { count: 0 };
   }
 
-  const dailyPrices = bucketByUtcDay(prices);
+  const dailyPrices = intraday ? prices : bucketByUtcDay(prices);
 
   const pricesToCreate = dailyPrices.map((price) => ({
     securityId: security.id,
     date: price.date,
     priceClose: price.priceClose.toString(),
+    ...(intraday && { priceAsOf: price.priceAsOf }),
     source: price.providerName,
   }));
 
@@ -87,3 +108,6 @@ const lockedSync = (securityId: string) =>
   withLock(`price-sync:security:${securityId}`, () => syncHistoricalPricesImpl(securityId))();
 
 export const syncHistoricalPrices = withTransaction(lockedSync);
+export const syncIntradayHistoricalPrices = withTransaction((securityId: string) =>
+  withLock(`price-sync:security:${securityId}`, () => syncHistoricalPricesImpl(securityId, true))(),
+);

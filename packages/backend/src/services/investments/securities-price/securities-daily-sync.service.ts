@@ -1,10 +1,13 @@
 import { ASSET_CLASS, SECURITY_PROVIDER } from '@bt/shared/types';
+import { usEquityMarketOpen } from '@bt/shared/types/investment-market';
 import { logger } from '@js/utils';
 import Holdings from '@models/investments/holdings.model';
 import Portfolios from '@models/investments/portfolios.model';
 import Securities from '@models/investments/securities.model';
 import SecurityPricing from '@models/investments/security-pricing.model';
+import UserSettings from '@models/user-settings.model';
 import { withLock } from '@services/common/lock';
+import { sseManager, SSE_EVENT_TYPES } from '@services/common/sse';
 import { subDays } from 'date-fns';
 import { Op, WhereOptions } from 'sequelize';
 
@@ -37,7 +40,7 @@ interface SecuritiesPricesSyncResult {
   errors: Array<{ securityId: string; symbol: string | null; error: string }>;
 }
 
-type SyncLabel = 'stocks-daily' | 'crypto-hourly';
+type SyncLabel = 'stocks-daily' | 'stocks-intraday' | 'crypto-hourly';
 
 interface SyncOptions {
   /**
@@ -57,6 +60,7 @@ interface SyncOptions {
    * current-price snapshot).
    */
   fetchStartDate?: Date;
+  currentQuotes?: boolean;
   /**
    * Maps one security's provider bars to the rows to store. Each returned
    * bar's `date` is written to the `date` column verbatim and must be unique
@@ -85,13 +89,13 @@ interface SyncOptions {
  * into total data loss with a misleading success counter in the result.
  */
 const securitiesPricesSyncImpl = async (options: SyncOptions): Promise<SecuritiesPricesSyncResult> => {
-  const { assetClassWhere, forDate, fetchStartDate, prepareBars, label } = options;
+  const { assetClassWhere, forDate, fetchStartDate, prepareBars, label, currentQuotes } = options;
   logger.info(`[${label}] Starting securities prices sync`);
 
   // Query securities with holdings, prioritized by staleness.
   // `providerSymbol` is the canonical id since crypto display symbols are not unique;
   // a security may still have a NULL legacy `symbol`, but `providerSymbol` is NOT NULL.
-  const securitiesFromDb = await Securities.findAll({
+  let securitiesFromDb = await Securities.findAll({
     where: assetClassWhere,
     include: [
       {
@@ -100,6 +104,7 @@ const securitiesPricesSyncImpl = async (options: SyncOptions): Promise<Securitie
         attributes: [],
         where: {
           excluded: false, // Only exclude securities marked as excluded
+          ...(currentQuotes && { quantity: { [Op.ne]: 0 } }),
         },
         // Chain through Portfolios so paranoid filtering drops holdings whose
         // parent portfolio is soft-deleted (trash) — otherwise we'd waste sync
@@ -117,6 +122,22 @@ const securitiesPricesSyncImpl = async (options: SyncOptions): Promise<Securitie
     order: [['pricingLastSyncedAt', 'ASC NULLS FIRST']], // Prioritize oldest/never-synced first
     raw: false, // Need model instances to update pricingLastSyncedAt
   });
+  if (label !== 'crypto-hourly') {
+    const benchmarkSymbols = new Set(['SPY']);
+    for (const user of await UserSettings.findAll({ attributes: ['settings'] })) {
+      const widgets = [
+        ...(user.settings.dashboard?.widgets ?? []),
+        ...Object.values(user.settings.ui?.pageLayouts ?? {}).flatMap((layout) => layout?.widgets ?? []),
+      ];
+      for (const widget of widgets.filter((w) => w.widgetId === 'investment-benchmark'))
+        for (const symbol of Array.isArray(widget.config?.benchmarks) ? widget.config.benchmarks : [])
+          if (typeof symbol === 'string') benchmarkSymbols.add(symbol);
+    }
+    const benchmarks = await Securities.findAll({
+      where: { symbol: { [Op.in]: [...benchmarkSymbols] }, currencyCode: 'USD', assetClass: ASSET_CLASS.stocks },
+    });
+    securitiesFromDb = [...new Map([...securitiesFromDb, ...benchmarks].map((s) => [s.id, s])).values()];
+  }
 
   if (securitiesFromDb.length === 0) {
     logger.info(`[${label}] No securities with holdings found for sync`);
@@ -147,7 +168,7 @@ const securitiesPricesSyncImpl = async (options: SyncOptions): Promise<Securitie
   const securitiesInputs = securitiesFromDb.map((s) => ({
     securityId: s.id,
     symbol: s.symbol ?? s.providerSymbol,
-    providerSymbol: toProviderSymbol(s.providerSymbol),
+    providerSymbol: toProviderSymbol(s.priceQuerySymbol),
     assetClass: s.assetClass,
   }));
 
@@ -165,6 +186,7 @@ const securitiesPricesSyncImpl = async (options: SyncOptions): Promise<Securitie
     // needed when consuming it.
     fetchedPrices = await compositeProvider.fetchPricesForSecurities(securitiesInputs, forDate, {
       startDate: fetchStartDate,
+      currentQuotes,
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -197,6 +219,7 @@ const securitiesPricesSyncImpl = async (options: SyncOptions): Promise<Securitie
     securityId: string;
     date: Date;
     priceClose: string;
+    priceAsOf: Date | null;
     source: SECURITY_PROVIDER | undefined;
   }[] = [];
 
@@ -220,6 +243,7 @@ const securitiesPricesSyncImpl = async (options: SyncOptions): Promise<Securitie
         securityId,
         date: priceData.date,
         priceClose: priceData.priceClose.toString(),
+        priceAsOf: currentQuotes || label === 'crypto-hourly' ? priceData.priceAsOf : null,
         source: priceData.providerName,
       });
     }
@@ -246,7 +270,7 @@ const securitiesPricesSyncImpl = async (options: SyncOptions): Promise<Securitie
       // NOT NULL at INSERT and the Money setter validates priceClose, so
       // dropping app-layer validation loses no real coverage.
       await SecurityPricing.bulkCreate(securityPricesToUpsert, {
-        updateOnDuplicate: ['priceClose', 'source'],
+        updateOnDuplicate: ['priceClose', 'source', 'priceAsOf'],
       });
 
       result.successfulUpdates = fetchedSecuritiesCount;
@@ -368,6 +392,29 @@ const securitiesPricesSyncImpl = async (options: SyncOptions): Promise<Securitie
     );
   }
 
+  if (result.successfulUpdates > 0) {
+    try {
+      const positions = await Holdings.findAll({
+        where: { securityId: { [Op.in]: [...new Set(securityPricesToUpsert.map((p) => p.securityId))] } },
+        attributes: ['portfolioId'],
+        raw: true,
+      });
+      const owners = await Portfolios.findAll({
+        where: { id: { [Op.in]: [...new Set(positions.map((p) => p.portfolioId))] } },
+        attributes: ['userId'],
+        group: ['userId'],
+        raw: true,
+      });
+      for (const owner of owners)
+        sseManager.sendToUser({
+          userId: owner.userId,
+          event: SSE_EVENT_TYPES.INVESTMENT_PRICES_UPDATED,
+          data: { updatedAt: new Date().toISOString() },
+        });
+    } catch {
+      logger.info(`[${label}] Price notification unavailable; clients retain the shared polling fallback`);
+    }
+  }
   return result;
 };
 
@@ -390,6 +437,24 @@ export const securitiesPricesStocksDailySync = withLock('lock:sync:securities-pr
   });
 });
 
+/** Same persistence/provider pipeline and lock as daily stocks; no overlapping runs. */
+export const securitiesPricesStocksIntradaySync = withLock(
+  'lock:sync:securities-prices:stocks',
+  async (options?: { force?: boolean }) => {
+    if (!options?.force && !usEquityMarketOpen()) {
+      logger.info('[stocks-intraday] Market closed; retained latest valid prices');
+      return { totalProcessed: 0, successfulUpdates: 0, failedUpdates: 0, errors: [], skipped: 'market-closed' };
+    }
+    return securitiesPricesSyncImpl({
+      assetClassWhere: { assetClass: { [Op.notIn]: [ASSET_CLASS.crypto] } },
+      forDate: new Date(),
+      currentQuotes: true,
+      prepareBars: (bars) => bars.map((bar) => ({ ...bar, date: bar.priceAsOf })),
+      label: 'stocks-intraday',
+    });
+  },
+);
+
 /**
  * Hourly intraday sync for crypto holdings.
  *
@@ -402,11 +467,16 @@ export const securitiesPricesStocksDailySync = withLock('lock:sync:securities-pr
  * Held under a crypto-specific lock so concurrent stock + crypto syncs don't
  * block each other.
  */
-export const securitiesPricesCryptoSync = withLock('lock:sync:securities-prices:crypto', () =>
-  securitiesPricesSyncImpl({
-    assetClassWhere: { assetClass: { [Op.in]: [ASSET_CLASS.crypto] } },
-    forDate: new Date(),
-    prepareBars: (bars) => bars.map((bar) => ({ ...bar, date: bar.priceAsOf })),
-    label: 'crypto-hourly',
-  }),
+export const securitiesPricesCryptoSync = withLock(
+  'lock:sync:securities-prices:crypto',
+  async (options?: { force?: boolean }) => {
+    if (!options?.force && !usEquityMarketOpen())
+      return { totalProcessed: 0, successfulUpdates: 0, failedUpdates: 0, errors: [], skipped: 'market-closed' };
+    return securitiesPricesSyncImpl({
+      assetClassWhere: { assetClass: { [Op.in]: [ASSET_CLASS.crypto] } },
+      forDate: new Date(),
+      prepareBars: (bars) => bars.map((bar) => ({ ...bar, date: bar.priceAsOf })),
+      label: 'crypto-hourly',
+    });
+  },
 );

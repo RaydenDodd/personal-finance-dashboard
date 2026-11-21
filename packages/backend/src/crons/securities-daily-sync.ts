@@ -1,8 +1,39 @@
+import { easternDate, usEquitySession } from '@bt/shared/types/investment-market';
 import { logger } from '@js/utils';
 import { checkUnrealizedLossAlerts } from '@root/services/investments/holdings/check-unrealized-loss-alerts';
-import { securitiesPricesStocksDailySync } from '@root/services/investments/securities-price/securities-daily-sync.service';
+import {
+  securitiesPricesStocksDailySync,
+  securitiesPricesStocksIntradaySync,
+} from '@root/services/investments/securities-price/securities-daily-sync.service';
 
 import { createScheduledSync } from './lib/create-scheduled-sync';
+
+export const securitiesIntradaySyncCron = createScheduledSync({
+  name: 'securities intraday prices sync',
+  cronExpression: '*/5 9-16 * * 1-5',
+  timeZone: 'America/New_York',
+  scheduleDescription: 'every 5 minutes during regular US equity sessions; holidays and early closes respected',
+  run: (options?: { force?: boolean }) => securitiesPricesStocksIntradaySync(options),
+});
+
+/** One final quote after provider delay, so an intraday observation cannot hide the closing price. */
+export const securitiesClosingSyncCron = createScheduledSync({
+  name: 'securities closing prices sync',
+  cronExpression: '20 13,16 * * 1-5',
+  timeZone: 'America/New_York',
+  scheduleDescription: 'one closing quote check 20 minutes after the regular or shortened session',
+  run: async () => {
+    const session = usEquitySession(easternDate());
+    const hour = Number(
+      new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: 'numeric', hourCycle: 'h23' }).format(
+        new Date(),
+      ),
+    );
+    return session.tradingDay && hour === session.closeMinute / 60
+      ? securitiesPricesStocksIntradaySync({ force: true })
+      : { skipped: 'not-the-session-close' };
+  },
+});
 
 /**
  * Daily stock price sync — runs at 6:00 AM EST (after global markets close).

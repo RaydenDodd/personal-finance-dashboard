@@ -28,6 +28,7 @@ export const computeHoldingsValueByDate = ({
   findPriceForDate,
   getExchangeRate,
   onMissingPrice,
+  positionAnchorsByPortfolio,
 }: {
   uniqueDates: string[];
   portfolioIds: string[];
@@ -36,6 +37,11 @@ export const computeHoldingsValueByDate = ({
   findPriceForDate: (securityId: string, targetDate: string) => number | null;
   getExchangeRate: (currencyCode: string, dateStr: string) => number;
   onMissingPrice?: ({ securityId, dateStr }: { securityId: string; dateStr: string }) => void;
+  /** Real complete broker positions establish an opening balance only from their dated observation forward. */
+  positionAnchorsByPortfolio?: Map<
+    string,
+    { asOf: string; positions: { securityId: string; quantity: string; costBasis: string | null }[] }[]
+  >;
 }): Map<string, number> => {
   const holdingsValueByDate = new Map<string, number>();
 
@@ -44,6 +50,7 @@ export const computeHoldingsValueByDate = ({
   // holdings accumulated so far.
   const holdingsByPortfolio = new Map<string, Map<string, HoldingState>>();
   const cursorByPortfolio = new Map<string, number>();
+  const appliedAnchor = new Map<string, string>();
   for (const portfolioId of portfolioIds) {
     holdingsByPortfolio.set(portfolioId, new Map<string, HoldingState>());
     cursorByPortfolio.set(portfolioId, 0);
@@ -56,6 +63,22 @@ export const computeHoldingsValueByDate = ({
       const portfolioTxs = transactionsByPortfolio.get(portfolioId) ?? [];
       const holdings = holdingsByPortfolio.get(portfolioId)!;
       let cursor = cursorByPortfolio.get(portfolioId)!;
+      const anchor = positionAnchorsByPortfolio?.get(portfolioId)?.findLast((a) => a.asOf.slice(0, 10) <= dateStr);
+      if (anchor && appliedAnchor.get(portfolioId) !== anchor.asOf) {
+        holdings.clear();
+        for (const position of anchor.positions) {
+          const security = securitiesById.get(position.securityId);
+          holdings.set(position.securityId, {
+            quantity: Number(position.quantity),
+            costBasis: Number(position.costBasis ?? 0),
+            currencyCode: security?.currencyCode ?? 'USD',
+            assetClass: security?.assetClass ?? ASSET_CLASS.other,
+          });
+        }
+        cursor = 0;
+        while (cursor < portfolioTxs.length && new Date(portfolioTxs[cursor]!.date) <= new Date(anchor.asOf)) cursor++;
+        appliedAnchor.set(portfolioId, anchor.asOf);
+      }
 
       // Fold in every transaction that settled on or before this snapshot day.
       while (cursor < portfolioTxs.length) {

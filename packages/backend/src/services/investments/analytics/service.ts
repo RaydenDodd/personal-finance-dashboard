@@ -5,6 +5,12 @@ import type {
   InvestmentMetric,
   InvestmentBenchmark,
 } from '@bt/shared/types/investment-analytics';
+import {
+  easternDate,
+  investmentPriceDate,
+  usEquityMarketOpen,
+  usEquitySession,
+} from '@bt/shared/types/investment-market';
 import { Money } from '@common/types/money';
 import { ValidationError } from '@js/errors';
 import BrokerPortfolioData from '@models/investments/broker-portfolio-data.model';
@@ -46,6 +52,7 @@ import {
   investmentIssuerCountry,
 } from './math';
 import { consolidatedReturns, normalizeComparableSeries, recordedPriceReturns } from './performance';
+import { currentHoldingsPriceRisk } from './price-risk';
 
 const decimal = (m: Money | string | number): string => (Money.isMoney(m) ? m.toDecimalString(18) : String(m));
 const dateString = (d: Date | string | null | undefined) => (d ? new Date(d).toISOString() : null);
@@ -82,7 +89,7 @@ async function getAnalyticsImpl({
   const scope = allPortfolios.filter((p) => selected.has(p.id));
   const userCurrency = await UsersCurrencies.getCurrency({ userId, isDefaultCurrency: true });
   const currencyCode = userCurrency?.currency.code ?? 'USD';
-  const today = new Date().toISOString().slice(0, 10);
+  const today = easternDate();
   const [brokers, balances, transactions, transfers, storedSnapshots] = await Promise.all([
     BrokerPortfolioData.findAll({ where: { portfolioId: { [Op.in]: ids } } }),
     PortfolioBalances.findAll({ where: { portfolioId: { [Op.in]: ids } } }),
@@ -125,7 +132,7 @@ async function getAnalyticsImpl({
   const prices = await SecurityPricing.findAll({
     where: {
       securityId: { [Op.in]: [...new Set([...securityIds, ...benchmarksSecurities.map((s) => s.id)])] },
-      date: { [Op.lte]: `${today}T23:59:59.999Z` },
+      date: { [Op.lte]: new Date() },
     },
     order: [['date', 'ASC']],
   });
@@ -153,6 +160,7 @@ async function getAnalyticsImpl({
     const account = {
       portfolioId: h.portfolioId,
       portfolioName: portfolioById.get(h.portfolioId)?.name ?? 'Portfolio',
+      reportedAverageCost: h.reportedAverageCost,
       quantity: h.quantity,
       costBasis: basis,
       averageCost:
@@ -309,6 +317,25 @@ async function getAnalyticsImpl({
   };
   metrics.unknownPositionCount = metric(String(holdings.filter((h) => h.marketValue === null).length));
   metrics.unknownCashCount = metric(String(portfolios.filter((p) => p.cash === null).length));
+  const knownBasisAccounts = holdings
+    .flatMap((h) => h.accounts)
+    .filter((a) => a.costBasis !== null && a.marketValue !== null);
+  metrics.knownCostBasis = {
+    value: knownBasisAccounts.length ? sum(knownBasisAccounts.map((a) => a.costBasis)) : null,
+    status: costBasis === null ? 'partial' : 'verified',
+    reason: 'Recorded open-position basis only; positions without evidenced basis are excluded.',
+  };
+  metrics.knownUnrealizedGain = {
+    value: knownBasisAccounts.length ? sum(knownBasisAccounts.map((a) => a.unrealizedGain)) : null,
+    status: unrealizedGain === null ? 'partial' : 'verified',
+    reason: 'Native unrealized gains for positions with known basis and value; missing positions are excluded.',
+  };
+  const reportedRealized = brokers.flatMap((b) => b.data.taxReports.filter((r) => r.realizedGain !== null));
+  metrics.reportedRealizedGain = {
+    value: reportedRealized.length ? sum(reportedRealized.map((r) => r.realizedGain)) : null,
+    status: 'partial',
+    reason: `Broker-reported realized gains for tax years ${[...new Set(reportedRealized.map((r) => r.year))].sort().join(', ') || 'unavailable'}. Other periods are incomplete.`,
+  };
   const flows = transfers.map((t) => ({
     date: t.date,
     value: externalFlow(
@@ -377,18 +404,20 @@ async function getAnalyticsImpl({
     h.unrealizedGain =
       h.marketValue !== null && h.costBasis !== null ? new Big(h.marketValue).minus(h.costBasis).toString() : null;
     h.unrealizedPercent = percent(h.unrealizedGain, h.costBasis);
-    h.weight = percent(h.marketValue, marketValue);
+    h.weight = percent(h.marketValue, marketValue ?? new Big(knownSecurities).plus(knownCash).toString());
     h.dividends = sum(dividends.filter((d) => d.securityId === h.securityId).map((d) => d.amount));
     const series = pricesBySecurity.get(h.securityId) ?? [];
     h.periodReturns = recordedPriceReturns(
       series.map((p) => ({ date: new Date(p.date).toISOString(), price: decimal(p.priceClose) })),
     );
     const latest = series.at(-1);
-    const previous = latest
-      ? series.findLast(
-          (p) => new Date(p.date).toISOString().slice(0, 10) < new Date(latest.date).toISOString().slice(0, 10),
-        )
-      : undefined;
+    let sessionDate = easternDate();
+    while (!usEquitySession(sessionDate).tradingDay) {
+      const prior = new Date(sessionDate + 'T12:00:00Z');
+      prior.setUTCDate(prior.getUTCDate() - 1);
+      sessionDate = prior.toISOString().slice(0, 10);
+    }
+    const previous = latest ? series.findLast((p) => investmentPriceDate(p.date) < sessionDate) : undefined;
     const freshPair =
       latest &&
       previous &&
@@ -400,14 +429,45 @@ async function getAnalyticsImpl({
       freshPair &&
       h.currencyCode === currencyCode &&
       h.priceDate &&
-      new Date(h.priceDate).toISOString().slice(0, 10) === new Date(latest.date).toISOString().slice(0, 10)
+      investmentPriceDate(h.priceDate) === sessionDate &&
+      investmentPriceDate(latest.date) === sessionDate
     ) {
-      h.dailyChange = latest.priceClose.toBig().minus(previous.priceClose.toBig()).times(h.quantity).toString();
+      const dayTrades = transactions.filter(
+        (t) =>
+          t.securityId === h.securityId &&
+          investmentPriceDate(t.date) === sessionDate &&
+          (t.category === 'buy' || t.category === 'sell'),
+      );
+      let openingQuantity = new Big(h.quantity),
+        netPurchases = new Big(0);
+      for (const trade of dayTrades) {
+        const direction = trade.category === 'buy' ? 1 : -1;
+        openingQuantity = openingQuantity.minus(trade.quantity.toBig().times(direction));
+        netPurchases = netPurchases.plus(trade.refAmount.toBig().times(direction));
+      }
+      h.dailyChange =
+        h.marketValue !== null && openingQuantity.gte(0)
+          ? new Big(h.marketValue)
+              .minus(openingQuantity.times(previous.priceClose.toBig()))
+              .minus(netPurchases)
+              .toString()
+          : null;
       h.dailyChangePercent = percent(
         latest.priceClose.toBig().minus(previous.priceClose.toBig()).toString(),
         decimal(previous.priceClose),
       );
+      h.previousCloseDate = dateString(previous.date);
+      h.dailyChangeReason = h.accounts.some((a) => !portfolios.find((p) => p.id === a.portfolioId)?.historyComplete)
+        ? 'Current shares and recorded same-session trades versus the previous recorded close; imported trade history is partial.'
+        : 'Previous recorded close with same-session buys, sells and fees removed from the change in position value.';
     }
+    h.quoteStatus = !h.priceDate
+      ? 'unavailable'
+      : investmentPriceDate(h.priceDate) !== sessionDate
+        ? 'historical'
+        : !usEquityMarketOpen()
+          ? 'closing'
+          : 'delayed';
     const stale = !h.priceDate || new Date(h.priceDate).getTime() < Date.now() - 4 * 86400000;
     health.push({
       id: `price:${h.id}`,
@@ -426,15 +486,27 @@ async function getAnalyticsImpl({
         detail: 'Opening lots or broker basis evidence are incomplete.',
       });
   }
-  metrics.dailyChange = metric(
-    sum(holdings.map((h) => h.dailyChange)),
-    'Price change on the latest two recorded trading dates; excludes cash flows.',
-  );
+  const dailyHoldings = holdings.filter((h) => h.dailyChange !== null);
+  metrics.dailyChange = {
+    value: dailyHoldings.length ? sum(dailyHoldings.map((h) => h.dailyChange)) : null,
+    status: dailyHoldings.length === holdings.length && completeHistory ? 'verified' : 'partial',
+    reason: `${dailyHoldings.length}/${holdings.length} positions with current-session quotes and a prior close. Recorded buys, sells and fees are accounted for; incomplete trade history and missing quotes limit coverage.`,
+  };
   metrics.dailyChangePercent = metric(
-    marketValue !== null && metrics.dailyChange.value !== null
-      ? percent(metrics.dailyChange.value, new Big(marketValue).minus(metrics.dailyChange.value).toString())
+    metrics.dailyChange.value !== null
+      ? percent(
+          metrics.dailyChange.value,
+          sum(
+            dailyHoldings.map((h) =>
+              h.marketValue !== null ? new Big(h.marketValue).minus(h.dailyChange!).toString() : null,
+            ),
+          ),
+        )
       : null,
   );
+  metrics.dailyChangePercent.status = metrics.dailyChange.status;
+  metrics.dailyChangePercent.reason =
+    'Change relative to the covered positions’ previous-close value, adjusted for recorded trades; cash and uncovered positions are excluded.';
   const history = buildHistory({
     ids,
     currencyCode,
@@ -455,6 +527,23 @@ async function getAnalyticsImpl({
       settlementCurrencyCode: t.settlementCurrencyCode,
     })) as TransactionRow[],
   });
+  const currentPoint = history.find((p) => p.date === today);
+  if (currentPoint) {
+    currentPoint.knownPortfolios = Object.fromEntries(
+      portfolios.map((p) => {
+        const accounts = holdings.flatMap((h) => h.accounts).filter((a) => a.portfolioId === p.id);
+        return [
+          p.id,
+          p.marketValue ??
+            sum([...accounts.filter((a) => a.marketValue !== null).map((a) => a.marketValue), p.cash ?? '0']),
+        ];
+      }),
+    );
+    currentPoint.knownMarketValue = metrics.knownMarketValue.value;
+    currentPoint.marketValue = marketValue;
+    currentPoint.source =
+      'Current native positions at their actual latest quote times; unknown cash excluded from known subtotals';
+  }
   const noFlows = flows.every((f) => new Big(f.value).eq(0));
   const exactPoints = history.filter(
     (p) =>
@@ -488,7 +577,8 @@ async function getAnalyticsImpl({
         new Big(p.marketValue!).minus(exactPoints[0]!.marketValue!).toString(),
         exactPoints[0]!.marketValue!,
       );
-  const exposure = lookThrough(holdings, fundSnapshots, marketValue);
+  const allocationValue = marketValue ?? new Big(knownSecurities).plus(knownCash).toString();
+  const exposure = lookThrough(holdings, fundSnapshots, allocationValue);
   const fundValue = sum(holdings.filter((h) => h.isFund).map((h) => h.marketValue));
   const coveredFundValue = sum(
     holdings
@@ -505,32 +595,37 @@ async function getAnalyticsImpl({
   const lookThroughCoverage = percent(coveredFundValue, fundValue) ?? '0';
   metrics.lookThroughCoverage = metric(lookThroughCoverage);
   const rankedExposure = exposure.filter(isCompanyExposure).sort((a, b) => new Big(b.totalValue).cmp(a.totalValue));
-  metrics.topFiveConcentration = metric(percent(sum(rankedExposure.slice(0, 5).map((e) => e.totalValue)), marketValue));
-  metrics.topTenConcentration = metric(percent(sum(rankedExposure.slice(0, 10).map((e) => e.totalValue)), marketValue));
-  if (exposure.some((e) => e.unknown))
+  metrics.topFiveConcentration = metric(
+    percent(sum(rankedExposure.slice(0, 5).map((e) => e.totalValue)), allocationValue),
+  );
+  metrics.topTenConcentration = metric(
+    percent(sum(rankedExposure.slice(0, 10).map((e) => e.totalValue)), allocationValue),
+  );
+  if (marketValue === null || exposure.some((e) => e.unknown))
     for (const key of ['topFiveConcentration', 'topTenConcentration'])
       if (metrics[key]!.value !== null)
         metrics[key] = {
           ...metrics[key]!,
           status: 'partial',
-          reason: 'Known underlying exposure only; unavailable fund holdings may increase concentration.',
+          reason:
+            'Percent of known investment assets. Unidentified fund exposure and unknown cash are excluded; they may change concentration.',
         };
   const allocations: InvestmentAnalytics['allocations'] = {};
   allocations.holdings = allocation(
     holdings.map((h) => ({ key: h.id, label: h.symbol, value: h.marketValue, id: h.id })),
-    marketValue,
+    allocationValue,
   );
-  if (cashValue !== null && new Big(cashValue).gt(0))
+  if (new Big(knownCash).gt(0))
     allocations.holdings.push({
       key: 'cash',
       label: 'Investment cash',
-      value: cashValue,
-      percent: percent(cashValue, marketValue),
+      value: knownCash,
+      percent: percent(knownCash, allocationValue),
       securityIds: [],
     });
   allocations.underlying = allocation(
     exposure.map((e) => ({ key: e.id, label: e.unknown ? e.name : e.symbol, value: e.totalValue, id: e.id })),
-    marketValue,
+    allocationValue,
   );
   for (const mode of ['sector', 'industry', 'country', 'region', 'marketCap', 'style', 'assetClass'] as const)
     allocations[mode] = allocation(
@@ -543,7 +638,7 @@ async function getAnalyticsImpl({
               : (e[mode] ?? 'Unknown');
         return { key: label, label, value: e.totalValue, id: e.id };
       }),
-      marketValue,
+      allocationValue,
     );
   allocations.usInternational = allocation(
     exposure.map((e) => {
@@ -557,21 +652,29 @@ async function getAnalyticsImpl({
               : 'International';
       return { key: label, label, value: e.totalValue, id: e.id };
     }),
-    marketValue,
+    allocationValue,
   );
   allocations.development = allocation(
     exposure.map((e) => ({ key: e.market ?? 'Unknown', label: e.market ?? 'Unknown', value: e.totalValue, id: e.id })),
-    marketValue,
+    allocationValue,
   );
   for (const mode of ['brokerage', 'accountType'] as const)
     allocations[mode] = allocation(
       portfolios.map((p) => ({
         key: mode === 'brokerage' ? p.broker : p.accountType,
         label: mode === 'brokerage' ? p.broker : p.accountType,
-        value: p.marketValue,
+        value:
+          p.marketValue ??
+          sum([
+            ...holdings
+              .flatMap((h) => h.accounts)
+              .filter((a) => a.portfolioId === p.id && a.marketValue !== null)
+              .map((a) => a.marketValue),
+            p.cash ?? '0',
+          ]),
         id: p.id,
       })),
-      marketValue,
+      allocationValue,
     );
   for (const p of portfolios) {
     health.push({
@@ -633,6 +736,15 @@ async function getAnalyticsImpl({
           'Fund classification inferred from an explicit ETF, fund or fund-issuer name. Confirm using a dated source composition.',
       });
   }
+  const priceRisk = currentHoldingsPriceRisk(
+    holdings,
+    prices.map((p) => ({
+      securityId: p.securityId,
+      date: new Date(p.date).toISOString(),
+      price: decimal(p.priceClose),
+    })),
+    currencyCode,
+  );
   const benchmarks: InvestmentBenchmark[] = benchmarkSymbols.map((symbol) => {
     const security = benchmarksSecurities.find((s) => s.symbol === symbol);
     const points = security
@@ -641,11 +753,7 @@ async function getAnalyticsImpl({
           value: decimal(p.priceClose),
         }))
       : [];
-    const comparable = normalizeComparableSeries([
-      { id: 'portfolio', points: exactPoints.map((p) => ({ date: p.date, value: p.marketValue! })) },
-      { id: symbol, points },
-    ]);
-    const normalized = completeHistory && noFlows ? (comparable.find((s) => s.id === symbol)?.points ?? []) : [];
+    const normalized = normalizeComparableSeries([{ id: symbol, points }])[0]?.points ?? [];
     return {
       id: security?.id ?? symbol,
       symbol,
@@ -656,7 +764,7 @@ async function getAnalyticsImpl({
       ...(normalized.length <= 1 && {
         reason: !points.length
           ? 'No stored price history for this benchmark. Add it through existing security management and price refresh.'
-          : 'Common verified portfolio return history is unavailable; raw account balances are never compared with index prices.',
+          : 'At least two stored price observations are required.',
       }),
     };
   });
@@ -697,6 +805,7 @@ async function getAnalyticsImpl({
     .sort();
   return {
     generatedAt: new Date().toISOString(),
+    priceRisk,
     currencyCode,
     selectedPortfolioIds: ids,
     portfolios,
@@ -742,7 +851,7 @@ async function getAnalyticsImpl({
       supported: true,
       lastSuccess: syncDates.at(-1) ?? null,
       provider: [...new Set(securities.map((s) => s.providerName))].join(', ') || 'Existing market providers',
-      schedule: `Stocks/ETFs: daily 06:00 America/New_York; cryptocurrency: every ${process.env.CRYPTO_PRICES_SYNC_INTERVAL_MINUTES ?? '15'} minutes (UTC). Fund compositions: manual issuer imports and separately enabled weekly SEC checks.`,
+      schedule: `Stocks/ETFs: every 5 minutes during regular US sessions (09:30–16:00 Eastern, holidays/early closes respected); daily historical close reconciliation at 06:00 Eastern. Cryptocurrency: every ${process.env.CRYPTO_PRICES_SYNC_INTERVAL_MINUTES ?? '15'} minutes. Mutual funds publish daily NAV. Fund compositions: dated issuer files and separately enabled weekly SEC checks.`,
       reason:
         'Manual refresh reuses the existing administrator price-sync endpoint; it does not synchronize broker transactions.',
     },

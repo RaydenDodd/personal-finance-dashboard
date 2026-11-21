@@ -203,6 +203,24 @@ export class CompositeDataProvider extends BaseSecurityDataProvider {
     forDate: Date,
     options?: BulkPriceFetchOptions,
   ): Promise<Map<string, BulkPriceData[]>> {
+    if (options?.currentQuotes) {
+      const results = new Map<string, BulkPriceData[]>();
+      // One request per unique instrument, shared across all portfolios. Use the
+      // existing latest-quote routing and fallback policy, never daily chart bars.
+      const groups = Map.groupBy(securities, (s) => `${s.assetClass}:${s.providerSymbol}`);
+      for (const group of groups.values()) {
+        const security = group[0]!;
+        try {
+          const price = await this.getLatestPrice(security.providerSymbol, { assetClass: security.assetClass });
+          if (!Number.isFinite(price.priceClose) || price.priceClose <= 0 || price.priceAsOf > forDate) continue;
+          for (const row of group) results.set(row.securityId, [{ ...price, securityId: row.securityId }]);
+        } catch {
+          logger.info(`No current quote available for ${security.symbol}; retained existing price`);
+        }
+        await new Promise((resolve) => setTimeout(resolve, 150));
+      }
+      return results;
+    }
     const securitiesByProvider = this.groupSecuritiesByProvider(securities);
 
     const allResults = new Map<string, BulkPriceData[]>();
