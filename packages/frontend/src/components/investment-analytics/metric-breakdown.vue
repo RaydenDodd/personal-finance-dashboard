@@ -46,10 +46,10 @@ function contribution(p: (typeof rows.value)[number]) {
 <template>
   <Dialog v-model:open="open">
     <DialogContent
-      class="flex max-h-[85dvh] max-w-3xl flex-col overflow-hidden p-4 sm:p-6"
+      class="flex h-[85dvh] max-h-[56rem] max-w-3xl flex-col overflow-hidden! p-4 sm:p-6"
       data-testid="investment-metric-breakdown"
     >
-      <DialogHeader>
+      <DialogHeader class="pr-8">
         <DialogTitle
           >{{ label }} <span :class="signed(value)" class="ml-2 tabular-nums">{{ money(value) }}</span></DialogTitle
         >
