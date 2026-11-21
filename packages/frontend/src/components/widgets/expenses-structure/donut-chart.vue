@@ -186,23 +186,6 @@ const renderChart = () => {
         select(d);
       }
     });
-  if (props.showPercentages && percentageTotal > 0) {
-    arcs
-      .filter((d) => d.endAngle - d.startAngle > 0.16)
-      .append('text')
-      .attr('transform', (d) => `translate(${arc.centroid(d)})`)
-      .attr('text-anchor', 'middle')
-      .attr('dy', '.35em')
-      .attr('fill', '#fff')
-      .attr('stroke', '#171717')
-      .attr('stroke-width', 2.5)
-      .attr('stroke-linejoin', 'round')
-      .attr('paint-order', 'stroke')
-      .attr('font-size', 12)
-      .attr('font-weight', 650)
-      .attr('pointer-events', 'none')
-      .text((d) => `${((d.data.amount / percentageTotal) * 100).toFixed(1)}%`);
-  }
   highlight(props.selectionMode === 'highlight' ? selectedCategoryId.value : null);
 };
 
