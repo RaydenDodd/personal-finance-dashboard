@@ -2,13 +2,14 @@
  * Calendar rules verified against https://www.nyse.com/trade/hours-calendars (2026-11-20).
  * Unscheduled exchange closures cannot be predicted; provider timestamps remain authoritative.
  */
+const easternDateFormatter = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'America/New_York',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+});
 export function easternDate(date = new Date()): string {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'America/New_York',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(date);
+  return easternDateFormatter.format(date);
 }
 const dayKey = (date: Date) => date.toISOString().slice(0, 10);
 function nthWeekday(year: number, month: number, weekday: number, nth: number) {
