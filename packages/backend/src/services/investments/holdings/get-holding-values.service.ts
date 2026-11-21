@@ -195,7 +195,12 @@ const getHoldingValuesImpl = async ({ portfolioId, date, userId }: GetHoldingVal
       where: {
         [Op.or]: extended.map((p) => ({
           securityId: p.securityId,
-          date: { [Op.lte]: new Date(latestCompletedUsEquityClose(p.priceAsOf!)) },
+          [Op.or]: [
+            { date: { [Op.lte]: new Date(latestCompletedUsEquityClose(p.priceAsOf!)) } },
+            // A verified regularMarketPrice may publish seconds after 16:00.
+            // Older extended-session rows must not hide that closing auction print.
+            { previousClose: { [Op.ne]: null }, date: { [Op.lte]: p.date } },
+          ],
         })),
       },
       attributes: ['securityId', [fn('MAX', col('date')), 'date']],
