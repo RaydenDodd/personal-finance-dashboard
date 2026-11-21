@@ -5,16 +5,16 @@ import { chartNumber } from './chart-model';
 
 export const INVESTMENT_PERFORMER_PERIODS = [
   ['unrealized', 'Unrealized position return'],
-  ['daily', 'Daily price change'],
-  ['weekly', 'Weekly price change'],
-  ['monthly', 'Monthly price change'],
-  ['3m', 'Three-month price change'],
-  ['6m', 'Six-month price change'],
-  ['ytd', 'YTD price change'],
-  ['1y', 'One-year price change'],
-  ['2y', 'Two-year price change'],
-  ['5y', 'Five-year price change'],
-  ['all', 'Lifetime holding return'],
+  ['daily', 'Daily holding gain / loss'],
+  ['weekly', 'Weekly holding return'],
+  ['monthly', 'Monthly holding return'],
+  ['3m', 'Three-month holding return'],
+  ['6m', 'Six-month holding return'],
+  ['ytd', 'YTD holding return'],
+  ['1y', 'One-year holding return'],
+  ['2y', 'Two-year holding return'],
+  ['5y', 'Five-year holding return'],
+  ['all', 'Open-position unrealized return'],
   ['custom', 'Selected dates'],
 ] as const;
 

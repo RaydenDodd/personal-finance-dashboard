@@ -38,7 +38,7 @@ import { getPortfolioSummary } from '@services/investments/portfolios/get-portfo
 import { createShareUnitFactor } from '@services/stats/get-combined-balance-history/security-price-lookup';
 import type { TransactionRow } from '@services/stats/get-combined-balance-history/types';
 import Big from 'big.js';
-import { Op } from 'sequelize';
+import { Op, literal } from 'sequelize';
 
 import { compactAnalytics } from './compact-response';
 import { dailyPositionChange } from './daily-performance';
@@ -147,6 +147,13 @@ async function getAnalyticsImpl({
     where: {
       securityId: { [Op.in]: [...new Set([...securityIds, ...benchmarksSecurities.map((s) => s.id)])] },
       date: { [Op.lte]: new Date() },
+      // Account analytics replay daily values. Keep daily bars and recent real
+      // quotes; individual security charts still load the complete native history.
+      [Op.or]: [
+        { priceAsOf: null },
+        literal(`("date" AT TIME ZONE 'UTC') = date_trunc('day', "date" AT TIME ZONE 'UTC')`),
+        { date: { [Op.gte]: new Date(Date.now() - 7 * 86400000) } },
+      ],
     },
     order: [['date', 'ASC']],
   });

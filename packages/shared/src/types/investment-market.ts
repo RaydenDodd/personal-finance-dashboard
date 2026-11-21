@@ -8,6 +8,17 @@ const easternDateFormatter = new Intl.DateTimeFormat('en-CA', {
   month: '2-digit',
   day: '2-digit',
 });
+const easternTimeFormatter = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'America/New_York',
+  hourCycle: 'h23',
+  hour: '2-digit',
+  minute: '2-digit',
+});
+const easternHourFormatter = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'America/New_York',
+  hourCycle: 'h23',
+  hour: '2-digit',
+});
 export function easternDate(date = new Date()): string {
   return easternDateFormatter.format(date);
 }
@@ -64,12 +75,7 @@ export function usEquitySession(date: string) {
 }
 export function usEquityMarketOpen(now = new Date()) {
   const session = usEquitySession(easternDate(now));
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'America/New_York',
-    hourCycle: 'h23',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).formatToParts(now);
+  const parts = easternTimeFormatter.formatToParts(now);
   const minute =
     Number(parts.find((p) => p.type === 'hour')?.value) * 60 + Number(parts.find((p) => p.type === 'minute')?.value);
   return session.tradingDay && minute >= session.openMinute && minute < session.closeMinute;
@@ -96,9 +102,7 @@ export function latestUsEquitySessionDate(date = easternDate()) {
 /** Scheduled close, rather than the time a later quote request retrieved it. */
 export function usEquityCloseInstant(date: string) {
   const noon = new Date(date + 'T12:00:00Z');
-  const easternHour = Number(
-    new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: '2-digit', hourCycle: 'h23' }).format(noon),
-  );
+  const easternHour = Number(easternHourFormatter.format(noon));
   return (
     new Date(date + 'T00:00:00Z').getTime() + (usEquitySession(date).closeMinute + (12 - easternHour) * 60) * 60000
   );
