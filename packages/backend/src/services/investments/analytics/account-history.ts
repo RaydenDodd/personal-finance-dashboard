@@ -7,7 +7,7 @@ import UserSettings from '@models/user-settings.model';
 import * as UsersCurrencies from '@models/users-currencies.model';
 import Big from 'big.js';
 
-import { sqlRows } from './daily-account-cache';
+import { sqlRows, ACCOUNT_HISTORY_VERSION } from './daily-account-cache';
 
 const decimal = (v: string | null) => (v === null ? null : new Big(v).toString());
 export async function getAccountHistory({
@@ -56,9 +56,9 @@ export async function getAccountHistory({
   if (!ids.length) return result;
   await sqlRows(
     `INSERT INTO "InvestmentHistoryDirty"("portfolioId","fromDate")
-    SELECT p.id,CASE WHEN s."currencyCode"<>:currency THEN COALESCE(s."firstDate",'1900-01-01') ELSE COALESCE(s."lastDate"+1,'1900-01-01') END FROM "Portfolios" p LEFT JOIN "InvestmentHistoryState" s ON s."portfolioId"=p.id
-    WHERE p.id IN (:ids) AND (s."portfolioId" IS NULL OR s."lastDate"<CAST(:today AS date) OR s."currencyCode"<>:currency) ON CONFLICT("portfolioId") DO NOTHING RETURNING "portfolioId"`,
-    { ids, currency: currencyCode, today },
+    SELECT p.id,CASE WHEN s."currencyCode"<>:currency OR COALESCE((s.audit->>'version')::int,0)<>:version THEN COALESCE(s."firstDate",'1900-01-01') ELSE COALESCE(s."lastDate"+1,'1900-01-01') END FROM "Portfolios" p LEFT JOIN "InvestmentHistoryState" s ON s."portfolioId"=p.id
+    WHERE p.id IN (:ids) AND (s."portfolioId" IS NULL OR s."lastDate"<CAST(:today AS date) OR s."currencyCode"<>:currency OR COALESCE((s.audit->>'version')::int,0)<>:version) ON CONFLICT("portfolioId") DO NOTHING RETURNING "portfolioId"`,
+    { ids, currency: currencyCode, today, version: ACCOUNT_HISTORY_VERSION },
   );
   const meta = await sqlRows<{
     id: string;

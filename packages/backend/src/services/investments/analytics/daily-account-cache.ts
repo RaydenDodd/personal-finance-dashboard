@@ -14,6 +14,7 @@ import { QueryTypes, Op, type Transaction } from 'sequelize';
 import { usesUsEquitySession } from '../securities-price/regular-session';
 import { buildHistory } from './history';
 import { sourceQuantityEvidence } from './source-quantity-evidence';
+export const ACCOUNT_HISTORY_VERSION = 2;
 
 export const sqlRows = <T extends object>(sql: string, replacements: Record<string, unknown> = {}) =>
   connection.sequelize.query(sql, { replacements, type: QueryTypes.SELECT }) as Promise<T[]>;
@@ -220,6 +221,7 @@ export async function refreshNextAccountHistory(userId?: number) {
     },
   });
   const audit = {
+    version: ACCOUNT_HISTORY_VERSION,
     firstPurchase: [...firstBuy.values()].sort()[0] ?? null,
     firstRecord: first,
     lastSnapshot: snapshots.at(-1)?.asOf ?? null,
