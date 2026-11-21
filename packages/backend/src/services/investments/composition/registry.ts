@@ -202,7 +202,7 @@ export const isCompositionIdentityConflict = (security: {
   security.isin !== 'US19423L6728';
 export const isFundSecurity = (s: { symbol: string | null; name: string | null }) =>
   !!definitionFor(s.symbol ?? '') ||
-  /\b(etf|mutual fund|index fund|total market index|stock market index|ishares|vanguard|invesco|spdr)\b/i.test(
+  /\b(etf|mutual fund|index fund|total market index|stock market index|ishares|vanguard|spdr)\b|\binvesco\b.*\b(fund|trust|index|portfolio)\b/i.test(
     s.name ?? '',
   );
 export const secFeedUrl = (seriesId: string) =>
