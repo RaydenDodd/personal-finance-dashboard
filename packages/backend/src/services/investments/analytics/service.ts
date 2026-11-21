@@ -49,7 +49,6 @@ import { getFundSnapshots, latestFundSnapshots } from './fund-snapshots';
 import { buildHistory } from './history';
 import {
   allocation,
-  externalFlow,
   fundOverlap,
   lookThrough,
   metric,
@@ -59,6 +58,7 @@ import {
   isCompanyExposure,
   investmentIssuerCountry,
 } from './math';
+import { nativeExternalFlow } from './native-transfer';
 import { consolidatedReturns, normalizeComparableSeries, recordedPriceReturns } from './performance';
 import { positionPeriodDates, positionPeriodReturns } from './position-performance';
 import { currentHoldingsPriceRisk } from './price-risk';
@@ -364,10 +364,7 @@ async function getAnalyticsImpl({
   };
   const flows = transfers.map((t) => ({
     date: t.date,
-    value: externalFlow(
-      { ...t, refAmount: decimal(t.refAmount), refToAmount: t.refToAmount ? decimal(t.refToAmount) : null },
-      selected,
-    ),
+    value: nativeExternalFlow(t, selected),
     portfolioId: t.toPortfolioId ?? t.fromPortfolioId!,
   }));
   const contributions = sum(flows.filter((f) => new Big(f.value).gt(0)).map((f) => f.value))!;

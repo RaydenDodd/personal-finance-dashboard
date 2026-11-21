@@ -18,7 +18,8 @@ import {
 import type { TransactionRow } from '@services/stats/get-combined-balance-history/types';
 import Big from 'big.js';
 
-import { externalFlow, sum } from './math';
+import { sum } from './math';
+import { nativeExternalFlow } from './native-transfer';
 
 /** Read adapter over the native history replay; no parallel transaction or lot accounting. */
 export function buildHistory({
@@ -172,28 +173,8 @@ export function buildHistory({
   const complete = ids.every((id) => byBroker.get(id)?.data.historyComplete !== false);
   let contributions = new Big(0);
   let withdrawals = new Big(0);
-  const flowsByDay = new Map<string, Big>();
-  for (const t of transfers) {
-    const f = new Big(
-      externalFlow(
-        { ...t, refAmount: t.refAmount.toDecimalString(18), refToAmount: t.refToAmount?.toDecimalString(18) },
-        selected,
-      ),
-    );
-    flowsByDay.set(t.date, (flowsByDay.get(t.date) ?? new Big(0)).plus(f));
-  }
   return dates.map((date) => {
-    const dailyFlows = transfers
-      .filter((t) => t.date === date)
-      .map(
-        (t) =>
-          new Big(
-            externalFlow(
-              { ...t, refAmount: t.refAmount.toDecimalString(18), refToAmount: t.refToAmount?.toDecimalString(18) },
-              selected,
-            ),
-          ),
-      );
+    const dailyFlows = transfers.filter((t) => t.date === date).map((t) => new Big(nativeExternalFlow(t, selected)));
     const incoming = dailyFlows.filter((v) => v.gt(0)).reduce((n, v) => n.plus(v), new Big(0));
     const outgoing = dailyFlows.filter((v) => v.lt(0)).reduce((n, v) => n.minus(v), new Big(0));
     contributions = contributions.plus(incoming);
