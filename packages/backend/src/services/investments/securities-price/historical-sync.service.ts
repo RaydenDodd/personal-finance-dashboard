@@ -20,7 +20,11 @@ import { bucketByUtcDay, startOfDayUtc, uniquePriceObservations } from './pricin
 const STOCK_BACKFILL_YEARS = 5;
 const CRYPTO_BACKFILL_YEARS = 1;
 
-const syncHistoricalPricesImpl = async (securityId: string, intraday = false): Promise<{ count: number }> => {
+const syncHistoricalPricesImpl = async (
+  securityId: string,
+  intraday = false,
+  requiredFrom?: string,
+): Promise<{ count: number }> => {
   logger.info(`Starting historical price sync for securityId: ${securityId}`);
 
   const security = await Securities.findByPk(securityId);
@@ -32,6 +36,8 @@ const syncHistoricalPricesImpl = async (securityId: string, intraday = false): P
   const yearsBack = security.assetClass === ASSET_CLASS.crypto ? CRYPTO_BACKFILL_YEARS : STOCK_BACKFILL_YEARS;
   let startDate = intraday ? subDays(endDate, 7) : subYears(endDate, yearsBack);
   if (!intraday) {
+    if (requiredFrom && /^\d{4}-\d{2}-\d{2}$/.test(requiredFrom) && new Date(requiredFrom) < startDate)
+      startDate = new Date(requiredFrom + 'T00:00:00Z');
     // Preserve the native default window, extending it only where actual native
     // transactions establish that the instrument is needed further back.
     const firstTrade = await InvestmentTransaction.min('date', { where: { securityId } });
@@ -141,8 +147,8 @@ const syncHistoricalPricesImpl = async (securityId: string, intraday = false): P
 };
 
 // Wrap with a lock to prevent multiple syncs for the same security at the same time
-const lockedSync = (securityId: string) =>
-  withLock(`price-sync:security:${securityId}`, () => syncHistoricalPricesImpl(securityId))();
+const lockedSync = (securityId: string, requiredFrom?: string) =>
+  withLock(`price-sync:security:${securityId}`, () => syncHistoricalPricesImpl(securityId, false, requiredFrom))();
 
 export const syncHistoricalPrices = withTransaction(lockedSync);
 export const syncIntradayHistoricalPrices = withTransaction((securityId: string) =>

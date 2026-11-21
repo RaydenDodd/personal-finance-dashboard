@@ -315,6 +315,11 @@ export interface InvestmentDataHealth {
   asOf?: string | null;
 }
 export interface InvestmentAnalytics {
+  performanceTotals?: Record<
+    string,
+    { gain: InvestmentDecimal; percent: InvestmentDecimal; covered: number; total: number }
+  >;
+  accountHistory?: import('./investment-history').InvestmentAccountHistoryResponse;
   /** Historical prices of a fixed basket of today's priced holdings; never a reconstructed account return. */
   priceRisk?: {
     points: { date: string; returnPercent: string; drawdown: string }[];

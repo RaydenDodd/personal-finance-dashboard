@@ -22,6 +22,7 @@ import Treemap from './treemap.vue';
 import OverlapDetails from './overlap-details.vue';
 import CompositionHealth from './composition-health.vue';
 import MetricBreakdown from './metric-breakdown.vue';
+import HistoryCoverage from './history-coverage.vue';
 import { INVESTMENT_PERFORMER_PERIODS, rankInvestmentPerformers, usesCustomPositionPeriod } from './performers-model';
 import {
   aggregateInvestmentFlows,
@@ -229,10 +230,7 @@ const historyLabels: Record<string, string> = {
 };
 const allHistory = computed(() => withinRange(props.analytics.history, range.value.from, range.value.through));
 const recordedAccountFallback = computed(
-  () =>
-    ['performance', 'value-capital'].includes(props.kind) &&
-    !percent.value &&
-    !allHistory.value.some((p) => p.marketValue !== null),
+  () => ['performance', 'value-capital'].includes(props.kind) && props.settings.breakdown === 'accounts',
 );
 const recordedPortfolios = computed(() =>
   props.analytics.portfolios.filter((p) =>
@@ -382,6 +380,13 @@ const dividendGrowth = computed(() => {
   };
 });
 const chartSeries = computed<InvestmentChartSeries[]>(() => {
+  if (props.analytics.accountHistory && !recordedAccountFallback.value && props.kind !== 'portfolio-comparison')
+    return [
+      { key: 'marketValue', label: 'Combined investment value', color: colors[0]! },
+      ...(props.kind === 'value-capital'
+        ? [{ key: 'knownNetInvested', label: 'Recorded net funding', color: colors[3]! }]
+        : []),
+    ];
   if (props.kind === 'dividends')
     return [
       { key: 'cash', label: 'Cash dividends', color: colors[0]! },
@@ -446,6 +451,15 @@ const chartSeries = computed<InvestmentChartSeries[]>(() => {
   }));
 });
 const chartPoints = computed<InvestmentChartPoint[]>(() => {
+  if (props.analytics.accountHistory && !recordedAccountFallback.value && props.kind !== 'portfolio-comparison')
+    return allHistory.value.map((row) => ({
+      date: row.date,
+      values: {
+        marketValue: chartNumber(row.marketValue ?? row.knownMarketValue),
+        ...(props.kind === 'value-capital' ? { knownNetInvested: chartNumber(row.knownNetInvested) } : {}),
+      },
+      note: row.coverage < 100 ? row.source : undefined,
+    }));
   if (props.kind === 'contributions')
     return aggregateInvestmentFlows(allHistory.value, String(props.settings.aggregation ?? 'monthly'));
   if (props.kind === 'dividends') {
@@ -803,6 +817,7 @@ const health = computed(() =>
       concentration.
     </p>
     <template v-if="showChart">
+      <HistoryCoverage v-if="analytics.accountHistory" :history="analytics.accountHistory" />
       <DateRange v-model="range" :earliest="earliest" :compact="compact" subject="investment">
         <template #actions
           ><Popover v-if="kind === 'performance'"
@@ -824,7 +839,28 @@ const health = computed(() =>
                   <option value="dollars">Dollars</option>
                   <option value="percent">Cash-flow-adjusted return %</option>
                 </select></label
-              ><label v-for="(label, key) in historyLabels" :key="key" class="flex items-center gap-2 py-1 text-xs"
+              ><label class="mb-2 block text-xs"
+                >Lines<select
+                  aria-label="Performance lines"
+                  :value="settings.breakdown ?? 'combined'"
+                  class="bg-background mt-1 w-full rounded border p-2"
+                  @change="emit('settings-change', { breakdown: ($event.target as HTMLSelectElement).value })"
+                >
+                  <option value="combined">Combined portfolios</option>
+                  <option value="accounts">By portfolio</option>
+                </select></label
+              >
+              <label v-if="analytics.accountHistory" class="flex items-center gap-2 py-1 text-xs"
+                ><input
+                  type="checkbox"
+                  :checked="Boolean(settings.showEvents)"
+                  @change="emit('settings-change', { showEvents: ($event.target as HTMLInputElement).checked })"
+                />Transaction markers</label
+              >
+              <label
+                v-for="(label, key) in analytics.accountHistory ? {} : historyLabels"
+                :key="key"
+                class="flex items-center gap-2 py-1 text-xs"
                 ><input
                   type="checkbox"
                   :checked="activeSeries.includes(String(key))"

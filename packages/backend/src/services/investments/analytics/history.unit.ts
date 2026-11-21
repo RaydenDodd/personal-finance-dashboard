@@ -65,7 +65,8 @@ describe('native historical valuation adapter', () => {
     expect(points[0]?.marketValue).toBeNull();
     expect(points[1]?.marketValue).toBeNull();
     // The existing native replay is used when an actual price exists.
-    expect(points[2]?.marketValue).not.toBeNull();
+    expect(points[2]?.knownMarketValue).toBe('120');
+    expect(points[2]?.marketValue).toBeNull(); // No cash record establishes a full account value.
   });
   it('shows supported securities after a real position anchor without fabricating earlier positions or cash', () => {
     const points = buildHistory({

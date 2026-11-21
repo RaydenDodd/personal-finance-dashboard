@@ -31,7 +31,7 @@ export function positionPeriodDates(today: string) {
 export function positionPeriodReturns(input: {
   holding: InvestmentHolding;
   dates: Record<string, string>;
-  onGain?: (period: string, gain: string) => void;
+  onGain?: (period: string, gain: string, capital: string) => void;
   through?: string;
   openingValue: (portfolioId: string, securityId: string, date: string) => string | null;
   positionQuantity?: (portfolioId: string, securityId: string, date: string) => string | null;
@@ -74,6 +74,10 @@ export function positionPeriodReturns(input: {
         t.date > date &&
         (period !== 'custom' || !input.through || t.date <= input.through),
     );
+    if (periodTrades.some((t) => t.category === 'transfer' && Number(t.quantity ?? 0) !== 0)) {
+      result[key] = null;
+      continue;
+    }
     if (input.positionQuantity) {
       const matches = h.accounts.every((a) => {
         const start = input.positionQuantity!(a.portfolioId, h.securityId, date);
@@ -103,11 +107,11 @@ export function positionPeriodReturns(input: {
         buys = buys.plus(t.amount);
       } else if (t.category === 'sell') net = net.minus(t.amount);
       else if (t.category === 'dividend') income = income.plus(t.amount);
-      else if (t.category === 'fee') income = income.minus(t.amount);
+      else if (t.category === 'fee' || t.category === 'tax') income = income.minus(t.amount);
     }
     const gain = new Big(ending).minus(opening).minus(net).plus(income).toString();
     result[key] = percent(gain, opening.plus(buys).toString());
-    if (result[key] !== null) input.onGain?.(period, gain);
+    input.onGain?.(period, gain, opening.plus(buys).toString());
   }
   return result;
 }

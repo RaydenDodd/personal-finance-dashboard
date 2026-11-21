@@ -2,6 +2,38 @@ import type { InvestmentHolding } from '@bt/shared/types/investment-analytics';
 
 import { positionPeriodDates, positionPeriodReturns } from './position-performance';
 describe('native position period attribution', () => {
+  it('exposes supported dollar gains even when zero capital makes the percentage undefined', () => {
+    const gains: Record<string, string> = {};
+    const result = positionPeriodReturns({
+      holding: { securityId: 'gift', marketValue: '20', accounts: [{ portfolioId: 'a' }] } as InvestmentHolding,
+      dates: { weekly: '2026-11-13' },
+      openingValue: () => '0',
+      trades: [],
+      onGain: (period, gain) => {
+        gains[period] = gain;
+      },
+    });
+    expect(result.weekly).toBeNull();
+    expect(gains.weekly).toBe('20');
+  });
+  it('does not classify an unvalued in-kind share transfer as an investment profit', () => {
+    const result = positionPeriodReturns({
+      holding: { securityId: 'stock', marketValue: '1000', accounts: [{ portfolioId: 'a' }] } as InvestmentHolding,
+      dates: { weekly: '2026-11-13' },
+      openingValue: () => '0',
+      trades: [
+        {
+          portfolioId: 'a',
+          securityId: 'stock',
+          date: '2026-11-14',
+          category: 'transfer',
+          quantity: '10',
+          amount: '0',
+        },
+      ],
+    });
+    expect(result.weekly).toBeNull();
+  });
   it('rejects unexplained share changes instead of calling them profits', () => {
     const result = positionPeriodReturns({
       holding: {

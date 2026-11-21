@@ -41,12 +41,40 @@ const stubs = {
   HoldingsTable: true,
   Treemap: true,
   DateRange: true,
+  HistoryCoverage: true,
   ModuleBody: { template: '<div><slot/></div>' },
 };
 const panel = (kind: string, analytics = base(), settings: Record<string, unknown> = {}) =>
   mount(AnalyticsPanel, { props: { kind, analytics, settings: { dateRange: 'MAX', ...settings } }, global: { stubs } });
 
 describe('shared investment panels', () => {
+  it('defaults saved partial account history to a single combined dollar line, with account lines optional', () => {
+    const analytics = base();
+    analytics.coverage.historyStart = '2019-12-12';
+    analytics.accountHistory = {} as NonNullable<InvestmentAnalytics['accountHistory']>;
+    analytics.portfolios = [
+      { id: 'p', name: 'Account A' },
+      { id: 'q', name: 'Account B' },
+    ] as InvestmentAnalytics['portfolios'];
+    analytics.history = [
+      {
+        date: '2019-12-12',
+        marketValue: null,
+        knownMarketValue: '30',
+        portfolios: { p: null, q: null },
+        knownPortfolios: { p: '10', q: '20' },
+        coverage: 0,
+        source: '2 priced positions · partial holdings / cash',
+      },
+    ] as InvestmentAnalytics['history'];
+    const combined = panel('performance', analytics);
+    const chart = combined.findComponent({ name: 'SeriesChart' });
+    expect(chart.props('series').map((s: { key: string }) => s.key)).toEqual(['marketValue']);
+    expect(chart.props('points')[0].values).toEqual({ marketValue: 30 });
+    const accounts = panel('performance', analytics, { breakdown: 'accounts' }).findComponent({ name: 'SeriesChart' });
+    expect(accounts.props('series').map((s: { key: string }) => s.key)).toEqual(['p', 'q']);
+    expect(accounts.props('points')[0].values).toMatchObject({ p: 10, q: 20 });
+  });
   it('opens the actual metric breakdown and keeps explanations out of the overview', async () => {
     const wrapper = panel('overview');
     expect(wrapper.text()).toContain('Known investment value');

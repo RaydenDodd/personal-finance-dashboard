@@ -545,7 +545,14 @@ async function getAnalyticsImpl({
           (t.category === 'buy' || t.category === 'sell'),
       );
       const daily =
-        h.marketValue === null
+        h.marketValue === null ||
+        transactions.some(
+          (t) =>
+            t.securityId === h.securityId &&
+            t.category === 'transfer' &&
+            Number(decimal(t.quantity)) !== 0 &&
+            investmentPriceDate(t.date) === sessionDate,
+        )
           ? null
           : dailyPositionChange({
               quantity: h.quantity,
@@ -682,11 +689,19 @@ async function getAnalyticsImpl({
       : {}),
   };
   const baselineDays = new Set(Object.values(periodDates));
+  baselineDays.add(today);
   if (performanceThrough) baselineDays.add(performanceThrough);
   const positionBaselines = new Map<string, string>();
-  const positionQuantities = new Map<string, string>();
+  const positionQuantities = new Map<string, string | null>();
   const shareUnitFactor = createShareUnitFactor(prices, investmentPriceDate);
   const history = buildHistory({
+    onHoldingQuantity: (row) => {
+      if (baselineDays.has(row.date))
+        positionQuantities.set(
+          `${row.portfolioId}:${row.securityId}:${row.date}`,
+          row.quantity === null ? null : String(row.quantity),
+        );
+    },
     onHoldingValue: (row) => {
       if (baselineDays.has(row.date)) {
         positionBaselines.set(`${row.portfolioId}:${row.securityId}:${row.date}`, String(row.value));
@@ -704,6 +719,8 @@ async function getAnalyticsImpl({
       portfolioId: t.portfolioId,
       securityId: t.securityId,
       category: t.category,
+      transactionType: t.transactionType,
+      description: t.name,
       date: t.date,
       quantity: decimal(t.quantity),
       refAmount: decimal(t.refAmount),
@@ -712,22 +729,23 @@ async function getAnalyticsImpl({
       settlementCurrencyCode: t.settlementCurrencyCode,
     })) as TransactionRow[],
   });
-  const supportedFrom = new Map<string, string | undefined>(
-    scope.map((p) => {
-      const broker = brokerById.get(p.id);
-      const first =
-        broker?.data.historyComplete !== false
-          ? transactions
-              .find((t) => t.portfolioId === p.id)
-              ?.date.toISOString()
-              .slice(0, 10)
-          : broker?.data.snapshots
-              .filter((s) => s.complete && s.positions?.length)
-              .map((s) => investmentPriceDate(s.asOf))
-              .sort()[0];
-      return [p.id, first];
-    }),
-  );
+  const firstSecurityEvidence = new Map<string, string>();
+  const evidence = (portfolioId: string, securityId: string, date: string) => {
+    const key = portfolioId + ':' + securityId;
+    const old = firstSecurityEvidence.get(key);
+    if (!old || date < old) firstSecurityEvidence.set(key, date);
+  };
+  for (const t of transactions.filter((t) => ['buy', 'sell'].includes(t.category)))
+    evidence(t.portfolioId, t.securityId, investmentPriceDate(t.date));
+  for (const b of brokers)
+    for (const snapshot of b.data.snapshots)
+      for (const p of snapshot.positions) evidence(b.portfolioId, p.securityId, investmentPriceDate(snapshot.asOf));
+  const quantityAt = (portfolioId: string, securityId: string, date: string) => {
+    const key = portfolioId + ':' + securityId + ':' + date;
+    if (positionQuantities.has(key)) return positionQuantities.get(key)!;
+    const first = firstSecurityEvidence.get(portfolioId + ':' + securityId);
+    return first && date < first ? '0' : null;
+  };
   for (const h of holdings)
     h.personalReturns = positionPeriodReturns({
       holding: h,
@@ -737,13 +755,11 @@ async function getAnalyticsImpl({
       dates: periodDates,
       through: performanceThrough && performanceThrough < today ? performanceThrough : undefined,
       shareUnitFactor,
-      positionQuantity: (portfolioId, securityId, date) =>
-        positionQuantities.get(`${portfolioId}:${securityId}:${date}`) ?? null,
+      positionQuantity: (portfolioId, securityId, date) => quantityAt(portfolioId, securityId, date),
       openingValue: (portfolioId, securityId, date) => {
-        const first = supportedFrom.get(portfolioId);
-        const day = history.find((p) => p.date === date);
-        if (!first || first > date || day?.knownPortfolios?.[portfolioId] == null) return null;
-        return positionBaselines.get(`${portfolioId}:${securityId}:${date}`) ?? '0';
+        const quantity = quantityAt(portfolioId, securityId, date);
+        if (quantity === '0') return '0';
+        return positionBaselines.get(`${portfolioId}:${securityId}:${date}`) ?? null;
       },
       trades: transactions.map((t) => ({
         portfolioId: t.portfolioId,
@@ -1087,6 +1103,90 @@ async function getAnalyticsImpl({
     p.calculation!.dailyChange = knownDaily.length ? sum(knownDaily.map((a) => a.dailyChange!)) : null;
   }
   const result: InvestmentAnalytics = {
+    performanceTotals: (() => {
+      const totals: NonNullable<InvestmentAnalytics['performanceTotals']> = {};
+      const pairs = new Map<string, { portfolioId: string; securityId: string }>();
+      for (const t of transactions.filter((t) => ['buy', 'sell', 'transfer'].includes(t.category)))
+        pairs.set(t.portfolioId + ':' + t.securityId, { portfolioId: t.portfolioId, securityId: t.securityId });
+      for (const b of brokers)
+        for (const s of b.data.snapshots)
+          for (const p of s.positions)
+            pairs.set(b.portfolioId + ':' + p.securityId, { portfolioId: b.portfolioId, securityId: p.securityId });
+      const capital = new Map<string, Big>(),
+        gains = new Map<string, Big>(),
+        covered = new Map<string, number>();
+      const eligible = new Map<string, number>();
+      const txs = transactions.map((t) => ({
+        portfolioId: t.portfolioId,
+        securityId: t.securityId,
+        date: investmentPriceDate(t.date),
+        category: t.category,
+        amount: decimal(t.refAmount),
+        quantity: decimal(t.quantity),
+      }));
+      for (const pair of pairs.values()) {
+        const pairTrades = txs.filter((t) => t.portfolioId === pair.portfolioId && t.securityId === pair.securityId);
+        for (const [period, start] of Object.entries(periodDates)) {
+          const end = period === 'custom' && performanceThrough ? performanceThrough : today;
+          const opening = quantityAt(pair.portfolioId, pair.securityId, start),
+            closing = quantityAt(pair.portfolioId, pair.securityId, end);
+          const evidenced = (firstSecurityEvidence.get(pair.portfolioId + ':' + pair.securityId) ?? '9999') <= end;
+          if (
+            Number(opening ?? 0) > 0 ||
+            Number(closing ?? 0) > 0 ||
+            (evidenced && (opening === null || closing === null)) ||
+            pairTrades.some(
+              (t) => t.date > start && t.date <= end && (Number(t.quantity) !== 0 || Number(t.amount) !== 0),
+            )
+          )
+            eligible.set(period, (eligible.get(period) ?? 0) + 1);
+        }
+        const qty = quantityAt(pair.portfolioId, pair.securityId, today);
+        const value =
+          qty === '0' ? '0' : (positionBaselines.get(`${pair.portfolioId}:${pair.securityId}:${today}`) ?? null);
+        positionPeriodReturns({
+          holding: {
+            securityId: pair.securityId,
+            marketValue: value,
+            accounts: [{ portfolioId: pair.portfolioId, quantity: qty ?? '0' }],
+          } as InvestmentHolding,
+          dates: periodDates,
+          through: performanceThrough && performanceThrough < today ? performanceThrough : undefined,
+          shareUnitFactor,
+          positionQuantity: quantityAt,
+          openingValue: (p, s, d) =>
+            quantityAt(p, s, d) === '0' ? '0' : (positionBaselines.get(`${p}:${s}:${d}`) ?? null),
+          trades: txs,
+          onGain: (period, gain, base) => {
+            if (new Big(gain).eq(0) && new Big(base).eq(0)) return;
+            gains.set(period, (gains.get(period) ?? new Big(0)).plus(gain));
+            capital.set(period, (capital.get(period) ?? new Big(0)).plus(base));
+            covered.set(period, (covered.get(period) ?? 0) + 1);
+          },
+        });
+      }
+      for (const period of Object.keys(periodDates))
+        totals[period] = {
+          gain: gains.get(period)?.toString() ?? null,
+          percent: percent(gains.get(period)?.toString() ?? null, capital.get(period)?.toString() ?? null),
+          covered: covered.get(period) ?? 0,
+          total: eligible.get(period) ?? 0,
+        };
+      totals.daily = {
+        gain: metrics.dailyChange?.value ?? null,
+        percent: metrics.dailyChangePercent?.value ?? null,
+        covered: dailyHoldings.length + closedChanges.length,
+        total: holdings.length + closedChanges.length,
+      };
+      totals.all = {
+        gain: metrics.knownUnrealizedGain?.value ?? null,
+        percent: percent(metrics.knownUnrealizedGain?.value ?? null, metrics.knownCostBasis?.value ?? null),
+        covered: holdings.filter((h) => h.costBasis !== null && h.marketValue !== null).length,
+        total: holdings.length,
+      };
+      totals.unrealized = totals.all;
+      return totals;
+    })(),
     generatedAt: new Date().toISOString(),
     priceRisk,
     currencyCode,

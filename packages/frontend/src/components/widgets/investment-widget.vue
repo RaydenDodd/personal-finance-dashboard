@@ -3,6 +3,7 @@ import type { DashboardWidgetConfig } from '@/api/user-settings';
 import { Button } from '@/components/lib/ui/button';
 import AnalyticsPanel from '@/components/investment-analytics/analytics-panel.vue';
 import { useInvestmentAnalytics } from '@/composable/data-queries/investment-analytics';
+import { useInvestmentHistory } from '@/composable/data-queries/investment-history';
 import { usePortfolios } from '@/composable/data-queries/portfolios';
 import { ArrowUpRightIcon } from '@lucide/vue';
 import { ScrollArea } from '@/components/lib/ui/scroll-area';
@@ -41,12 +42,28 @@ const performanceFrom = computed(() =>
 const performanceThrough = computed(() =>
   performanceFrom.value && settings.value.through ? String(settings.value.through) : undefined,
 );
-const { data, isPending, isFetching, error, refetch } = useInvestmentAnalytics({
+const focusedHistory = computed(
+  () =>
+    ['performance', 'value-capital', 'portfolio-comparison'].includes(kind.value) && settings.value.unit !== 'percent',
+);
+const broad = useInvestmentAnalytics({
   portfolioIds,
   benchmarks,
   performanceFrom,
   performanceThrough,
+  enabled: () => !focusedHistory.value,
 });
+const narrow = useInvestmentHistory({
+  portfolioIds,
+  enabled: focusedHistory,
+  includeCapital: () => kind.value === 'value-capital',
+  includeEvents: () => Boolean(settings.value.showEvents),
+});
+const data = computed(() => (focusedHistory.value ? narrow.data.value : broad.data.value));
+const isPending = computed(() => (focusedHistory.value ? narrow.isPending.value : broad.isPending.value));
+const isFetching = computed(() => (focusedHistory.value ? narrow.isFetching.value : broad.isFetching.value));
+const error = computed(() => (focusedHistory.value ? narrow.error.value : broad.error.value));
+const refetch = () => (focusedHistory.value ? narrow.refetch() : broad.refetch());
 const { data: portfolios } = usePortfolios();
 const settingsOpen = ref(false);
 const saving = ref(false);

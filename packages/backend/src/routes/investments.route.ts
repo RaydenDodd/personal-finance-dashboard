@@ -4,6 +4,7 @@ import {
   executeImportController as importExecuteController,
   extractController as importExtractController,
 } from '@controllers/investment-transactions-parser';
+import { getAccountHistoryController, rebuildAccountHistoryController } from '@controllers/investments/account-history';
 import {
   compositionCatalog,
   compositionFile,
@@ -70,6 +71,8 @@ const router = Router({});
 // endpoints enforce their own access checks.
 router.use(authenticateSession);
 router.get('/analytics', getAnalytics);
+router.get('/analytics/history', getAccountHistoryController);
+router.post('/analytics/history/rebuild', blockDemoUsers, rebuildAccountHistoryController);
 router.get('/analytics/overlap-detail', getOverlapDetail);
 router.get('/analytics/composition', compositionCatalog);
 router.post('/analytics/composition/file', blockDemoUsers, compositionFile);

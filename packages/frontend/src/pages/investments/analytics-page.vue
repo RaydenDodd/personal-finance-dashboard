@@ -13,6 +13,7 @@ import InvestmentInformation from '@/components/investment-analytics/information
 import InvestmentSettings from '@/components/widgets/investment-widget-settings.vue';
 import { INVESTMENT_WIDGET_DEFINITIONS, type InvestmentWidgetKind } from '@/components/widgets/investment-widgets';
 import { useInvestmentAnalytics } from '@/composable/data-queries/investment-analytics';
+import { useInvestmentHistory } from '@/composable/data-queries/investment-history';
 import { refreshInvestmentPrices } from '@/api/investment-analytics';
 
 const props = defineProps<{ page: 'overview' | 'performance' | 'holdings' | 'allocation' | 'dividends' }>();
@@ -40,7 +41,9 @@ const settingsOpen = ref(false),
   refreshError = ref(''),
   groupFilter = ref('all'),
   brokerFilter = ref('all');
-const all = useInvestmentAnalytics();
+const broadAll = useInvestmentAnalytics({ enabled: () => props.page !== 'performance' || importOpen.value });
+const narrowAll = useInvestmentHistory({ enabled: () => props.page === 'performance' });
+const all = { data: computed(() => (props.page === 'performance' ? narrowAll.data.value : broadAll.data.value)) };
 const portfolioIds = computed(() => {
   const ids = Array.isArray(settings.value.portfolioIds) ? (settings.value.portfolioIds as string[]) : [];
   const candidates = all.data.value?.portfolios ?? [];
@@ -59,11 +62,21 @@ const noMatches = computed(() =>
     all.data.value && (groupFilter.value !== 'all' || brokerFilter.value !== 'all') && !portfolioIds.value.length,
   ),
 );
-const query = useInvestmentAnalytics({
+const broadQuery = useInvestmentAnalytics({
   portfolioIds,
   benchmarks: () => (props.page === 'performance' ? ((settings.value.benchmarks as string[]) ?? []) : []),
-  enabled: () => !noMatches.value,
+  enabled: () => !noMatches.value && props.page !== 'performance',
 });
+const narrowQuery = useInvestmentHistory({
+  portfolioIds,
+  enabled: () => !noMatches.value && props.page === 'performance',
+});
+const query = {
+  data: computed(() => (props.page === 'performance' ? narrowQuery.data.value : broadQuery.data.value)),
+  isError: computed(() => (props.page === 'performance' ? narrowQuery.isError.value : broadQuery.isError.value)),
+  isPending: computed(() => (props.page === 'performance' ? narrowQuery.isPending.value : broadQuery.isPending.value)),
+  refetch: () => (props.page === 'performance' ? narrowQuery.refetch() : broadQuery.refetch()),
+};
 const titles = {
   overview: 'Overview',
   performance: 'Performance',
@@ -250,8 +263,12 @@ async function refresh() {
       <FundImport
         v-if="query.data.value"
         v-model="importOpen"
-        :funds="query.data.value.holdings.filter((row) => row.isFund)"
-        :securities="query.data.value.holdings"
+        :funds="
+          (page === 'performance' ? broadAll.data.value?.holdings : query.data.value.holdings)?.filter(
+            (row) => row.isFund,
+          ) ?? []
+        "
+        :securities="(page === 'performance' ? broadAll.data.value?.holdings : query.data.value.holdings) ?? []"
         @saved="invalidateAnalytics"
       /></div
   ></PageWrapper>

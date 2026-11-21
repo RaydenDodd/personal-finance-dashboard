@@ -13,6 +13,7 @@ import { demoTemplateRefreshCron } from './crons/demo-template-refresh';
 import { loadCurrencyRatesJob } from './crons/exchange-rates';
 import { fundCompositionRefreshCron } from './crons/fund-composition-refresh';
 import { goalsReachedCheckCron } from './crons/goals-reached-check';
+import { investmentHistoryCron } from './crons/investment-history';
 import { personalFinanceMonthlyJob } from './crons/personal-finance-monthly';
 import { personalFinancePrincipalJob } from './crons/personal-finance-principal';
 import { personalFinanceSheetsCron } from './crons/personal-finance-sheets';
@@ -42,6 +43,7 @@ const prodOnlyCrons = [
   securitiesIntradaySyncCron,
   securitiesClosingSyncCron,
   fundCompositionRefreshCron,
+  investmentHistoryCron,
   publicPortfolioSyncCron,
   cryptoPricesSyncCron,
   tagRemindersCron,

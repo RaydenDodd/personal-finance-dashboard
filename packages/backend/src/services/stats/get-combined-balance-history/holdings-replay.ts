@@ -33,6 +33,10 @@ export const computeHoldingsValueByDate = ({
   onHoldingValue,
   dateKey = toUtcDateString,
   shareUnitFactor = () => 1,
+  mergePositionAnchors = false,
+  onUnknownQuantity,
+  onHoldingQuantity,
+  onAnchorDifference,
 }: {
   uniqueDates: string[];
   portfolioIds: string[];
@@ -54,10 +58,25 @@ export const computeHoldingsValueByDate = ({
   dateKey?: (date: Date | string) => string;
   /** Optional market-data unit adapter. Does not persist share or transaction changes. */
   shareUnitFactor?: (securityId: string, date: string) => number;
+  mergePositionAnchors?: boolean;
+  onUnknownQuantity?: (row: { securityId: string; dateStr: string }) => void;
+  onHoldingQuantity?: (row: { portfolioId: string; securityId: string; date: string; quantity: number | null }) => void;
+  onAnchorDifference?: (row: {
+    portfolioId: string;
+    securityId: string;
+    date: string;
+    expected: number | null;
+    observed: number;
+  }) => void;
   /** Real complete broker positions establish an opening balance only from their dated observation forward. */
   positionAnchorsByPortfolio?: Map<
     string,
-    { asOf: string; positions: { securityId: string; quantity: string; costBasis: string | null }[] }[]
+    {
+      asOf: string;
+      complete?: boolean;
+      opening?: boolean;
+      positions: { securityId: string; quantity: string; costBasis: string | null }[];
+    }[]
   >;
 }): Map<string, number> => {
   const holdingsValueByDate = new Map<string, number>();
@@ -68,6 +87,28 @@ export const computeHoldingsValueByDate = ({
   const holdingsByPortfolio = new Map<string, Map<string, HoldingState>>();
   const cursorByPortfolio = new Map<string, number>();
   const appliedAnchor = new Map<string, string>();
+  type Anchor = NonNullable<typeof positionAnchorsByPortfolio> extends Map<string, (infer A)[]> ? A : never;
+  const events = new Map(
+    portfolioIds.map((id) => [
+      id,
+      [
+        ...(transactionsByPortfolio.get(id) ?? []).map((tx) => ({
+          date: tx.date,
+          tx,
+          anchor: undefined as Anchor | undefined,
+        })),
+        ...(mergePositionAnchors ? (positionAnchorsByPortfolio?.get(id) ?? []) : []).map((anchor) => ({
+          date: new Date(anchor.asOf),
+          tx: undefined as TransactionRow | undefined,
+          anchor,
+        })),
+      ].sort(
+        (a, b) =>
+          dateKey(a.date).localeCompare(dateKey(b.date)) ||
+          (a.anchor?.opening ? -1 : b.anchor?.opening ? 1 : new Date(a.date).getTime() - new Date(b.date).getTime()),
+      ),
+    ]),
+  );
   for (const portfolioId of portfolioIds) {
     holdingsByPortfolio.set(portfolioId, new Map<string, HoldingState>());
     cursorByPortfolio.set(portfolioId, 0);
@@ -80,7 +121,9 @@ export const computeHoldingsValueByDate = ({
       const portfolioTxs = transactionsByPortfolio.get(portfolioId) ?? [];
       const holdings = holdingsByPortfolio.get(portfolioId)!;
       let cursor = cursorByPortfolio.get(portfolioId)!;
-      const anchor = positionAnchorsByPortfolio?.get(portfolioId)?.findLast((a) => dateKey(a.asOf) <= dateStr);
+      const anchor =
+        !mergePositionAnchors &&
+        positionAnchorsByPortfolio?.get(portfolioId)?.findLast((a) => dateKey(a.asOf) <= dateStr);
       if (anchor && appliedAnchor.get(portfolioId) !== anchor.asOf) {
         holdings.clear();
         for (const position of anchor.positions) {
@@ -98,8 +141,39 @@ export const computeHoldingsValueByDate = ({
       }
 
       // Fold in every transaction that settled on or before this snapshot day.
-      while (cursor < portfolioTxs.length) {
-        const tx = portfolioTxs[cursor]!;
+      const portfolioEvents = events.get(portfolioId)!;
+      while (cursor < portfolioEvents.length) {
+        const event = portfolioEvents[cursor]!;
+        if (dateKey(event.date) > dateStr) break;
+        if (event.anchor) {
+          if (onAnchorDifference && !event.anchor.opening) {
+            const ids = new Set([
+              ...event.anchor.positions.map((p) => p.securityId),
+              ...(event.anchor.complete ? holdings.keys() : []),
+            ]);
+            for (const id of ids) {
+              const old = holdings.get(id)?.quantity ?? null,
+                p = event.anchor.positions.find((p) => p.securityId === id);
+              const observed = Number(p?.quantity ?? 0) * shareUnitFactor(id, dateKey(event.date));
+              if (old === null ? observed > 0 : Math.abs(old - observed) > (Math.abs(observed) + 1) * 1e-8)
+                onAnchorDifference({ portfolioId, securityId: id, date: dateKey(event.date), expected: old, observed });
+            }
+          }
+          if (event.anchor.complete) holdings.clear();
+          for (const p of event.anchor.positions) {
+            const security = securitiesById.get(p.securityId);
+            holdings.set(p.securityId, {
+              quantity:
+                Number(p.quantity) * (event.anchor.opening ? 1 : shareUnitFactor(p.securityId, dateKey(event.date))),
+              costBasis: Number(p.costBasis ?? 0),
+              currencyCode: security?.currencyCode ?? 'USD',
+              assetClass: security?.assetClass ?? ASSET_CLASS.other,
+            });
+          }
+          cursor++;
+          continue;
+        }
+        const tx = event.tx!;
         // `tx.date` is TIMESTAMPTZ; bucket to its UTC calendar day so the
         // comparison against the `yyyy-MM-dd` snapshot key is lexicographic.
         if (dateKey(tx.date) > dateStr) break;
@@ -126,7 +200,14 @@ export const computeHoldingsValueByDate = ({
 
         const holding = holdings.get(securityId)!;
 
-        if (tx.category === INVESTMENT_TRANSACTION_CATEGORY.buy) {
+        if (mergePositionAnchors && tx.category === INVESTMENT_TRANSACTION_CATEGORY.transfer && quantity !== 0) {
+          holding.quantity =
+            tx.transactionType === 'income'
+              ? holding.quantity + quantity
+              : tx.transactionType === 'expense'
+                ? holding.quantity - quantity
+                : NaN;
+        } else if (tx.category === INVESTMENT_TRANSACTION_CATEGORY.buy) {
           const newQuantity = holding.quantity + quantity;
           if (newQuantity <= 0) {
             holding.costBasis = 0;
@@ -156,9 +237,15 @@ export const computeHoldingsValueByDate = ({
       cursorByPortfolio.set(portfolioId, cursor);
 
       for (const [securityId, holding] of holdings) {
+        if (onUnknownQuantity && (!Number.isFinite(holding.quantity) || holding.quantity < -1e-9)) {
+          onHoldingQuantity?.({ portfolioId, securityId, date: dateStr, quantity: null });
+          onUnknownQuantity({ securityId, dateStr });
+          continue;
+        }
         // Stocks cap at zero; crypto can legitimately drift negative until reconciled.
         const allowNegative = holding.assetClass === ASSET_CLASS.crypto;
         const effectiveQuantity = !allowNegative && holding.quantity < 0 ? 0 : holding.quantity;
+        onHoldingQuantity?.({ portfolioId, securityId, date: dateStr, quantity: effectiveQuantity });
         if (effectiveQuantity === 0) continue;
 
         const currentPrice = findPriceForDate(securityId, dateStr);

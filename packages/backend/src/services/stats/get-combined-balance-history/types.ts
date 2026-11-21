@@ -36,6 +36,8 @@ export interface CombinedBalanceHistoryItem {
  * DECIMAL columns therefore arrive as Postgres decimal strings, not `Money`.
  */
 export interface TransactionRow {
+  description?: string | null;
+  transactionType?: 'income' | 'expense';
   portfolioId: RecordId;
   securityId: RecordId;
   category: INVESTMENT_TRANSACTION_CATEGORY;

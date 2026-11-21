@@ -6,6 +6,7 @@ import { ChartTooltip, ChartTooltipHeader, ChartTooltipRow } from '@/components/
 import { useChartTooltipPosition } from '@/composable/charts/use-chart-tooltip-position';
 import type { InvestmentAnalytics } from '@bt/shared/types/investment-analytics';
 import { investmentTreemapRows } from './treemap-model';
+import { usesCustomPositionPeriod } from './performers-model';
 const props = defineProps<{ analytics: InvestmentAnalytics; settings: Record<string, unknown>; compact?: boolean }>();
 const chartHeight = inject<Ref<number> | null>('investment-chart-height', null);
 const clipPrefix = useId().replace(/[^a-zA-Z0-9_-]/g, '');
@@ -31,6 +32,14 @@ const averages = computed(() => {
   };
 });
 const signedMoney = (value: number | null) => (value == null ? '—' : (value >= 0 ? '+' : '') + money(value));
+const total = computed(
+  () =>
+    props.analytics.performanceTotals?.[
+      usesCustomPositionPeriod(props.settings, String(props.settings.colorBy))
+        ? 'custom'
+        : String(props.settings.colorBy ?? 'unrealized')
+    ],
+);
 watch(
   () => [props.settings.grouping, props.settings.holdingsMode],
   () => {
@@ -177,6 +186,21 @@ watch([visible, () => props.settings], () => nextTick(render), { deep: true });
 </script>
 <template>
   <div class="min-w-0">
+    <div
+      class="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm tabular-nums"
+      data-testid="treemap-range-total"
+    >
+      <span class="text-muted-foreground">Total holdings</span
+      ><strong :class="Number(total?.gain ?? 0) >= 0 ? 'text-app-income-color' : 'text-app-expense-color'">{{
+        signedMoney(total?.gain == null ? null : Number(total.gain))
+      }}</strong
+      ><strong :class="Number(total?.percent ?? 0) >= 0 ? 'text-app-income-color' : 'text-app-expense-color'">{{
+        total?.percent == null ? '—' : (Number(total.percent) >= 0 ? '+' : '') + Number(total.percent).toFixed(2) + '%'
+      }}</strong
+      ><span v-if="total && total.covered < total.total" class="text-muted-foreground text-xs"
+        >{{ total.covered }}/{{ total.total }} positions</span
+      >
+    </div>
     <div
       class="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs tabular-nums"
       data-testid="treemap-range-summary"

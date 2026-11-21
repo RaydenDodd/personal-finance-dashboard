@@ -2,10 +2,14 @@ import { createController } from '@controllers/helpers/controller-factory';
 import { cryptoPricesSyncCron } from '@crons/crypto-prices-sync';
 import { securitiesIntradaySyncCron } from '@crons/securities-daily-sync';
 import { ValidationError } from '@js/errors';
+import BrokerPortfolioData from '@models/investments/broker-portfolio-data.model';
 import Holdings from '@models/investments/holdings.model';
+import InvestmentTransaction from '@models/investments/investment-transaction.model';
 import Portfolios from '@models/investments/portfolios.model';
+import Securities from '@models/investments/securities.model';
 import SecurityPricing from '@models/investments/security-pricing.model';
 import UserSettings from '@models/user-settings.model';
+import { sourceQuantityEvidence } from '@services/investments/analytics/source-quantity-evidence';
 import { dataProviderFactory } from '@services/investments/data-providers';
 import {
   syncHistoricalPrices,
@@ -48,6 +52,7 @@ function createPricesSyncController(ownerScoped = false) {
     }),
     async ({ body, user }) => {
       let scope: string[] | undefined;
+      const requiredFrom = new Map<string, string>();
       if (ownerScoped) {
         const hidden =
           (await UserSettings.findOne({ where: { userId: user.id } }))?.settings.ui?.hiddenPortfolioIds ?? [];
@@ -66,6 +71,47 @@ function createPricesSyncController(ownerScoped = false) {
           raw: true,
         });
         scope = [...new Set(positions.map((p) => p.securityId))];
+        if (body.historical) {
+          const portfolios = await Portfolios.findAll({
+            where: { userId: user.id, ...(hidden.length && { id: { [Op.notIn]: hidden } }) },
+            attributes: ['id'],
+          });
+          const portfolioIds = portfolios.map((p) => p.id);
+          const [past, records] = await Promise.all([
+            InvestmentTransaction.findAll({
+              where: { portfolioId: { [Op.in]: portfolioIds } },
+              attributes: ['securityId'],
+              group: ['securityId'],
+              raw: true,
+            }),
+            BrokerPortfolioData.findAll({ where: { portfolioId: { [Op.in]: portfolioIds } } }),
+          ]);
+          scope = [
+            ...new Set([
+              ...scope,
+              ...past.map((t) => t.securityId),
+              ...records.flatMap((r) => r.data.snapshots.flatMap((s) => s.positions.map((p) => p.securityId))),
+            ]),
+          ];
+          const symbols = [
+            ...new Set(
+              records.flatMap((r) =>
+                r.data.sourceEvents
+                  .filter((e) => ['REC', 'SXCH'].includes(String(e.action)))
+                  .map((e) => String(e.symbol ?? '')),
+              ),
+            ),
+          ];
+          const sourceSecurities = await Securities.findAll({ where: { symbol: { [Op.in]: symbols } } });
+          for (const record of records)
+            for (const t of sourceQuantityEvidence(record.portfolioId, record.data, sourceSecurities, []).rows) {
+              const d = t.date.toISOString().slice(0, 10);
+              scope.push(t.securityId);
+              if (!requiredFrom.has(t.securityId) || d < requiredFrom.get(t.securityId)!)
+                requiredFrom.set(t.securityId, d);
+            }
+          scope = [...new Set(scope)];
+        }
         if (body.securityIds?.some((id) => !scope!.includes(id)))
           throw new ValidationError({ message: 'Only securities in your visible portfolios may be refreshed.' });
         scope = body.securityIds ?? scope;
@@ -85,11 +131,13 @@ function createPricesSyncController(ownerScoped = false) {
         for (const securityId of ids) {
           try {
             if (body.intraday && (body.daily || (await SecurityPricing.count({ where: { securityId } })) < 30))
-              await syncHistoricalPrices(securityId);
+              await syncHistoricalPrices(securityId, requiredFrom.get(securityId));
             results.push({
               securityId,
               ok: true,
-              ...(await (body.intraday ? syncIntradayHistoricalPrices(securityId) : syncHistoricalPrices(securityId))),
+              ...(await (body.intraday
+                ? syncIntradayHistoricalPrices(securityId)
+                : syncHistoricalPrices(securityId, requiredFrom.get(securityId)))),
             });
           } catch (error) {
             results.push({
