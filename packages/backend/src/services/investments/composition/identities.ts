@@ -5,7 +5,7 @@ const issuerName = (name: string) =>
     .toUpperCase()
     .replace(/\b(COMMON STOCK|CORPORATION|CORP|INCORPORATED|INC|PLC|LTD|LIMITED|CO|COMPANY)\b/g, '')
     .replace(/[^A-Z0-9]/g, '');
-const tickerKey = (symbol: string | null | undefined) => (symbol ?? '').toUpperCase().replace(/[.\- ]/g, '');
+const tickerKey = (symbol: string | null | undefined) => (symbol ?? '').toUpperCase().replace(/[.\- /]/g, '');
 const baseIssuerName = (name: string) => issuerName(name.replace(/\bCLASS\s+[A-Z]\b/gi, ''));
 const usVenue = (venue: string | null | undefined) =>
   /^(XNAS|XNYS|ARCX|NASDAQ|NYSE|NMS|NAS|NGM|NCM|NYQ|PCX|ARCA|NYSEARCA|ASE|AMEX|XASE)$/i.test(venue ?? '');
