@@ -92,7 +92,8 @@ export function buildHistory({
         ).rows,
     ),
   ].sort((a, b) => +new Date(a.date) - +new Date(b.date));
-  const today = through ?? easternDate();
+  const liveDay = easternDate();
+  const today = through ?? liveDay;
   const starts = [
     ...transactions.map((t) => investmentPriceDate(t.date)),
     ...transfers.map((t) => t.date),
@@ -164,7 +165,14 @@ export function buildHistory({
         const security = securityById.get(securityId);
         const expected =
           security?.assetClass === 'crypto' || usEquitySession(date).tradingDay ? date : previousUsEquitySession(date);
-        const price = observed.has(`${securityId}:${expected}`) ? findPrice(securityId, date) : null;
+        // Today's account value retains a real prior close until a regular quote arrives.
+        // This is a valuation fallback, never a new price observation or a historical gap fill.
+        const prior = previousUsEquitySession(date);
+        const price = observed.has(`${securityId}:${expected}`)
+          ? findPrice(securityId, date)
+          : date === liveDay && security?.assetClass !== 'crypto' && observed.has(`${securityId}:${prior}`)
+            ? findPrice(securityId, prior)
+            : null;
         if (price !== null) return price;
         const snapshot = snapshots.findLast(
           (s) =>

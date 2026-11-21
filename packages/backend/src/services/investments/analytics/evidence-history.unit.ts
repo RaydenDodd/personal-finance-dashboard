@@ -35,6 +35,30 @@ const run = (extra: Record<string, unknown>) =>
   } as never);
 
 describe('security evidence rather than account-completeness gates', () => {
+  it('retains the real prior close for the current day before a regular quote arrives, without filling historical gaps', () => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-11-23T13:00:00Z'));
+    try {
+      expect(
+        run({
+          from: '2026-11-23',
+          through: '2026-11-23',
+          transactions: [tx('a', '2026-11-20', 'buy', '2')],
+          prices: [price('a', '2026-11-20', '10')],
+        })[0]?.knownMarketValue,
+      ).toBe('20');
+      expect(
+        run({
+          from: '2026-11-19',
+          through: '2026-11-19',
+          transactions: [tx('a', '2026-11-18', 'buy', '2')],
+          prices: [price('a', '2026-11-18', '10')],
+        })[0]?.knownMarketValue,
+      ).toBeNull();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
   it('uses a reconciled cash-in-lieu record to retire fractional shares, without guessing from an unrelated cash receipt', () => {
     const input = {
       from: '2021-08-02',
