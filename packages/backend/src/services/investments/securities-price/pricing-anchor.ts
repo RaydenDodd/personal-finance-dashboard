@@ -10,6 +10,11 @@ import { PriceData } from '../data-providers/base-provider';
 export const startOfDayUtc = (date: Date): Date =>
   new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
 
+/** Providers may publish a terminal quote at the same close as their last candle. */
+export const uniquePriceObservations = <T extends { date: Date }>(prices: T[]): T[] => [
+  ...new Map(prices.map((price) => [price.date.toISOString(), price])).values(),
+];
+
 /**
  * Collapse a list of historical prices into one row per UTC day, anchored at
  * midnight UTC of that day. Picks the latest-timestamp point within each day.

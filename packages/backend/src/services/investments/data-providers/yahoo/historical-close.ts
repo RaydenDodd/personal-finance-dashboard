@@ -1,4 +1,8 @@
-import { investmentPriceDate, usEquityCloseInstant } from '@bt/shared/types/investment-market';
+import {
+  investmentPriceDate,
+  usEquityCloseInstant,
+  usEquityObservationAllowed,
+} from '@bt/shared/types/investment-market';
 import Big from 'big.js';
 
 /** Restore original-share units from Yahoo's split-adjusted close. Dividends are never applied. */
@@ -24,6 +28,7 @@ export function originalShareClose(
 }
 /** Completed 5-minute candle closes, including the terminal US closing quote. */
 export function candleCloseTime(start: Date, usSession: boolean, now = Date.now()) {
+  if (usSession && !usEquityObservationAllowed(start)) return null;
   const sessionClose = usSession ? usEquityCloseInstant(investmentPriceDate(start)) : Infinity;
   const end = new Date(Math.max(start.getTime(), Math.min(start.getTime() + 300000, sessionClose)));
   return end.getTime() <= now ? end : null;

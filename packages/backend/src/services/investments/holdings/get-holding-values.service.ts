@@ -1,4 +1,8 @@
-import { investmentPriceDate } from '@bt/shared/types/investment-market';
+import {
+  investmentPriceDate,
+  usEquityObservationAllowed,
+  latestCompletedUsEquityClose,
+} from '@bt/shared/types/investment-market';
 import { INVESTMENT_TRANSACTION_CATEGORY } from '@bt/shared/types/investments';
 import { INVESTMENT_DECIMAL_SCALE, Money } from '@common/types/money';
 import { logger } from '@js/utils';
@@ -13,6 +17,7 @@ import { calculateRefAmountFromParams } from '@services/calculate-ref-amount.ser
 import { withDeduplication } from '@services/common/with-deduplication';
 import { latestSnapshot } from '@services/investments/broker-records/schema';
 import { calculateAllGains } from '@services/investments/gains/gains-calculator.utils';
+import { usesUsEquitySession } from '@services/investments/securities-price/regular-session';
 import * as userExchangeRateService from '@services/user-exchange-rate';
 import { Big } from 'big.js';
 import { Op, WhereOptions, fn, col } from 'sequelize';
@@ -174,6 +179,33 @@ const getHoldingValuesImpl = async ({ portfolioId, date, userId }: GetHoldingVal
     string,
     SecurityPricing
   >;
+  const usSessionIds = new Set(
+    holdings.filter((h) => h.security && usesUsEquitySession(h.security)).map((h) => String(h.securityId)),
+  );
+  const extended = prices.filter(
+    (p) =>
+      p.source === 'yahoo' && p.priceAsOf && usSessionIds.has(p.securityId) && !usEquityObservationAllowed(p.priceAsOf),
+  );
+  if (extended.length) {
+    const closingDates = (await SecurityPricing.findAll({
+      where: {
+        [Op.or]: extended.map((p) => ({
+          securityId: p.securityId,
+          date: { [Op.lte]: new Date(latestCompletedUsEquityClose(p.priceAsOf!)) },
+        })),
+      },
+      attributes: ['securityId', [fn('MAX', col('date')), 'date']],
+      group: ['securityId'],
+      raw: true,
+    })) as unknown as { securityId: string; date: Date | null }[];
+    for (const p of extended) delete pricesBySecurityId[p.securityId];
+    const knownDates = closingDates.filter((p): p is { securityId: string; date: Date } => p.date !== null);
+    if (knownDates.length)
+      for (const p of await SecurityPricing.findAll({
+        where: { [Op.or]: knownDates.map((p) => ({ securityId: p.securityId, date: p.date })) },
+      }))
+        pricesBySecurityId[p.securityId] = p;
+  }
   if (date) {
     const weak = prices.filter((p) => p.source === 'yahoo' && p.unadjustedClose == null);
     if (weak.length) {

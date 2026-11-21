@@ -120,3 +120,20 @@ export function usEquityCloseInstant(date: string) {
   closeInstantCache.set(date, result);
   return result;
 }
+
+/** A real regular-session observation, including the official closing instant. */
+export function usEquityObservationAllowed(instant: Date | string) {
+  const time = new Date(instant).getTime(),
+    day = investmentPriceDate(instant, false),
+    session = usEquitySession(day);
+  const close = usEquityCloseInstant(day),
+    open = close - (session.closeMinute - session.openMinute) * 60000;
+  return session.tradingDay && time >= open && time <= close;
+}
+export function latestCompletedUsEquityClose(instant: Date | string) {
+  const day = investmentPriceDate(instant, false),
+    close = usEquityCloseInstant(day);
+  return usEquitySession(day).tradingDay && new Date(instant).getTime() >= close
+    ? close
+    : usEquityCloseInstant(previousUsEquitySession(day));
+}

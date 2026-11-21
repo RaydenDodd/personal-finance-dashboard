@@ -15,8 +15,17 @@ import { addSecurityFromSearch } from '@services/investments/securities/add-from
 import { Op } from 'sequelize';
 import { z } from 'zod';
 
-const summarize = (result: PromiseSettledResult<unknown>): { ok: boolean; error?: string } => {
-  if (result.status === 'fulfilled') return { ok: true };
+const summarize = (result: PromiseSettledResult<unknown>): { ok: boolean; error?: string; result?: unknown } => {
+  if (result.status === 'fulfilled')
+    return {
+      ok: !(
+        result.value &&
+        typeof result.value === 'object' &&
+        'failedUpdates' in result.value &&
+        Number(result.value.failedUpdates) > 0
+      ),
+      result: result.value,
+    };
   const reason = result.reason;
   return { ok: false, error: reason instanceof Error ? reason.message : String(reason) };
 };
@@ -72,7 +81,7 @@ function createPricesSyncController(ownerScoped = false) {
       }
       const currentOptions = { force: true, ...(ownerScoped && { securityIds: [...ids] }) };
       if (body?.historical) {
-        const results: { securityId: string; ok: boolean; count: number }[] = [];
+        const results: { securityId: string; ok: boolean; count: number; error?: string }[] = [];
         for (const securityId of ids) {
           try {
             if (body.intraday && (body.daily || (await SecurityPricing.count({ where: { securityId } })) < 30))
@@ -82,8 +91,13 @@ function createPricesSyncController(ownerScoped = false) {
               ok: true,
               ...(await (body.intraday ? syncIntradayHistoricalPrices(securityId) : syncHistoricalPrices(securityId))),
             });
-          } catch {
-            results.push({ securityId, ok: false, count: 0 });
+          } catch (error) {
+            results.push({
+              securityId,
+              ok: false,
+              count: 0,
+              error: error instanceof Error ? error.message.slice(0, 500) : 'Price history refresh failed',
+            });
           }
         }
         const current = await Promise.allSettled([

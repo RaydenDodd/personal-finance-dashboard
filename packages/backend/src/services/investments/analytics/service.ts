@@ -11,6 +11,7 @@ import {
   usEquityMarketOpen,
   usEquitySession,
   previousUsEquitySession,
+  usEquityObservationAllowed,
 } from '@bt/shared/types/investment-market';
 import { Money } from '@common/types/money';
 import { ValidationError } from '@js/errors';
@@ -35,6 +36,7 @@ import {
 } from '@services/investments/composition/service';
 import { getHoldingValues } from '@services/investments/holdings/get-holding-values.service';
 import { getPortfolioSummary } from '@services/investments/portfolios/get-portfolio-summary.service';
+import { usesUsEquitySession } from '@services/investments/securities-price/regular-session';
 import {
   createShareUnitFactor,
   type SecurityPriceRow,
@@ -146,7 +148,7 @@ async function getAnalyticsImpl({
   const benchmarksSecurities = await Securities.findAll({
     where: { symbol: { [Op.in]: benchmarkSymbols }, currencyCode },
   });
-  const prices = (await SecurityPricing.findAll({
+  const loadedPrices = (await SecurityPricing.findAll({
     where: {
       securityId: { [Op.in]: [...new Set([...securityIds, ...benchmarksSecurities.map((s) => s.id)])] },
       date: { [Op.lte]: new Date() },
@@ -162,6 +164,16 @@ async function getAnalyticsImpl({
     attributes: ['securityId', 'date', 'priceClose', 'unadjustedClose', 'source', 'priceAsOf', 'previousClose'],
     raw: true,
   })) as unknown as (SecurityPriceRow & Pick<SecurityPricing, 'previousClose'>)[];
+  const usSessionIds = new Set(
+    [...securities, ...benchmarksSecurities].filter(usesUsEquitySession).map((s) => String(s.id)),
+  );
+  const prices = loadedPrices.filter(
+    (p) =>
+      p.source !== 'yahoo' ||
+      !p.priceAsOf ||
+      !usSessionIds.has(p.securityId) ||
+      usEquityObservationAllowed(p.priceAsOf),
+  );
   const pricesBySecurity = new Map<string, (typeof prices)[number][]>(Map.groupBy(prices, (p) => p.securityId));
   const health: InvestmentAnalytics['health'] = [];
   const holdingsByIdentity = new Map<string, InvestmentHolding>();

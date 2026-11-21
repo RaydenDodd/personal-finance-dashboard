@@ -1,7 +1,10 @@
-import { investmentPriceDate } from '@bt/shared/types/investment-market';
+import { investmentPriceDate, usEquityObservationAllowed } from '@bt/shared/types/investment-market';
+import Securities from '@models/investments/securities.model';
 import SecurityPricing from '@models/investments/security-pricing.model';
 import { withTransaction } from '@services/common/with-transaction';
 import { Op, WhereOptions } from 'sequelize';
+
+import { usesUsEquitySession } from './regular-session';
 
 interface PriceQueryOptions {
   securityId?: string;
@@ -30,7 +33,16 @@ const getPricesImpl = async (options: PriceQueryOptions) => {
     }
   }
 
-  const rows = await SecurityPricing.findAll({ where, order: [['date', 'ASC']] });
+  const storedRows = await SecurityPricing.findAll({ where, order: [['date', 'ASC']] });
+  const securities = await Securities.findAll({ where: options.securityId ? { id: options.securityId } : {} });
+  const usSessionIds = new Set(securities.filter(usesUsEquitySession).map((s) => String(s.id)));
+  const rows = storedRows.filter(
+    (p) =>
+      p.source !== 'yahoo' ||
+      !p.priceAsOf ||
+      !usSessionIds.has(p.securityId) ||
+      usEquityObservationAllowed(p.priceAsOf),
+  );
   const factors = new Map<string, number>();
   const intradayCounts = new Map<string, number>();
   for (const p of rows)

@@ -12,7 +12,7 @@ import { fetchCoinbaseHistory } from '@services/investments/data-providers/coinb
 import { subYears, subDays } from 'date-fns';
 import { Op } from 'sequelize';
 
-import { bucketByUtcDay, startOfDayUtc } from './pricing-anchor';
+import { bucketByUtcDay, startOfDayUtc, uniquePriceObservations } from './pricing-anchor';
 
 // CoinGecko Demo tier only serves up to 1 year of history. Stocks (Yahoo etc.)
 // happily go back further, so keep the longer backfill for them. Extending the
@@ -104,7 +104,7 @@ const syncHistoricalPricesImpl = async (securityId: string, intraday = false): P
     ? prices.map((p) => (p.dailyBar ? { ...p, date: startOfDayUtc(p.date) } : p))
     : bucketByUtcDay(prices);
 
-  const pricesToCreate = dailyPrices.map((price) => ({
+  const pricesToCreate = uniquePriceObservations(dailyPrices).map((price) => ({
     securityId: security.id,
     date: price.date,
     priceClose: price.priceClose.toString(),
