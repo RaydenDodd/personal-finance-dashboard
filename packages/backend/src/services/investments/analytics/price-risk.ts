@@ -17,7 +17,7 @@ export function currentHoldingsPriceRisk(
     map.set(investmentPriceDate(point.date), point.price);
     maps.set(point.securityId, map);
   }
-  const included = holdings.filter(
+  const candidates = holdings.filter(
     (h) =>
       h.currencyCode === currency &&
       h.marketValue !== null &&
@@ -25,6 +25,16 @@ export function currentHoldingsPriceRisk(
       new Big(h.quantity).gt(0) &&
       (maps.get(h.id)?.size ?? 0) >= 2,
   );
+  const latestDate = [...maps.values()]
+    .flatMap((m) => [...m.keys()])
+    .sort()
+    .at(-1);
+  const recentFrom = latestDate
+    ? new Date(new Date(latestDate + 'T12:00:00Z').getTime() - 14 * 86400000).toISOString().slice(0, 10)
+    : '';
+  const recent = candidates.filter((h) => [...maps.get(h.id)!.keys()].filter((d) => d >= recentFrom).length >= 2);
+  const seasoned = recent.filter((h) => maps.get(h.id)!.size >= 31);
+  const included = seasoned.length ? seasoned : recent;
   const dates = included.length
     ? [...maps.get(included[0]!.id)!.keys()].filter((d) => included.every((h) => maps.get(h.id)!.has(d))).sort()
     : [];
@@ -65,6 +75,6 @@ export function currentHoldingsPriceRisk(
     volatility,
     maxDrawdown: stats.maxDrawdown,
     methodology:
-      'Price-only fixed basket of current quantities, using actual common dated prices. This is current-holdings price risk, not historical account performance. Cash, trades, distributions and unpriced holdings are excluded. Volatility uses observed trading dates and 252 sessions per year.',
+      'Price-only fixed basket of current quantities, using actual common dated prices. This is current-holdings price risk, not historical account performance. Cash, trades, distributions, unpriced holdings and instruments without sufficiently recent history are excluded. Volatility uses observed trading dates and 252 sessions per year.',
   };
 }

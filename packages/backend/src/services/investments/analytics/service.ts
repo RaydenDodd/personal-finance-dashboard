@@ -851,9 +851,10 @@ async function getAnalyticsImpl({
       supported: true,
       lastSuccess: syncDates.at(-1) ?? null,
       provider: [...new Set(securities.map((s) => s.providerName))].join(', ') || 'Existing market providers',
-      schedule: `Stocks/ETFs: every 5 minutes during regular US sessions (09:30–16:00 Eastern, holidays/early closes respected); daily historical close reconciliation at 06:00 Eastern. Cryptocurrency: every ${process.env.CRYPTO_PRICES_SYNC_INTERVAL_MINUTES ?? '15'} minutes. Mutual funds publish daily NAV. Fund compositions: dated issuer files and separately enabled weekly SEC checks.`,
+      schedule:
+        'Prices: approximately every 5 minutes during regular US sessions (09:30–16:00 Eastern; holidays and early closes respected). One stock closing check follows the session; daily historical reconciliation runs at 06:00 Eastern. Mutual funds publish daily NAV. Fund compositions use dated disclosures and separately enabled weekly SEC checks.',
       reason:
-        'Manual refresh reuses the existing administrator price-sync endpoint; it does not synchronize broker transactions.',
+        'Refresh uses the existing price services with owner-scoped visible holdings and verified benchmarks. Broker transactions are synchronized separately.',
     },
   };
 }

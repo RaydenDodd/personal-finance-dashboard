@@ -12,3 +12,5 @@ Add only the following missing integration behavior:
 - Investments page layouts through the existing dashboard layout mechanism, all twenty shared panels, native controls/scrollbars, short date ranges and responsive interactions.
 
 Production verification must cover actual source files, repeated reconciliation, unchanged transactions/quantities/settings, real quote/history rows, independent saved page layouts, all panel types, and 320/390-pixel interactions. Empty charts and successful scheduler registration alone do not count as completed data integration.
+
+The deployed owner session received HTTP 401 from the existing administrator-only global price refresh endpoint. Preserve that endpoint and its administrator guard. Add an authenticated, rate-limited refresh that validates requested securities against the owner's visible portfolios, includes verified benchmark listings, and invokes the same native services and locks. Long work uses the existing background-job response/polling mechanism. Successful writes notify existing SSE connections; the app invalidates shared investment caches once per event burst.

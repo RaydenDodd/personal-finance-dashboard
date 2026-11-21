@@ -55,5 +55,5 @@ export const cryptoPricesSyncCron = createScheduledSync({
   cronExpression: `*/${intervalMinutes} 9-16 * * 1-5`,
   timeZone: 'America/New_York',
   scheduleDescription: `runs every ${intervalMinutes} minutes during regular US market sessions`,
-  run: (options?: { force?: boolean }) => securitiesPricesCryptoSync(options),
+  run: (options?: { force?: boolean; securityIds?: string[] }) => securitiesPricesCryptoSync(options),
 });

@@ -13,7 +13,7 @@ export const securitiesIntradaySyncCron = createScheduledSync({
   cronExpression: '*/5 9-16 * * 1-5',
   timeZone: 'America/New_York',
   scheduleDescription: 'every 5 minutes during regular US equity sessions; holidays and early closes respected',
-  run: (options?: { force?: boolean }) => securitiesPricesStocksIntradaySync(options),
+  run: (options?: { force?: boolean; securityIds?: string[] }) => securitiesPricesStocksIntradaySync(options),
 });
 
 /** One final quote after provider delay, so an intraday observation cannot hide the closing price. */

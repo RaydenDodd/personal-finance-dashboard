@@ -61,6 +61,7 @@ interface SyncOptions {
    */
   fetchStartDate?: Date;
   currentQuotes?: boolean;
+  securityIds?: string[];
   /**
    * Maps one security's provider bars to the rows to store. Each returned
    * bar's `date` is written to the `date` column verbatim and must be unique
@@ -89,22 +90,22 @@ interface SyncOptions {
  * into total data loss with a misleading success counter in the result.
  */
 const securitiesPricesSyncImpl = async (options: SyncOptions): Promise<SecuritiesPricesSyncResult> => {
-  const { assetClassWhere, forDate, fetchStartDate, prepareBars, label, currentQuotes } = options;
+  const { assetClassWhere, forDate, fetchStartDate, prepareBars, label, currentQuotes, securityIds } = options;
   logger.info(`[${label}] Starting securities prices sync`);
 
   // Query securities with holdings, prioritized by staleness.
   // `providerSymbol` is the canonical id since crypto display symbols are not unique;
   // a security may still have a NULL legacy `symbol`, but `providerSymbol` is NOT NULL.
   let securitiesFromDb = await Securities.findAll({
-    where: assetClassWhere,
+    where: { ...assetClassWhere, ...(securityIds && { id: { [Op.in]: securityIds } }) },
     include: [
       {
         model: Holdings,
-        required: true, // INNER JOIN - only securities with holdings
+        required: !securityIds, // Explicit scopes also contain verified unheld benchmark securities.
         attributes: [],
         where: {
           excluded: false, // Only exclude securities marked as excluded
-          ...(currentQuotes && { quantity: { [Op.ne]: 0 } }),
+          ...((currentQuotes || label === 'crypto-hourly') && { quantity: { [Op.ne]: 0 } }),
         },
         // Chain through Portfolios so paranoid filtering drops holdings whose
         // parent portfolio is soft-deleted (trash) — otherwise we'd waste sync
@@ -122,7 +123,7 @@ const securitiesPricesSyncImpl = async (options: SyncOptions): Promise<Securitie
     order: [['pricingLastSyncedAt', 'ASC NULLS FIRST']], // Prioritize oldest/never-synced first
     raw: false, // Need model instances to update pricingLastSyncedAt
   });
-  if (label !== 'crypto-hourly') {
+  if (label !== 'crypto-hourly' && !securityIds) {
     const benchmarkSymbols = new Set(['SPY']);
     for (const user of await UserSettings.findAll({ attributes: ['settings'] })) {
       const widgets = [
@@ -440,7 +441,7 @@ export const securitiesPricesStocksDailySync = withLock('lock:sync:securities-pr
 /** Same persistence/provider pipeline and lock as daily stocks; no overlapping runs. */
 export const securitiesPricesStocksIntradaySync = withLock(
   'lock:sync:securities-prices:stocks',
-  async (options?: { force?: boolean }) => {
+  async (options?: { force?: boolean; securityIds?: string[] }) => {
     if (!options?.force && !usEquityMarketOpen()) {
       logger.info('[stocks-intraday] Market closed; retained latest valid prices');
       return { totalProcessed: 0, successfulUpdates: 0, failedUpdates: 0, errors: [], skipped: 'market-closed' };
@@ -449,6 +450,7 @@ export const securitiesPricesStocksIntradaySync = withLock(
       assetClassWhere: { assetClass: { [Op.notIn]: [ASSET_CLASS.crypto] } },
       forDate: new Date(),
       currentQuotes: true,
+      securityIds: options?.securityIds,
       prepareBars: (bars) => bars.map((bar) => ({ ...bar, date: bar.priceAsOf })),
       label: 'stocks-intraday',
     });
@@ -469,12 +471,13 @@ export const securitiesPricesStocksIntradaySync = withLock(
  */
 export const securitiesPricesCryptoSync = withLock(
   'lock:sync:securities-prices:crypto',
-  async (options?: { force?: boolean }) => {
+  async (options?: { force?: boolean; securityIds?: string[] }) => {
     if (!options?.force && !usEquityMarketOpen())
       return { totalProcessed: 0, successfulUpdates: 0, failedUpdates: 0, errors: [], skipped: 'market-closed' };
     return securitiesPricesSyncImpl({
       assetClassWhere: { assetClass: { [Op.in]: [ASSET_CLASS.crypto] } },
       forDate: new Date(),
+      securityIds: options?.securityIds,
       prepareBars: (bars) => bars.map((bar) => ({ ...bar, date: bar.priceAsOf })),
       label: 'crypto-hourly',
     });

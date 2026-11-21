@@ -38,7 +38,9 @@ import setTransferAdjustmentController from '@controllers/investments/portfolios
 import updatePortfolioController from '@controllers/investments/portfolios/update-portfolio';
 import updatePortfolioBalanceController from '@controllers/investments/portfolios/update-portfolio-balance';
 import getPricesController from '@controllers/investments/prices/get-prices.controller';
-import securitiesSyncController from '@controllers/investments/prices/securities-sync.controller';
+import securitiesSyncController, {
+  ownerSecuritiesSyncController,
+} from '@controllers/investments/prices/securities-sync.controller';
 import { connectPublic, getPublicStatus, refreshPublic } from '@controllers/investments/public-provider';
 import bulkUploadPricesController from '@controllers/investments/securities/bulk-upload-prices.controller';
 import getAllSecurities from '@controllers/investments/securities/get-all.controller';
@@ -134,6 +136,7 @@ router.post('/portfolios/:id/restore', blockDemoUsers, checkBaseCurrencyLock, re
 router.post('/portfolios', blockDemoUsers, checkBaseCurrencyLock, createPortfolioController);
 
 router.post('/sync/securities-prices', adminOnly, priceSyncRateLimit, securitiesSyncController);
+router.post('/analytics/prices/refresh', blockDemoUsers, priceSyncRateLimit, ownerSecuritiesSyncController);
 
 router.get('/prices', getPricesController);
 router.get('/securities', getAllSecurities);

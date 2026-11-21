@@ -212,7 +212,13 @@ export class CompositeDataProvider extends BaseSecurityDataProvider {
         const security = group[0]!;
         try {
           const price = await this.getLatestPrice(security.providerSymbol, { assetClass: security.assetClass });
-          if (!Number.isFinite(price.priceClose) || price.priceClose <= 0 || price.priceAsOf > forDate) continue;
+          if (
+            !Number.isFinite(price.priceClose) ||
+            price.priceClose <= 0 ||
+            !Number.isFinite(price.priceAsOf.getTime()) ||
+            price.priceAsOf.getTime() > Date.now() + 60000
+          )
+            continue;
           for (const row of group) results.set(row.securityId, [{ ...price, securityId: row.securityId }]);
         } catch {
           logger.info(`No current quote available for ${security.symbol}; retained existing price`);
