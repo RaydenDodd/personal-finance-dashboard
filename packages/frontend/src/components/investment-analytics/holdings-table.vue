@@ -66,6 +66,12 @@ const gainReason = (row: InvestmentHolding) => (row.marketValue === null ? quote
 const dailyReason = (row: InvestmentHolding) =>
   row.dailyChangeReason ??
   `${row.symbol}: paired session closes or same-day trades are missing. Refresh price history and import any missing trade records.`;
+const quoteLabel = (row: InvestmentHolding) =>
+  !row.priceDate
+    ? 'No quote timestamp'
+    : row.securityType !== 'crypto' && row.priceDate.endsWith('T00:00:00.000Z')
+      ? `${row.priceDate.slice(0, 10)} · daily close; exact time unavailable`
+      : row.priceDate;
 function sortBy(key: string) {
   direction.value = sort.value === key ? -direction.value : -1;
   sort.value = key;
@@ -145,7 +151,7 @@ function sortBy(key: string) {
             </div>
           </dl>
           <p class="text-muted-foreground mt-3 text-[10px] break-words">
-            Price / valuation recorded {{ row.priceDate ?? 'unavailable' }} ·
+            Price / valuation recorded {{ quoteLabel(row) }} ·
             {{
               row.quoteStatus === 'closing'
                 ? 'Latest close'
@@ -239,9 +245,7 @@ function sortBy(key: string) {
                 <UnavailableValue v-if="row.price === null" :reason="quoteReason(row)" /><template v-else>{{
                   unitPrice(row.price, row.currencyCode)
                 }}</template
-                ><time class="text-muted-foreground block text-[10px]">{{
-                  row.priceDate ?? 'No quote timestamp'
-                }}</time>
+                ><time class="text-muted-foreground block text-[10px]">{{ quoteLabel(row) }}</time>
               </td>
               <td class="p-3 text-right font-semibold whitespace-nowrap tabular-nums">
                 <UnavailableValue v-if="row.marketValue === null" :reason="quoteReason(row)" /><template v-else>{{
