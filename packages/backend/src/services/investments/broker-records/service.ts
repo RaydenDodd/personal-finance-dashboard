@@ -1,9 +1,11 @@
+import { easternDate } from '@bt/shared/types/investment-market';
 import { Money } from '@common/types/money';
 import { findOrThrowNotFound } from '@common/utils/find-or-throw-not-found';
 import { ValidationError } from '@js/errors';
 import { connection } from '@models/connection';
 import BrokerPortfolioData from '@models/investments/broker-portfolio-data.model';
 import Holdings from '@models/investments/holdings.model';
+import PortfolioTransfers from '@models/investments/portfolio-transfers.model';
 import Portfolios from '@models/investments/portfolios.model';
 import Securities from '@models/investments/securities.model';
 import * as UsersCurrencies from '@models/users-currencies.model';
@@ -11,6 +13,8 @@ import { withTransaction } from '@services/common/with-transaction';
 import { recalculateHolding } from '@services/investments/holdings/recalculation.service';
 import { isDeepStrictEqual } from 'node:util';
 
+import { nativeExternalFlow } from '../analytics/native-transfer';
+import { verifiedFunding } from '../analytics/verified-funding';
 import { BrokerData, brokerDataSchema, latestSnapshot } from './schema';
 
 export const getBrokerData = async ({ userId, portfolioId }: { userId: number; portfolioId: string }) => {
@@ -47,8 +51,21 @@ export const saveBrokerData = withTransaction(
           message: 'Existing source observation is immutable. Supply a new revision identifier.',
         });
     }
+    for (const observation of data.accountObservations ?? []) {
+      const old = previous?.data.accountObservations?.find((v) => v.id === observation.id);
+      if (old && !isDeepStrictEqual(old, observation))
+        throw new ValidationError({
+          message: 'Existing account observation is immutable. Supply a new revision identifier.',
+        });
+    }
     const merged: BrokerData = {
       ...data,
+      fundingCoverage: data.fundingCoverage ?? previous?.data.fundingCoverage,
+      accountObservations: [
+        ...new Map(
+          [...(previous?.data.accountObservations ?? []), ...(data.accountObservations ?? [])].map((v) => [v.id, v]),
+        ).values(),
+      ].toSorted((a, b) => a.date.localeCompare(b.date)),
       snapshots: [
         ...new Map([...(previous?.data.snapshots ?? []), ...data.snapshots].map((s) => [s.id, s])).values(),
       ].toSorted((a, b) => a.asOf.localeCompare(b.asOf)),
@@ -68,6 +85,20 @@ export const saveBrokerData = withTransaction(
         ).values(),
       ],
     };
+    if (data.fundingCoverage) {
+      const rows = (await PortfolioTransfers.findAll({ where: { userId }, order: [['date', 'ASC']] }))
+        .filter((t) => (t.toPortfolioId === portfolioId || t.fromPortfolioId === portfolioId) && !t.isAdjustment)
+        .map((t) => ({
+          date: t.date,
+          amount: nativeExternalFlow(t, new Set([portfolioId])),
+          description: t.description ?? '',
+        }));
+      if (!verifiedFunding(merged, rows, easternDate()))
+        throw new ValidationError({
+          message:
+            'Funding coverage must match every imported external source reference and its net contribution control.',
+        });
+    }
     for (const snapshot of data.snapshots)
       for (const p of snapshot.positions) {
         const security = await Securities.findByPk(p.securityId);

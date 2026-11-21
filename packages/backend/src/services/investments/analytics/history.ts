@@ -98,6 +98,7 @@ export function buildHistory({
     ...transactions.map((t) => investmentPriceDate(t.date)),
     ...transfers.map((t) => t.date),
     ...brokers.flatMap((b) => b.data.snapshots.map((s) => investmentPriceDate(s.asOf))),
+    ...brokers.flatMap((b) => (b.data.accountObservations ?? []).map((o) => o.date)),
     ...brokers.flatMap((b) =>
       (b.data.sourceEvents ?? [])
         .filter((e) => ['REC', 'SXCH', 'SPR'].includes(String(e.action)) && /^\d{4}-\d{2}-\d{2}$/.test(String(e.date)))
@@ -157,6 +158,8 @@ export function buildHistory({
     const cashByDate = new Map(
       snapshots.filter((s) => s.cash !== null).map((s) => [investmentPriceDate(s.asOf), s.cash!]),
     );
+    for (const observation of broker?.data.accountObservations ?? [])
+      cashByDate.set(observation.date, observation.cash);
     const firstEvidence = [
       ...txs
         .filter((t) => ['buy', 'sell', 'transfer'].includes(t.category) && Number(t.quantity) !== 0)
@@ -164,6 +167,7 @@ export function buildHistory({
       ...snapshots
         .filter((s) => s.positions?.length || (s.complete && Array.isArray(s.positions)))
         .map((s) => investmentPriceDate(s.asOf)),
+      ...(broker?.data.accountObservations ?? []).map((o) => o.date),
     ].sort()[0];
     const supportedDates = dates.filter((d) => firstEvidence && d >= firstEvidence);
     const replay = computeHoldingsValueByDate({
@@ -265,6 +269,12 @@ export function buildHistory({
         known.set(d, s.totalValue);
       }
     }
+    for (const observation of broker?.data.accountObservations ?? []) {
+      if (dates.includes(observation.date)) {
+        values.set(observation.date, observation.totalValue);
+        known.set(observation.date, observation.totalValue);
+      }
+    }
     byPortfolio.set(id, values);
     for (const [date, value] of values) if (value !== null) known.set(date, value);
     knownByPortfolio.set(id, known);
@@ -304,7 +314,11 @@ export function buildHistory({
       knownMarketValue: knownValues.length ? sum(knownValues) : null,
       knownNetInvested: transfers.length ? contributions.minus(withdrawals).toString() : null,
       coverage: ids.length ? (Object.values(portfolios).filter((v) => v !== null).length / ids.length) * 100 : 0,
-      source: ids.some((id) => byBroker.get(id)?.data.snapshots.some((s) => investmentPriceDate(s.asOf) === date))
+      source: ids.some(
+        (id) =>
+          byBroker.get(id)?.data.snapshots.some((s) => investmentPriceDate(s.asOf) === date) ||
+          byBroker.get(id)?.data.accountObservations?.some((o) => o.date === date),
+      )
         ? 'Recorded broker observations / native history'
         : 'Native historical valuation; missing prices remain unavailable',
     };

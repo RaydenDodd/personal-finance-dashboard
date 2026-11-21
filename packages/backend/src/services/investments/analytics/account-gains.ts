@@ -1,12 +1,16 @@
 import type { InvestmentAnalytics, InvestmentPortfolio, InvestmentMetric } from '@bt/shared/types/investment-analytics';
 import { easternDate, previousUsEquitySession } from '@bt/shared/types/investment-market';
+import type { INVESTMENT_TRANSACTION_CATEGORY } from '@bt/shared/types/investments';
 import { principalFor } from '@services/personal-finance/calculations';
 import { matchPrincipalEvidence } from '@services/personal-finance/principal-matching';
 import type { FinanceAccount, FinanceCashFlow } from '@services/personal-finance/types';
 import Big from 'big.js';
 
+import type { BrokerData } from '../broker-records/schema';
+import { calculateCashDelta } from '../transactions/cash-balance-utils';
 import type { AccountValuation } from './account-gain-sources';
 import { percent } from './math';
+import { verifiedFunding } from './verified-funding';
 
 export const accountNameKey = (name: string) =>
   name
@@ -26,13 +30,15 @@ export interface GainEvidence {
   valuations: AccountValuation[];
 }
 export interface GainInput {
+  brokers?: { portfolioId: string; data: BrokerData }[];
+  operatingCash?: Map<string, FundingRecord[]>;
   portfolios: InvestmentPortfolio[];
   allPortfolioNames: string[];
   metrics: Record<string, InvestmentMetric>;
   sources: GainEvidence;
   today: string;
   funding: Map<string, FundingRecord[]>;
-  trades: { portfolioId: string; category: string; amount: string }[];
+  trades: { portfolioId: string; category: string; amount: string; date?: string }[];
 }
 const total = (values: (string | null | undefined)[]) =>
   values.reduce<Big>((n, v) => (v == null ? n : n.plus(v)), new Big(0)).toString();
@@ -43,6 +49,7 @@ export function reconcileAccountGains(input: GainInput): NonNullable<InvestmentA
   const { portfolios, sources, today, metrics } = input;
   for (const p of portfolios) {
     const c = p.calculation!;
+    const holdingAsOf = c.valueAsOf;
     const crypto = /crypto/i.test(p.name);
     const candidates = crypto
       ? []
@@ -68,6 +75,8 @@ export function reconcileAccountGains(input: GainInput): NonNullable<InvestmentA
       .abs()
       .toString();
     const importedNet = new Big(c.importedDeposits).minus(c.importedWithdrawals).toString();
+    const broker = input.brokers?.find((b) => b.portfolioId === p.id)?.data;
+    const fundingVerified = verifiedFunding(broker, records, today);
     c.recordedFunding = imported.length ? importedNet : null;
     c.fundingRecords = records;
     c.principalRecords = flows.map((f) => ({
@@ -79,8 +88,22 @@ export function reconcileAccountGains(input: GainInput): NonNullable<InvestmentA
     }));
     c.financeAccountId = account?.id;
     c.principal = principal?.knownPrincipal == null ? c.recordedFunding : String(principal.knownPrincipal);
-    c.principalSource =
-      principal?.knownPrincipal != null ? 'Reconciled principal ledger' : 'Imported external flows (estimate)';
+    if (fundingVerified) {
+      c.worksheetPrincipal = principal?.knownPrincipal == null ? null : String(principal.knownPrincipal);
+      c.principal = importedNet;
+      c.principalRecords = imported.map((r) => ({
+        id: r.id,
+        date: r.date,
+        amount: r.amount,
+        type: new Big(r.amount).gte(0) ? 'deposit' : 'withdrawal / returned deposit',
+        description: r.description,
+      }));
+    }
+    c.principalSource = fundingVerified
+      ? `Verified external funding · ${broker!.fundingCoverage!.from}–${broker!.fundingCoverage!.through}`
+      : principal?.knownPrincipal != null
+        ? 'Reconciled principal ledger'
+        : 'Imported external flows (estimate)';
     c.principalDifference = c.principal == null ? null : new Big(c.principal).minus(importedNet).toString();
     // Linked Robinhood account spans stock + crypto; partition using provider account identity.
     const linked = account?.nativeAccountIds ?? [];
@@ -93,18 +116,39 @@ export function reconcileAccountGains(input: GainInput): NonNullable<InvestmentA
       )
       .filter((v) => v.date <= today);
     const latest = providerRows.at(-1);
+    const cashObservation = providerRows.filter((v) => v.cash != null).at(-1);
+    if (cashObservation?.cash != null) {
+      // Advance a reported cash balance with native settlement signs, never purchases as deposits.
+      const laterTrades = input.trades.filter((t) => t.portfolioId === p.id && t.date && t.date > cashObservation.date);
+      const tradeCash = total(
+        laterTrades.map((t) =>
+          calculateCashDelta({ category: t.category as INVESTMENT_TRANSACTION_CATEGORY, settlementAmount: t.amount }),
+        ),
+      );
+      const transfersAfter = [...imported, ...(input.operatingCash?.get(p.id) ?? [])].filter(
+        (r) => r.date > cashObservation.date,
+      );
+      p.cash = new Big(cashObservation.cash)
+        .plus(tradeCash)
+        .plus(total(transfersAfter.map((r) => r.amount)))
+        .toString();
+      c.missing = c.missing.filter((m) => !m.startsWith('Cash balance:'));
+    }
     // Public's linked bank account is cash-only; it is not its portfolio total.
     const cashOnly = latest && p.cash != null && new Big(latest.value).eq(p.cash) && new Big(c.pricedValue).gt(0);
     c.currentValue = p.marketValue ?? new Big(c.pricedValue).plus(p.cash ?? 0).toString();
     c.valueSource = p.marketValue == null ? 'Priced holdings + recorded cash' : 'Native portfolio valuation';
     c.valueAsOf = c.valueAsOf ?? p.observationDate ?? latest?.date ?? today;
-    c.estimated = p.marketValue == null || principal?.knownPrincipal == null || !!principal?.principalEstimated;
+    c.estimated =
+      p.marketValue == null ||
+      (!fundingVerified && (principal?.knownPrincipal == null || !!principal?.principalEstimated));
     const currentReported = latest && !cashOnly && latest.date >= valuationDate(c.valueAsOf);
     if (currentReported) {
       c.currentValue = latest.value;
       c.valueSource = latest.source || 'Reported account total';
       c.valueAsOf = latest.date;
-      c.estimated = principal?.knownPrincipal == null || !!principal?.principalEstimated;
+      c.estimated = !fundingVerified && (principal?.knownPrincipal == null || !!principal?.principalEstimated);
+      if (latest.cash != null) p.cash = latest.cash;
     }
     if (!currentReported && c.securitiesValue === null && new Big(c.pricedValue).eq(0) && p.cash === null) {
       c.currentValue = null;
@@ -143,11 +187,58 @@ export function reconcileAccountGains(input: GainInput): NonNullable<InvestmentA
         .filter((m) => !m.startsWith('Cash balance:'))
         .concat('Account value estimates holdings plus known cash; unrecorded cash is excluded.');
     p.marketValue = c.currentValue;
+    const observation = broker?.accountObservations
+      ?.filter((o) => o.date <= today && o.performance)
+      .toSorted((a, b) => a.date.localeCompare(b.date))
+      .at(-1);
+    if (observation?.performance) {
+      const trades = input.trades.filter((t) => t.portfolioId === p.id && (!t.date || t.date <= observation.date));
+      const purchases = total(trades.filter((t) => t.category === 'buy').map((t) => t.amount));
+      const sales = total(trades.filter((t) => t.category === 'sell').map((t) => t.amount));
+      const dividends = total(trades.filter((t) => t.category === 'dividend').map((t) => t.amount));
+      c.operatingCashRecords = (input.operatingCash?.get(p.id) ?? []).filter((r) => r.date <= observation.date);
+      const operatingCash = total(c.operatingCashRecords.map((r) => r.amount));
+      const netSecurityFlow = new Big(purchases).minus(sales).toString();
+      const recordedPrincipal = total(imported.filter((r) => r.date <= observation.date).map((r) => r.amount));
+      const observedPrincipal = fundingVerified
+        ? recordedPrincipal
+        : account
+          ? principalFor(account.id, flows, observation.date).knownPrincipal
+          : null;
+      const bookCash = new Big(recordedPrincipal).minus(netSecurityFlow).plus(dividends).plus(operatingCash).toString();
+      // Compare the reported values with each other, independently of later market quotes.
+      const observedGain =
+        observedPrincipal == null ? null : new Big(observation.totalValue).minus(observedPrincipal).toString();
+      c.brokerReconciliation = {
+        date: observation.date,
+        source: observation.source,
+        netContributions: observedPrincipal == null ? null : String(observedPrincipal),
+        wholeAccountGain: observedGain,
+        investmentsValue: observation.investmentsValue,
+        reportedCash: observation.cash,
+        reportedNetCashFlow: observation.performance.netCashFlow,
+        reportedMarketGain: observation.performance.marketGain,
+        reportedDividends: observation.performance.dividends,
+        reportedTotalGain: observation.performance.totalGain,
+        purchases,
+        sales,
+        dividends,
+        operatingCash,
+        bookCash,
+        netSecurityFlow,
+        cashDifference: new Big(observation.cash).minus(bookCash).toString(),
+        dividendDifference: new Big(observation.performance.dividends).minus(dividends).toString(),
+        securityFlowDifference: new Big(observation.performance.netCashFlow).minus(netSecurityFlow).toString(),
+        gainDifference:
+          observedGain == null ? null : new Big(observation.performance.totalGain).minus(observedGain).toString(),
+      };
+    }
 
     // Combine dated principal evidence and native transfers once, never checkpoint adjustments.
     const external = imported.map((r) => ({ ...r }));
     for (const f of flows.filter(
       (f) =>
+        !fundingVerified &&
         !f.opening &&
         ['contribution', 'withdrawal', 'transfer'].includes(f.type) &&
         f.evidence?.dateUnknown !== true &&
@@ -225,8 +316,8 @@ export function reconcileAccountGains(input: GainInput): NonNullable<InvestmentA
       c.daily = {
         currentValue: c.currentValue,
         previousValue: new Big(c.currentValue).minus(c.dailyChange).toString(),
-        currentDate: valuationDate(c.valueAsOf),
-        previousDate: previousUsEquitySession(valuationDate(c.valueAsOf)),
+        currentDate: valuationDate(holdingAsOf ?? c.valueAsOf),
+        previousDate: previousUsEquitySession(valuationDate(holdingAsOf ?? c.valueAsOf)),
         deposits: '0',
         withdrawals: '0',
         change: c.dailyChange,
@@ -292,6 +383,19 @@ export function reconcileAccountGains(input: GainInput): NonNullable<InvestmentA
     value: total(portfolios.map((p) => p.calculation!.principal)),
     status: portfolios.some((p) => p.calculation!.principal == null) ? 'partial' : 'verified',
     reason: 'Reconciled net principal; crypto trading costs are separate.',
+  };
+  const cashMissing = portfolios.some((p) => p.cash == null);
+  const knownCash = total(portfolios.map((p) => p.cash));
+  metrics.knownCash = { value: knownCash, status: cashMissing ? 'partial' : 'verified' };
+  metrics.unknownCashCount = {
+    value: String(portfolios.filter((p) => p.cash == null).length),
+    status: cashMissing ? 'partial' : 'verified',
+  };
+  metrics.cash = {
+    value: portfolios.some((p) => p.cash != null) ? knownCash : null,
+    status: cashMissing ? 'partial' : 'verified',
+    estimated: cashMissing,
+    reason: cashMissing ? 'Known account cash; unrecorded balances are excluded.' : undefined,
   };
   metrics.contributions = {
     value: total(portfolios.map((p) => p.calculation!.importedDeposits)),

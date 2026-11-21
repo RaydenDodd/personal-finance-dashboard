@@ -20,6 +20,30 @@ export interface InvestmentClassification {
 }
 export interface InvestmentPortfolio {
   calculation?: {
+    worksheetPrincipal?: InvestmentDecimal;
+    brokerReconciliation?: {
+      date: string;
+      source: string;
+      investmentsValue: string;
+      reportedCash: string;
+      reportedNetCashFlow: string;
+      netContributions: InvestmentDecimal;
+      wholeAccountGain: InvestmentDecimal;
+      reportedMarketGain: string;
+      reportedDividends: string;
+      reportedTotalGain: string;
+      purchases: string;
+      sales: string;
+      dividends: string;
+      operatingCash: string;
+      bookCash: string;
+      netSecurityFlow: string;
+      cashDifference: string;
+      dividendDifference: string;
+      securityFlowDifference: string;
+      gainDifference: InvestmentDecimal;
+    };
+    operatingCashRecords?: { id: string; date: string; amount: string; source: string; description: string }[];
     currentValue?: InvestmentDecimal;
     valueSource?: string;
     valueAsOf?: string;

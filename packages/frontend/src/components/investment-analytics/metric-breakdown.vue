@@ -137,6 +137,89 @@ function contribution(p: (typeof rows.value)[number]) {
             <p v-if="p.calculation?.valueSource" class="text-muted-foreground mt-2 text-xs break-words">
               {{ p.calculation.valueSource }} · {{ p.calculation.valueAsOf }}<br />{{ p.calculation.principalSource }}
             </p>
+            <details
+              v-if="p.calculation?.brokerReconciliation"
+              class="mt-3 text-xs"
+              data-testid="broker-performance-reconciliation"
+            >
+              <summary class="cursor-pointer">Broker Pie and account reconciliation</summary>
+              <dl class="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 tabular-nums">
+                <dt>Reported investments value</dt>
+                <dd class="text-right">{{ money(p.calculation.brokerReconciliation.investmentsValue) }}</dd>
+                <dt>Reported cash balance</dt>
+                <dd class="text-right">{{ money(p.calculation.brokerReconciliation.reportedCash) }}</dd>
+                <dt>Verified external net contributions</dt>
+                <dd class="text-right">{{ money(p.calculation.brokerReconciliation.netContributions) }}</dd>
+                <dt>Whole-account gain (includes cash)</dt>
+                <dd class="text-right" :class="signed(p.calculation.brokerReconciliation.wholeAccountGain)">
+                  {{ money(p.calculation.brokerReconciliation.wholeAccountGain) }}
+                </dd>
+                <dt>Broker Pie net cash flow</dt>
+                <dd class="text-right">{{ money(p.calculation.brokerReconciliation.reportedNetCashFlow) }}</dd>
+                <dt>Broker market gain</dt>
+                <dd class="text-right" :class="signed(p.calculation.brokerReconciliation.reportedMarketGain)">
+                  {{ money(p.calculation.brokerReconciliation.reportedMarketGain) }}
+                </dd>
+                <dt>Broker dividends earned</dt>
+                <dd class="text-right">{{ money(p.calculation.brokerReconciliation.reportedDividends) }}</dd>
+                <dt>Broker Pie total gain (excludes cash)</dt>
+                <dd class="text-right" :class="signed(p.calculation.brokerReconciliation.reportedTotalGain)">
+                  {{ money(p.calculation.brokerReconciliation.reportedTotalGain) }}
+                </dd>
+                <dt>Pie gain − whole-account gain</dt>
+                <dd class="text-right">{{ money(p.calculation.brokerReconciliation.gainDifference) }}</dd>
+                <dt>Recorded purchases</dt>
+                <dd class="text-right">{{ money(p.calculation.brokerReconciliation.purchases) }}</dd>
+                <dt>Recorded sale proceeds (not withdrawals)</dt>
+                <dd class="text-right">{{ money(p.calculation.brokerReconciliation.sales) }}</dd>
+                <dt>Purchases − sales</dt>
+                <dd class="text-right">{{ money(p.calculation.brokerReconciliation.netSecurityFlow) }}</dd>
+                <dt>Unreconciled Pie-flow difference</dt>
+                <dd class="text-right">{{ money(p.calculation.brokerReconciliation.securityFlowDifference) }}</dd>
+                <dt>Recorded dividends</dt>
+                <dd class="text-right">{{ money(p.calculation.brokerReconciliation.dividends) }}</dd>
+                <dt>Broker dividends − recorded dividends</dt>
+                <dd class="text-right">{{ money(p.calculation.brokerReconciliation.dividendDifference) }}</dd>
+                <dt>Other recorded cash, net of costs</dt>
+                <dd class="text-right">{{ money(p.calculation.brokerReconciliation.operatingCash) }}</dd>
+                <dt>Reconstructed cash balance</dt>
+                <dd class="text-right">{{ money(p.calculation.brokerReconciliation.bookCash) }}</dd>
+                <dt>Unreconciled reported cash difference</dt>
+                <dd class="text-right">{{ money(p.calculation.brokerReconciliation.cashDifference) }}</dd>
+                <dt>Earlier worksheet-ledger principal</dt>
+                <dd class="text-right">{{ money(p.calculation.worksheetPrincipal) }}</dd>
+              </dl>
+              <p class="text-muted-foreground mt-2 break-words">
+                {{ p.calculation.brokerReconciliation.source }} · {{ p.calculation.brokerReconciliation.date }}
+              </p>
+              <p class="text-muted-foreground mt-2">
+                Unreconciled differences require M1's detailed Pie movements, distribution history and cash statement.
+                They have not been entered as transactions.
+              </p>
+            </details>
+            <details v-if="p.calculation?.operatingCashRecords?.length" class="mt-3 text-xs">
+              <summary class="cursor-pointer">
+                Fees, refunds, interest and other cash ({{ p.calculation.operatingCashRecords.length }})
+              </summary>
+              <div v-for="r in p.calculation.operatingCashRecords" :key="r.id" class="border-b py-2 break-words">
+                <div class="flex justify-between gap-2">
+                  <span>{{ r.date }}</span
+                  ><span>{{ money(r.amount) }}</span>
+                </div>
+                <p class="text-muted-foreground">{{ r.description }}</p>
+              </div>
+            </details>
+            <details v-if="p.calculation?.brokerReconciliation" class="mt-3 text-xs">
+              <summary class="cursor-pointer">Recorded dividend transactions</summary>
+              <div
+                v-for="r in analytics.dividends.filter((d) => d.portfolioId === p.id)"
+                :key="r.id"
+                class="flex justify-between gap-2 border-b py-2"
+              >
+                <span>{{ r.date }} · {{ r.symbol }}</span
+                ><span>{{ money(r.amount) }}</span>
+              </div>
+            </details>
             <p v-if="metric === 'dailyChange' && p.calculation?.daily" class="text-muted-foreground mt-2 text-xs">
               {{ p.calculation.daily.method }}<span v-if="p.calculation.daily.estimated"> · Estimated</span>
             </p>

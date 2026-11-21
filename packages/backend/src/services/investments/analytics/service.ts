@@ -798,12 +798,13 @@ async function getAnalyticsImpl({
         const accounts = holdings.flatMap((h) => h.accounts).filter((a) => a.portfolioId === p.id);
         return [
           p.id,
-          p.marketValue ??
+          brokerById.get(p.id)?.data.accountObservations?.findLast((o) => o.date === today)?.totalValue ??
+            p.marketValue ??
             sum([...accounts.filter((a) => a.marketValue !== null).map((a) => a.marketValue), p.cash ?? '0']),
         ];
       }),
     );
-    currentPoint.knownMarketValue = metrics.knownMarketValue.value;
+    currentPoint.knownMarketValue = sum(Object.values(currentPoint.knownPortfolios));
     currentPoint.marketValue = marketValue;
     currentPoint.source =
       'Current native positions at their actual latest quote times; unknown cash excluded from known subtotals';
@@ -1140,7 +1141,46 @@ async function getAnalyticsImpl({
     ),
   );
   gainSources.valuations.sort((a, b) => a.date.localeCompare(b.date));
+  gainSources.valuations.push(
+    ...brokers.flatMap((b) =>
+      (b.data.accountObservations ?? []).map((o) => ({
+        accountId: `reported-account:${b.portfolioId}`,
+        portfolioId: b.portfolioId,
+        name: portfolioById.get(b.portfolioId)?.name ?? '',
+        date: o.date,
+        value: o.totalValue,
+        cash: o.cash,
+        source: o.source,
+      })),
+    ),
+  );
+  gainSources.valuations.sort((a, b) => a.date.localeCompare(b.date));
   const accountValueAdjustments = reconcileAccountGains({
+    brokers,
+    operatingCash: new Map(
+      portfolios.map((p) => [
+        p.id,
+        transfers
+          .filter((t) => (t.toPortfolioId === p.id || t.fromPortfolioId === p.id) && t.isAdjustment)
+          .map((t) => ({
+            id: t.id,
+            date: t.date,
+            amount: nativeExternalFlow(
+              {
+                fromPortfolioId: t.fromPortfolioId,
+                toPortfolioId: t.toPortfolioId,
+                refAmount: t.refAmount,
+                refToAmount: t.refToAmount,
+                toCurrencyCode: t.toCurrencyCode,
+                isAdjustment: false,
+              },
+              new Set([p.id]),
+            ),
+            source: 'Recorded internal cash movement',
+            description: t.description ?? '',
+          })),
+      ]),
+    ),
     portfolios,
     allPortfolioNames: allPortfolios.map((p) => p.name),
     metrics,
@@ -1161,6 +1201,7 @@ async function getAnalyticsImpl({
       ]),
     ),
     trades: transactions.map((t) => ({
+      date: investmentPriceDate(t.date),
       portfolioId: t.portfolioId,
       category: t.category,
       amount: decimal(t.refAmount),

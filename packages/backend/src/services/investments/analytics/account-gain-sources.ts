@@ -3,6 +3,7 @@ import { getCashFlows, getFinanceAccounts } from '@services/personal-finance';
 import { QueryTypes } from 'sequelize';
 
 export interface AccountValuation {
+  cash?: string;
   portfolioId?: string;
   accountId: string;
   name: string;

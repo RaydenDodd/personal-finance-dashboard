@@ -4,6 +4,56 @@ import type SecurityPricing from '@models/investments/security-pricing.model';
 import { buildHistory } from './history';
 
 describe('native historical valuation adapter', () => {
+  it('uses a real aggregate account observation without resetting the earlier security quantity anchor', () => {
+    const quantities: number[] = [];
+    const history = buildHistory({
+      ids: ['a'],
+      currencyCode: 'USD',
+      brokers: [
+        {
+          portfolioId: 'a',
+          data: {
+            historyComplete: false,
+            snapshots: [
+              {
+                asOf: '2026-11-18T12:00:00Z',
+                currencyCode: 'USD',
+                complete: false,
+                totalValue: null,
+                cash: null,
+                positions: [{ securityId: 's', quantity: '2', costBasis: '100', marketValue: null }],
+              },
+            ],
+            accountObservations: [
+              {
+                id: 'owner',
+                date: '2026-11-20',
+                source: 'Owner report',
+                currencyCode: 'USD',
+                totalValue: '22343.96',
+                investmentsValue: '22143.94',
+                cash: '200.02',
+              },
+            ],
+          },
+        },
+      ] as never,
+      transactions: [],
+      transfers: [],
+      balances: [],
+      securities: [{ id: 's', currencyCode: 'USD', assetClass: 'stocks' }] as never,
+      prices: [
+        { securityId: 's', date: new Date('2026-11-18'), priceClose: '80' },
+        { securityId: 's', date: new Date('2026-11-20'), priceClose: '90' },
+      ] as never,
+      onHoldingQuantity: (r) => {
+        if (r.quantity != null) quantities.push(r.quantity);
+      },
+    });
+    expect(history.at(-1)?.knownPortfolios?.a).toBe('22343.96');
+    expect(history.at(-1)?.portfolios.a).toBe('22343.96');
+    expect(quantities.every((q) => q === 2)).toBe(true);
+  });
   beforeAll(() => {
     jest.useFakeTimers();
     jest.setSystemTime(new Date('2026-11-20T12:00:00Z'));

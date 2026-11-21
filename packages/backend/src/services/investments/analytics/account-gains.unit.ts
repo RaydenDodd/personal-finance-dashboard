@@ -1,6 +1,7 @@
 import type { InvestmentPortfolio, InvestmentMetric } from '@bt/shared/types/investment-analytics';
 import type { FinanceAccount, FinanceCashFlow } from '@services/personal-finance/types';
 
+import { brokerDataSchema } from '../broker-records/schema';
 import { reconcileAccountGains, type GainInput } from './account-gains';
 
 const portfolio = (name = 'Fidelity LongTerm'): InvestmentPortfolio => ({
@@ -70,6 +71,110 @@ const input = (p = portfolio(), a = account()): GainInput => ({
 });
 
 describe('reconciled account gains', () => {
+  it('separates reported M1 Pie performance, verified bank funding and the unreconciled cash ledger', () => {
+    const p = portfolio('M1 Investments'),
+      a = account('M1 Investments'),
+      x = input(p, a);
+    const dep = 'a'.repeat(64),
+      ret = 'b'.repeat(64),
+      sha = 'd'.repeat(64);
+    const observation = {
+      id: 'owner-report',
+      date: '2026-11-21',
+      source: 'Owner-reported M1 ALL screenshot; quote time not supplied',
+      currencyCode: 'USD',
+      totalValue: '22343.96',
+      cash: '200.02',
+      investmentsValue: '22143.94',
+      performance: {
+        period: 'all',
+        startDate: '2022-06-09',
+        netCashFlow: '19911.66',
+        marketGain: '2232.28',
+        dividends: '325.75',
+        totalGain: '2558.03',
+      },
+    };
+    x.brokers = [
+      {
+        portfolioId: p.id,
+        data: brokerDataSchema.parse({
+          broker: 'm1',
+          accountKey: 'example',
+          historyComplete: false,
+          documents: [{ name: 'activity.csv', sha256: sha }],
+          fundingCoverage: {
+            from: '2022-06-09',
+            through: '2026-11-21',
+            sourceRowIds: [dep, ret],
+            netContributions: '19787.33',
+            documentSha256: sha,
+            verified: true,
+          },
+          accountObservations: [observation],
+        }),
+      },
+    ];
+    x.funding.set(p.id, [
+      { id: 'd', date: '2022-06-09', amount: '19975.33', source: 'csv', description: `[broker-row:${dep}] deposits` },
+      {
+        id: 'r',
+        date: '2024-11-19',
+        amount: '-188',
+        source: 'csv',
+        description: `[broker-row:${ret}] returned deposit`,
+      },
+    ]);
+    x.sources.valuations = [
+      {
+        portfolioId: p.id,
+        accountId: 'reported',
+        name: p.name,
+        date: '2026-11-21',
+        value: '22343.96',
+        cash: '200.02',
+        source: observation.source,
+      },
+    ];
+    x.operatingCash = new Map([
+      [
+        p.id,
+        [
+          {
+            id: 'fees-and-other-cash',
+            date: '2026-11-20',
+            amount: '-32.22',
+            source: 'csv',
+            description: 'Net operating cash',
+          },
+        ],
+      ],
+    ]);
+    x.trades = [
+      { portfolioId: p.id, category: 'buy', amount: '20111.99' },
+      { portfolioId: p.id, category: 'sell', amount: '221.03' },
+      { portfolioId: p.id, category: 'dividend', amount: '331.75' },
+    ];
+    reconcileAccountGains(x);
+    expect(p.calculation).toMatchObject({
+      principal: '19787.33',
+      accountGain: '2556.63',
+      estimated: false,
+      principalDifference: '0',
+      brokerReconciliation: {
+        netSecurityFlow: '19890.96',
+        bookCash: '195.9',
+        cashDifference: '4.12',
+        dividendDifference: '-6',
+        securityFlowDifference: '20.7',
+        gainDifference: '1.4',
+        reportedTotalGain: '2558.03',
+      },
+    });
+    expect(p.cash).toBe('200.02');
+    expect(p.unrealizedGain).toBe('100');
+    expect(p.historyComplete).toBe(false);
+  });
   it('uses verified lifetime principal despite incomplete trade history or absent cash detail', () => {
     const x = input();
     reconcileAccountGains(x);

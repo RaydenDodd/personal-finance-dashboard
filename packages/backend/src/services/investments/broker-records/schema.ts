@@ -44,6 +44,54 @@ export const brokerSnapshotSchema = z
     }
   });
 export const brokerDataSchema = z.object({
+  fundingCoverage: z
+    .object({
+      from: z.iso.date(),
+      through: z.iso.date(),
+      documentSha256: z.string().regex(/^[a-f0-9]{64}$/),
+      sourceRowIds: z
+        .array(z.string().regex(/^[a-f0-9]{64}$/))
+        .min(1)
+        .max(10000),
+      netContributions: decimal,
+      verified: z.literal(true),
+    })
+    .optional(),
+  accountObservations: z
+    .array(
+      z
+        .object({
+          id: z.string().min(1).max(200),
+          date: z.iso.date(),
+          source: z.string().min(1).max(1000),
+          currencyCode: z.literal('USD'),
+          totalValue: positive,
+          cash: decimal,
+          investmentsValue: positive,
+          performance: z
+            .object({
+              period: z.literal('all'),
+              startDate: z.iso.date(),
+              netCashFlow: decimal,
+              marketGain: decimal,
+              dividends: decimal,
+              totalGain: decimal,
+            })
+            .optional(),
+        })
+        .superRefine((v, ctx) => {
+          if (!new Big(v.investmentsValue).plus(v.cash).eq(v.totalValue))
+            ctx.addIssue({ code: 'custom', message: 'Account total must equal investments plus cash.' });
+          if (
+            v.performance &&
+            (!new Big(v.investmentsValue).minus(v.performance.netCashFlow).eq(v.performance.marketGain) ||
+              !new Big(v.performance.marketGain).plus(v.performance.dividends).eq(v.performance.totalGain))
+          )
+            ctx.addIssue({ code: 'custom', message: 'Reported performance does not reconcile.' });
+        }),
+    )
+    .max(500)
+    .optional(),
   broker: z.enum(['m1', 'robinhood', 'fidelity', 'public', 'vanguard']),
   accountKey: z.string().min(1).max(100),
   snapshots: z.array(brokerSnapshotSchema).max(500).default([]),

@@ -20,6 +20,41 @@ const snapshot = {
   lots: [],
 };
 describe('Broker evidence', () => {
+  it('keeps a date-only aggregate report separate from position anchors and rejects inconsistent totals', () => {
+    const report = {
+      id: 'aggregate',
+      date: '2026-11-21',
+      source: 'Owner-reported account total; valuation timestamp not supplied',
+      currencyCode: 'USD',
+      totalValue: '22343.96',
+      cash: '200.02',
+      investmentsValue: '22143.94',
+      performance: {
+        period: 'all',
+        startDate: '2022-06-09',
+        netCashFlow: '19911.66',
+        marketGain: '2232.28',
+        dividends: '325.75',
+        totalGain: '2558.03',
+      },
+    };
+    const result = brokerDataSchema.parse({
+      broker: 'm1',
+      accountKey: 'example',
+      snapshots: [snapshot],
+      accountObservations: [report],
+    });
+    expect(latestSnapshot(result)?.id).toBe(snapshot.id);
+    expect(() =>
+      brokerDataSchema.parse({ ...result, accountObservations: [{ ...report, totalValue: '22345.36' }] }),
+    ).toThrow('Account total');
+    expect(() =>
+      brokerDataSchema.parse({
+        ...result,
+        accountObservations: [{ ...report, performance: { ...report.performance, totalGain: '2556.63' } }],
+      }),
+    ).toThrow('performance');
+  });
   it('preserves absent basis and cash as unknown', () => {
     const s = brokerSnapshotSchema.parse(snapshot);
     expect(s.positions[0]!.costBasis).toBeNull();
