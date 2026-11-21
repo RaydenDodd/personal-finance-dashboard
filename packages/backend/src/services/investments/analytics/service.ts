@@ -511,6 +511,20 @@ async function getAnalyticsImpl({
         ? 'Current shares and recorded same-session trades versus the previous recorded close; imported trade history is partial.'
         : 'Previous recorded close with same-session buys, sells and fees removed from the change in position value.';
     }
+    if (h.dailyChange === null) {
+      const quoteDay = h.priceDate
+        ? investmentPriceDate(h.priceDate, h.assetClass === 'crypto' ? false : undefined)
+        : null;
+      h.dailyChangeReason = !quoteDay
+        ? `${h.symbol}: no stored quote. Refresh prices or verify its provider ticker.`
+        : quoteDay !== sessionDate
+          ? `${h.symbol}: latest quote is dated ${quoteDay}; this comparison uses the ${sessionDate} US session. Select matching dates in price history.`
+          : !reference || !freshPair
+            ? `${h.symbol}: a matching previous-session close is missing. Refresh historical prices.`
+            : h.marketValue === null
+              ? `${h.symbol}: a position value or currency conversion is missing. Check the account's dated holdings and currency records.`
+              : `${h.symbol}: opening shares do not reconcile with recorded session trades. Import missing trades or corporate-action records.`;
+    }
     h.quoteStatus = !h.priceDate
       ? 'unavailable'
       : investmentPriceDate(h.priceDate) !== sessionDate

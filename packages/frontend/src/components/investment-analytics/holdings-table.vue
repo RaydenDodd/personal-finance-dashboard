@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue';
 import { ScrollArea } from '@/components/lib/ui/scroll-area';
 import SecurityHistory from './security-history.vue';
+import UnavailableValue from './unavailable-value.vue';
 import { ROUTES_NAMES } from '@/routes';
 import type { InvestmentAnalytics, InvestmentHolding } from '@bt/shared/types/investment-analytics';
 import { chartNumber } from './chart-model';
@@ -57,6 +58,14 @@ const money = (value: string | null, currency = props.analytics.currencyCode) =>
 const percent = (value: string | null) => (value == null ? 'Unknown' : `${Number(value).toFixed(2)}%`);
 const signed = (value: string | null) =>
   value == null ? 'text-muted-foreground' : Number(value) >= 0 ? 'text-app-income-color' : 'text-app-expense-color';
+const basisReason = (row: InvestmentHolding) =>
+  `${row.symbol}: verified opening lots or reported tax basis are missing. Import a brokerage cost-basis or tax-lot export.`;
+const quoteReason = (row: InvestmentHolding) =>
+  `${row.symbol}: a supported quote is missing. Refresh prices or verify its provider ticker in Securities.`;
+const gainReason = (row: InvestmentHolding) => (row.marketValue === null ? quoteReason(row) : basisReason(row));
+const dailyReason = (row: InvestmentHolding) =>
+  row.dailyChangeReason ??
+  `${row.symbol}: paired session closes or same-day trades are missing. Refresh price history and import any missing trade records.`;
 function sortBy(key: string) {
   direction.value = sort.value === key ? -direction.value : -1;
   sort.value = key;
@@ -80,7 +89,11 @@ function sortBy(key: string) {
               <strong>{{ row.symbol }}</strong>
               <p class="text-muted-foreground mt-0.5 truncate">{{ row.name }}</p>
             </div>
-            <strong class="shrink-0">{{ money(row.marketValue) }}</strong>
+            <strong class="shrink-0"
+              ><UnavailableValue v-if="row.marketValue === null" :reason="quoteReason(row)" /><template v-else>{{
+                money(row.marketValue)
+              }}</template></strong
+            >
           </div>
           <dl class="mt-3 grid grid-cols-2 gap-x-3 gap-y-2">
             <div>
@@ -96,8 +109,10 @@ function sortBy(key: string) {
             <div>
               <dt class="text-muted-foreground">Average cost</dt>
               <dd>
-                {{ unitPrice(averageCost(row), row.currencyCode)
-                }}<span
+                <UnavailableValue v-if="averageCost(row) === null" :reason="basisReason(row)" /><template v-else>{{
+                  unitPrice(averageCost(row), row.currencyCode)
+                }}</template
+                ><span
                   v-if="row.averageCost === null && averageCost(row) !== null"
                   class="text-muted-foreground block text-[10px]"
                   >Broker display average; tax basis unavailable</span
@@ -106,18 +121,26 @@ function sortBy(key: string) {
             </div>
             <div>
               <dt class="text-muted-foreground">Open cost basis</dt>
-              <dd>{{ money(row.costBasis) }}</dd>
+              <dd>
+                <UnavailableValue v-if="row.costBasis === null" :reason="basisReason(row)" /><template v-else>{{
+                  money(row.costBasis)
+                }}</template>
+              </dd>
             </div>
             <div>
               <dt class="text-muted-foreground">Lifetime unrealized</dt>
               <dd :class="signed(row.unrealizedGain)">
-                {{ money(row.unrealizedGain) }} · {{ percent(row.unrealizedPercent) }}
+                <UnavailableValue v-if="row.unrealizedGain === null" :reason="gainReason(row)" /><template v-else
+                  >{{ money(row.unrealizedGain) }} · {{ percent(row.unrealizedPercent) }}</template
+                >
               </dd>
             </div>
             <div>
               <dt class="text-muted-foreground">Today's change</dt>
               <dd :class="signed(row.dailyChange)" :title="row.dailyChangeReason">
-                {{ money(row.dailyChange) }} · {{ percent(row.dailyChangePercent) }}
+                <UnavailableValue v-if="row.dailyChange === null" :reason="dailyReason(row)" /><template v-else
+                  >{{ money(row.dailyChange) }} · {{ percent(row.dailyChangePercent) }}</template
+                >
               </dd>
             </div>
           </dl>
@@ -203,28 +226,49 @@ function sortBy(key: string) {
               </td>
               <td class="p-3 text-right whitespace-nowrap tabular-nums">{{ row.quantity }}</td>
               <td class="p-3 text-right whitespace-nowrap tabular-nums">
-                {{ unitPrice(averageCost(row), row.currencyCode) }}
+                <UnavailableValue v-if="averageCost(row) === null" :reason="basisReason(row)" /><template v-else>{{
+                  unitPrice(averageCost(row), row.currencyCode)
+                }}</template>
               </td>
               <td class="p-3 text-right whitespace-nowrap tabular-nums">
-                {{ money(row.costBasis)
-                }}<span v-if="row.costBasis == null" class="text-muted-foreground block">Incomplete basis</span>
+                <UnavailableValue v-if="row.costBasis === null" :reason="basisReason(row)" /><template v-else>{{
+                  money(row.costBasis)
+                }}</template>
               </td>
               <td class="p-3 text-right whitespace-nowrap tabular-nums">
-                {{ unitPrice(row.price, row.currencyCode)
-                }}<time class="text-muted-foreground block text-[10px]">{{
+                <UnavailableValue v-if="row.price === null" :reason="quoteReason(row)" /><template v-else>{{
+                  unitPrice(row.price, row.currencyCode)
+                }}</template
+                ><time class="text-muted-foreground block text-[10px]">{{
                   row.priceDate ?? 'No quote timestamp'
                 }}</time>
               </td>
-              <td class="p-3 text-right font-semibold whitespace-nowrap tabular-nums">{{ money(row.marketValue) }}</td>
+              <td class="p-3 text-right font-semibold whitespace-nowrap tabular-nums">
+                <UnavailableValue v-if="row.marketValue === null" :reason="quoteReason(row)" /><template v-else>{{
+                  money(row.marketValue)
+                }}</template>
+              </td>
               <td class="p-3 text-right whitespace-nowrap tabular-nums" :class="signed(row.unrealizedGain)">
-                {{ money(row.unrealizedGain) }}<span class="block">{{ percent(row.unrealizedPercent) }}</span>
+                <UnavailableValue v-if="row.unrealizedGain === null" :reason="gainReason(row)" /><template v-else
+                  >{{ money(row.unrealizedGain)
+                  }}<span class="block">{{ percent(row.unrealizedPercent) }}</span></template
+                >
               </td>
               <td class="p-3 text-right whitespace-nowrap" :class="signed(row.realizedGain)">
-                {{ money(row.realizedGain) }}
+                <UnavailableValue
+                  v-if="row.realizedGain === null"
+                  :reason="
+                    row.symbol +
+                    ': sales or opening tax lots are incomplete. Import the full transaction and lot history.'
+                  "
+                /><template v-else>{{ money(row.realizedGain) }}</template>
               </td>
               <td class="p-3 text-right whitespace-nowrap">{{ money(row.dividends) }}</td>
               <td class="p-3 text-right whitespace-nowrap" :class="signed(row.dailyChange)">
-                {{ money(row.dailyChange) }}<span class="block">{{ percent(row.dailyChangePercent) }}</span>
+                <UnavailableValue v-if="row.dailyChange === null" :reason="dailyReason(row)" /><template v-else
+                  >{{ money(row.dailyChange)
+                  }}<span class="block">{{ percent(row.dailyChangePercent) }}</span></template
+                >
               </td>
               <td class="p-3 text-right whitespace-nowrap">{{ percent(row.weight) }}</td>
             </tr>

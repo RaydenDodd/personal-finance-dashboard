@@ -69,6 +69,7 @@ function render() {
   const w = Math.max(1, width - margin.left - margin.right),
     h = height - margin.top - margin.bottom;
   const points = [...props.points].sort((a, b) => a.date.localeCompare(b.date));
+  const hasIntraday = points.some((point) => point.date.includes('T'));
   const dates = points.map((point) => pointDate(point.date));
   let [minDate, maxDate] = d3.extent(dates) as [Date, Date];
   if (+minDate === +maxDate) {
@@ -113,7 +114,11 @@ function render() {
         .ticks(width < 450 ? 3 : 6)
         .tickFormat((date) =>
           d3.timeFormat(
-            +maxDate - +minDate < 3 * 86400000 ? '%a %H:%M' : +maxDate - +minDate < 62 * 86400000 ? '%b %d' : '%b %y',
+            hasIntraday && +maxDate - +minDate < 3 * 86400000
+              ? '%a %H:%M'
+              : +maxDate - +minDate < 62 * 86400000
+                ? '%b %d'
+                : '%b %y',
           )(date as Date),
         ),
     )
