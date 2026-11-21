@@ -31,6 +31,8 @@ export const computeHoldingsValueByDate = ({
   onMissingPrice,
   positionAnchorsByPortfolio,
   onHoldingValue,
+  dateKey = toUtcDateString,
+  shareUnitFactor = () => 1,
 }: {
   uniqueDates: string[];
   portfolioIds: string[];
@@ -42,7 +44,16 @@ export const computeHoldingsValueByDate = ({
   floorValues?: boolean;
   onMissingPrice?: ({ securityId, dateStr }: { securityId: string; dateStr: string }) => void;
   /** Read-only analytics hook; quantity and valuation still come from this native replay. */
-  onHoldingValue?: (row: { portfolioId: string; securityId: string; date: string; value: number }) => void;
+  onHoldingValue?: (row: {
+    portfolioId: string;
+    securityId: string;
+    date: string;
+    value: number;
+    quantity: number;
+  }) => void;
+  dateKey?: (date: Date | string) => string;
+  /** Optional market-data unit adapter. Does not persist share or transaction changes. */
+  shareUnitFactor?: (securityId: string, date: string) => number;
   /** Real complete broker positions establish an opening balance only from their dated observation forward. */
   positionAnchorsByPortfolio?: Map<
     string,
@@ -69,13 +80,13 @@ export const computeHoldingsValueByDate = ({
       const portfolioTxs = transactionsByPortfolio.get(portfolioId) ?? [];
       const holdings = holdingsByPortfolio.get(portfolioId)!;
       let cursor = cursorByPortfolio.get(portfolioId)!;
-      const anchor = positionAnchorsByPortfolio?.get(portfolioId)?.findLast((a) => a.asOf.slice(0, 10) <= dateStr);
+      const anchor = positionAnchorsByPortfolio?.get(portfolioId)?.findLast((a) => dateKey(a.asOf) <= dateStr);
       if (anchor && appliedAnchor.get(portfolioId) !== anchor.asOf) {
         holdings.clear();
         for (const position of anchor.positions) {
           const security = securitiesById.get(position.securityId);
           holdings.set(position.securityId, {
-            quantity: Number(position.quantity),
+            quantity: Number(position.quantity) * shareUnitFactor(position.securityId, dateKey(anchor.asOf)),
             costBasis: Number(position.costBasis ?? 0),
             currencyCode: security?.currencyCode ?? 'USD',
             assetClass: security?.assetClass ?? ASSET_CLASS.other,
@@ -91,12 +102,12 @@ export const computeHoldingsValueByDate = ({
         const tx = portfolioTxs[cursor]!;
         // `tx.date` is TIMESTAMPTZ; bucket to its UTC calendar day so the
         // comparison against the `yyyy-MM-dd` snapshot key is lexicographic.
-        if (toUtcDateString(tx.date) > dateStr) break;
+        if (dateKey(tx.date) > dateStr) break;
 
         const securityId = tx.securityId;
         // Raw rows carry DECIMALs as strings (see `TransactionRow`); this replay
         // runs on floats anyway, so plain Number() conversion loses nothing.
-        const quantity = Number(tx.quantity);
+        const quantity = Number(tx.quantity) * shareUnitFactor(securityId, dateKey(tx.date));
         // Read only for buys, where `refAmount` is the leg's full cost in base currency —
         // quantity × price *including* fees, as `resolveSettlement` composes it. That is exactly
         // what `computeHoldingTotals` folds into the basis, so `refFees` must not
@@ -158,7 +169,13 @@ export const computeHoldingsValueByDate = ({
           const unfloored = marketValueInSecurityCurrency * exchangeRate;
           const marketValueInBaseCurrency = floorValues ? Math.floor(unfloored) : unfloored;
           totalValueForDate += marketValueInBaseCurrency;
-          onHoldingValue?.({ portfolioId, securityId, date: dateStr, value: marketValueInBaseCurrency });
+          onHoldingValue?.({
+            portfolioId,
+            securityId,
+            date: dateStr,
+            value: marketValueInBaseCurrency,
+            quantity: effectiveQuantity,
+          });
         } else {
           // No price for this day — value the holding at cost basis so the line
           // stays continuous instead of collapsing to zero. It is only an

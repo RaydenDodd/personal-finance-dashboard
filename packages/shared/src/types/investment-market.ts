@@ -75,9 +75,11 @@ export function usEquityMarketOpen(now = new Date()) {
   return session.tradingDay && minute >= session.openMinute && minute < session.closeMinute;
 }
 /** Daily bars are stored at UTC midnight; intraday observations retain their actual instant. */
-export function investmentPriceDate(date: Date | string) {
+export function investmentPriceDate(date: Date | string, dateOnly?: boolean) {
   const value = new Date(date);
-  return value.toISOString().endsWith('T00:00:00.000Z') ? dayKey(value) : easternDate(value);
+  return dateOnly === true || (dateOnly === undefined && value.toISOString().endsWith('T00:00:00.000Z'))
+    ? dayKey(value)
+    : easternDate(value);
 }
 
 export function previousUsEquitySession(date: string) {

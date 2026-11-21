@@ -1,4 +1,4 @@
-import type {
+﻿import type {
   InvestmentAnalytics,
   InvestmentHolding,
   InvestmentPortfolio,
@@ -26,6 +26,7 @@ import UserSettings from '@models/user-settings.model';
 import * as UsersCurrencies from '@models/users-currencies.model';
 import { withDeduplication } from '@services/common/with-deduplication';
 import { latestSnapshot } from '@services/investments/broker-records/schema';
+import { fillMissingCompanyClassifications } from '@services/investments/classification-values';
 import { isCompositionIdentityConflict, isFundSecurity } from '@services/investments/composition/registry';
 import {
   compositionStatuses,
@@ -34,10 +35,12 @@ import {
 } from '@services/investments/composition/service';
 import { getHoldingValues } from '@services/investments/holdings/get-holding-values.service';
 import { getPortfolioSummary } from '@services/investments/portfolios/get-portfolio-summary.service';
+import { createShareUnitFactor } from '@services/stats/get-combined-balance-history/security-price-lookup';
 import type { TransactionRow } from '@services/stats/get-combined-balance-history/types';
 import Big from 'big.js';
 import { Op } from 'sequelize';
 
+import { compactAnalytics } from './compact-response';
 import { dailyPositionChange } from './daily-performance';
 import { getFundSnapshots, latestFundSnapshots } from './fund-snapshots';
 import { buildHistory } from './history';
@@ -77,6 +80,8 @@ async function getAnalyticsImpl({
   hiddenPortfolioIds = [],
   performanceFrom,
   performanceThrough,
+  compact = false,
+  overlapPair,
 }: {
   userId: number;
   portfolioIds?: string[];
@@ -85,6 +90,8 @@ async function getAnalyticsImpl({
   compositionRevision?: string;
   performanceFrom?: string;
   performanceThrough?: string;
+  compact?: boolean;
+  overlapPair?: [string, string];
 }): Promise<InvestmentAnalytics> {
   const allPortfolios = await Portfolios.findAll({ where: { userId }, order: [['name', 'ASC']] });
   const ids = visiblePortfolioSelection(
@@ -353,6 +360,12 @@ async function getAnalyticsImpl({
   }));
   const contributions = sum(flows.filter((f) => new Big(f.value).gt(0)).map((f) => f.value))!;
   const withdrawals = sum(flows.filter((f) => new Big(f.value).lt(0)).map((f) => new Big(f.value).neg().toString()))!;
+  metrics.knownNetInvested = {
+    value: transfers.length ? new Big(contributions).minus(withdrawals).toString() : null,
+    status: completeHistory ? 'verified' : 'partial',
+    reason:
+      'Recorded deposits less withdrawals only. Import missing funding and opening balances to reconcile lifetime invested capital.',
+  };
   for (const [key, value] of Object.entries({
     contributions,
     withdrawals,
@@ -425,15 +438,25 @@ async function getAnalyticsImpl({
       prior.setUTCDate(prior.getUTCDate() - 1);
       sessionDate = prior.toISOString().slice(0, 10);
     }
-    const previous = latest ? series.findLast((p) => investmentPriceDate(p.date) < sessionDate) : undefined;
+    const previous = latest
+      ? series.findLast(
+          (p) => investmentPriceDate(p.priceAsOf ?? p.date, p.priceAsOf ? false : undefined) < sessionDate,
+        )
+      : undefined;
+    const priorReference = latest?.previousClose;
+    const reference = priorReference
+      ? { date: new Date(priorReference.date), price: new Big(priorReference.price) }
+      : previous
+        ? { date: new Date(previous.date), price: previous.priceClose.toBig() }
+        : undefined;
     const freshPair =
       latest &&
-      previous &&
+      reference &&
       Date.now() - new Date(latest.date).getTime() <= 4 * 86400000 &&
-      new Date(latest.date).getTime() - new Date(previous.date).getTime() <= 4 * 86400000;
+      new Date(latest.date).getTime() - reference.date.getTime() <= 4 * 86400000;
     if (
       latest &&
-      previous &&
+      reference &&
       freshPair &&
       h.currencyCode === currencyCode &&
       h.priceDate &&
@@ -452,7 +475,7 @@ async function getAnalyticsImpl({
           : dailyPositionChange({
               quantity: h.quantity,
               marketValue: h.marketValue,
-              previousClose: decimal(previous.priceClose),
+              previousClose: reference.price.toString(),
               trades: dayTrades.map((t) => ({
                 category: t.category,
                 quantity: decimal(t.quantity),
@@ -462,7 +485,7 @@ async function getAnalyticsImpl({
       h.dailyChange = daily?.change ?? null;
       h.dailyChangePercent = daily?.percent ?? null;
       if (daily) dailyCapital.set(h.id, daily.capital);
-      h.previousCloseDate = dateString(previous.date);
+      h.previousCloseDate = dateString(reference.date);
       h.dailyChangeReason = h.accounts.some((a) => !portfolios.find((p) => p.id === a.portfolioId)?.historyComplete)
         ? 'Current shares and recorded same-session trades versus the previous recorded close; imported trade history is partial.'
         : 'Previous recorded close with same-session buys, sells and fees removed from the change in position value.';
@@ -559,10 +582,14 @@ async function getAnalyticsImpl({
   const baselineDays = new Set(Object.values(periodDates));
   if (performanceThrough) baselineDays.add(performanceThrough);
   const positionBaselines = new Map<string, string>();
+  const positionQuantities = new Map<string, string>();
+  const shareUnitFactor = createShareUnitFactor(prices, investmentPriceDate);
   const history = buildHistory({
     onHoldingValue: (row) => {
-      if (baselineDays.has(row.date))
+      if (baselineDays.has(row.date)) {
         positionBaselines.set(`${row.portfolioId}:${row.securityId}:${row.date}`, String(row.value));
+        positionQuantities.set(`${row.portfolioId}:${row.securityId}:${row.date}`, String(row.quantity));
+      }
     },
     ids,
     currencyCode,
@@ -594,7 +621,7 @@ async function getAnalyticsImpl({
               .slice(0, 10)
           : broker?.data.snapshots
               .filter((s) => s.complete && s.positions?.length)
-              .map((s) => s.asOf.slice(0, 10))
+              .map((s) => investmentPriceDate(s.asOf))
               .sort()[0];
       return [p.id, first];
     }),
@@ -604,6 +631,9 @@ async function getAnalyticsImpl({
       holding: h,
       dates: periodDates,
       through: performanceThrough && performanceThrough < today ? performanceThrough : undefined,
+      shareUnitFactor,
+      positionQuantity: (portfolioId, securityId, date) =>
+        positionQuantities.get(`${portfolioId}:${securityId}:${date}`) ?? null,
       openingValue: (portfolioId, securityId, date) => {
         const first = supportedFrom.get(portfolioId);
         const day = history.find((p) => p.date === date);
@@ -616,6 +646,7 @@ async function getAnalyticsImpl({
         date: investmentPriceDate(t.date),
         category: t.category,
         amount: decimal(t.refAmount),
+        quantity: decimal(t.quantity),
       })),
     });
   const currentPoint = history.find((p) => p.date === today);
@@ -640,7 +671,7 @@ async function getAnalyticsImpl({
     (p) =>
       p.marketValue !== null &&
       portfolios.every((portfolio) =>
-        brokerById.get(portfolio.id)?.data.snapshots.some((s) => s.complete && s.asOf.slice(0, 10) === p.date),
+        brokerById.get(portfolio.id)?.data.snapshots.some((s) => s.complete && investmentPriceDate(s.asOf) === p.date),
       ),
   );
   const returns = consolidatedReturns(
@@ -670,6 +701,11 @@ async function getAnalyticsImpl({
       );
   const allocationValue = marketValue ?? new Big(knownSecurities).plus(knownCash).toString();
   const exposure = lookThrough(holdings, fundSnapshots, allocationValue);
+  fillMissingCompanyClassifications(exposure.filter(isCompanyExposure), securities);
+  fillMissingCompanyClassifications(
+    holdings.filter((h) => !h.isFund && h.assetClass === 'stocks'),
+    securities,
+  );
   const fundValue = sum(holdings.filter((h) => h.isFund).map((h) => h.marketValue));
   const coveredFundValue = sum(
     holdings
@@ -939,7 +975,7 @@ async function getAnalyticsImpl({
     .map((s) => dateString(s.pricingLastSyncedAt))
     .filter((s): s is string => !!s)
     .sort();
-  return {
+  const result: InvestmentAnalytics = {
     generatedAt: new Date().toISOString(),
     priceRisk,
     currencyCode,
@@ -959,7 +995,7 @@ async function getAnalyticsImpl({
       await getCompositionAttempts(userId),
       (await getCompositionSchedule(userId))?.enabled,
     ),
-    overlap: fundOverlap(fundSnapshots, holdings),
+    overlap: fundOverlap(fundSnapshots, holdings, { includeDetails: !compact, pair: overlapPair }),
     benchmarks,
     health,
     coverage: {
@@ -993,6 +1029,7 @@ async function getAnalyticsImpl({
         'Refresh uses the existing price services with owner-scoped visible holdings and verified benchmarks. Broker transactions are synchronized separately.',
     },
   };
+  return compact ? compactAnalytics(result) : result;
 }
 
 const deduplicatedAnalytics = withDeduplication(getAnalyticsImpl, {
@@ -1004,8 +1041,10 @@ const deduplicatedAnalytics = withDeduplication(getAnalyticsImpl, {
     compositionRevision,
     performanceFrom,
     performanceThrough,
+    compact,
+    overlapPair,
   }) =>
-    `investment-analytics:${userId}:${portfolioIds?.toSorted().join(',') ?? 'all'}:${benchmarkSymbols?.join(',') ?? 'default'}:${hiddenPortfolioIds?.toSorted().join(',')}:${compositionRevision}:${performanceFrom}:${performanceThrough}`,
+    `investment-analytics:${userId}:${portfolioIds?.toSorted().join(',') ?? 'all'}:${benchmarkSymbols?.join(',') ?? 'default'}:${hiddenPortfolioIds?.toSorted().join(',')}:${compositionRevision}:${performanceFrom}:${performanceThrough}:${compact}:${overlapPair?.join(',')}`,
   ttl: 1000,
   maxCacheSize: 8,
 });

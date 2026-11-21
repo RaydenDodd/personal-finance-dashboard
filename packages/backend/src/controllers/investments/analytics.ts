@@ -23,12 +23,36 @@ export const getAnalytics = createController(
       .object({
         portfolioIds: list,
         benchmarkSymbols: list,
+        compact: z.enum(['true', 'false']).optional(),
         performanceFrom: z.iso.date().optional(),
         performanceThrough: z.iso.date().optional(),
       })
       .default({ portfolioIds: undefined, benchmarkSymbols: undefined }),
   }),
-  async ({ user, query }) => ({ data: await getInvestmentAnalytics({ userId: user.id, ...query }) }),
+  async ({ user, query }) => ({
+    data: await getInvestmentAnalytics({ userId: user.id, ...query, compact: query.compact === 'true' }),
+  }),
+);
+
+export const getOverlapDetail = createController(
+  z.object({ query: z.object({ portfolioIds: list, leftId: z.uuid(), rightId: z.uuid() }) }),
+  async ({ user, query }) => {
+    const result = await getInvestmentAnalytics({
+      userId: user.id,
+      portfolioIds: query.portfolioIds,
+      benchmarkSymbols: [],
+      compact: true,
+      overlapPair: [query.leftId, query.rightId],
+    });
+    const pair = result.overlap.find(
+      (p) =>
+        (p.leftId === query.leftId && p.rightId === query.rightId) ||
+        (p.leftId === query.rightId && p.rightId === query.leftId),
+    );
+    if (!pair)
+      throw new ValidationError({ message: 'This fund pair is unavailable in the selected visible portfolios.' });
+    return { data: pair };
+  },
 );
 
 export const compositionCatalog = createController(z.object({}), async ({ user }) => ({

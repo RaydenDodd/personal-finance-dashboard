@@ -2,6 +2,20 @@ import type { InvestmentHolding } from '@bt/shared/types/investment-analytics';
 
 import { positionPeriodDates, positionPeriodReturns } from './position-performance';
 describe('native position period attribution', () => {
+  it('rejects unexplained share changes instead of calling them profits', () => {
+    const result = positionPeriodReturns({
+      holding: {
+        securityId: 'PLTR',
+        marketValue: '2000',
+        accounts: [{ portfolioId: 'account', quantity: '20' }],
+      } as InvestmentHolding,
+      dates: { weekly: '2026-11-13' },
+      openingValue: () => '1000',
+      positionQuantity: () => '10',
+      trades: [],
+    });
+    expect(result.weekly).toBeNull();
+  });
   it('uses the selected historical closing value and excludes later trades', () => {
     const result = positionPeriodReturns({
       holding: { securityId: 'PLTR', marketValue: '1320', accounts: [{ portfolioId: 'account' }] } as InvestmentHolding,

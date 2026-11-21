@@ -1,5 +1,5 @@
 ﻿import type { InvestmentHistoryPoint } from '@bt/shared/types/investment-analytics';
-import { easternDate } from '@bt/shared/types/investment-market';
+import { easternDate, investmentPriceDate } from '@bt/shared/types/investment-market';
 import type BrokerPortfolioData from '@models/investments/broker-portfolio-data.model';
 import type PortfolioBalances from '@models/investments/portfolio-balances.model';
 import type PortfolioTransfers from '@models/investments/portfolio-transfers.model';
@@ -13,6 +13,7 @@ import {
 import {
   buildPriceLookup,
   createFindPriceForDate,
+  createShareUnitFactor,
 } from '@services/stats/get-combined-balance-history/security-price-lookup';
 import type { TransactionRow } from '@services/stats/get-combined-balance-history/types';
 import Big from 'big.js';
@@ -39,13 +40,19 @@ export function buildHistory({
   balances: PortfolioBalances[];
   securities: Securities[];
   prices: SecurityPricing[];
-  onHoldingValue?: (row: { portfolioId: string; securityId: string; date: string; value: number }) => void;
+  onHoldingValue?: (row: {
+    portfolioId: string;
+    securityId: string;
+    date: string;
+    value: number;
+    quantity: number;
+  }) => void;
 }): InvestmentHistoryPoint[] {
   const today = easternDate();
   const starts = [
-    ...transactions.map((t) => new Date(t.date).toISOString().slice(0, 10)),
+    ...transactions.map((t) => investmentPriceDate(t.date)),
     ...transfers.map((t) => t.date),
-    ...brokers.flatMap((b) => b.data.snapshots.map((s) => s.asOf.slice(0, 10))),
+    ...brokers.flatMap((b) => b.data.snapshots.map((s) => investmentPriceDate(s.asOf))),
   ]
     .filter((d) => d <= today)
     .sort();
@@ -60,7 +67,8 @@ export function buildHistory({
   const byBroker = new Map(brokers.map((b) => [b.portfolioId, b]));
   const byPortfolio = new Map<string, Map<string, string | null>>();
   const knownByPortfolio = new Map<string, Map<string, string | null>>();
-  const findPrice = createFindPriceForDate(buildPriceLookup(prices));
+  const findPrice = createFindPriceForDate(buildPriceLookup(prices, investmentPriceDate, true));
+  const shareUnitFactor = createShareUnitFactor(prices, investmentPriceDate);
   for (const id of ids) {
     const broker = byBroker.get(id);
     const values = new Map<string, string | null>();
@@ -70,7 +78,7 @@ export function buildHistory({
       const snapshots = [...broker.data.snapshots].sort((a, b) => a.asOf.localeCompare(b.asOf));
       const anchors = snapshots.filter((s) => s.complete && s.currencyCode === currencyCode && s.positions?.length);
       if (anchors.length) {
-        const supportedDates = dates.filter((d) => d >= anchors[0]!.asOf.slice(0, 10));
+        const supportedDates = dates.filter((d) => d >= investmentPriceDate(anchors[0]!.asOf));
         const missing = new Set<string>();
         const txs = transactions.filter((t) => t.portfolioId === id);
         const replay = computeHoldingsValueByDate({
@@ -86,15 +94,18 @@ export function buildHistory({
           onMissingPrice: ({ dateStr }) => missing.add(dateStr),
           floorValues: false,
           onHoldingValue,
+          dateKey: investmentPriceDate,
+          shareUnitFactor,
           positionAnchorsByPortfolio: new Map([[id, anchors]]),
         });
         for (const d of supportedDates) if (!missing.has(d)) known.set(d, String(replay.get(d) ?? 0));
       }
       for (const s of snapshots) {
-        if (s.totalValue !== null && s.currencyCode === currencyCode) values.set(s.asOf.slice(0, 10), s.totalValue);
+        if (s.totalValue !== null && s.currencyCode === currencyCode)
+          values.set(investmentPriceDate(s.asOf), s.totalValue);
         const priced = s.positions?.filter((p) => p.marketValue !== null) ?? [];
         if (priced.length && s.currencyCode === currencyCode)
-          known.set(s.asOf.slice(0, 10), sum([...priced.map((p) => p.marketValue), s.cash ?? '0']));
+          known.set(investmentPriceDate(s.asOf), sum([...priced.map((p) => p.marketValue), s.cash ?? '0']));
       }
     } else {
       const txs = transactions.filter((t) => t.portfolioId === id);
@@ -118,6 +129,8 @@ export function buildHistory({
         onMissingPrice: ({ dateStr }) => missing.add(dateStr),
         floorValues: false,
         onHoldingValue,
+        dateKey: investmentPriceDate,
+        shareUnitFactor,
       });
       const cashValues = computePortfolioCashByDate({
         uniqueDates: dates,
@@ -135,9 +148,9 @@ export function buildHistory({
       });
       const firstEvidence =
         [
-          ...txs.map((t) => new Date(t.date).toISOString().slice(0, 10)),
+          ...txs.map((t) => investmentPriceDate(t.date)),
           ...transfers.filter((t) => t.fromPortfolioId === id || t.toPortfolioId === id).map((t) => t.date),
-          ...(broker?.data.snapshots.map((s) => s.asOf.slice(0, 10)) ?? []),
+          ...(broker?.data.snapshots.map((s) => investmentPriceDate(s.asOf)) ?? []),
         ].sort()[0] ?? today;
       for (const d of dates.filter((d) => d >= firstEvidence))
         values.set(
@@ -149,7 +162,7 @@ export function buildHistory({
       // Exact source observations supersede the shared replay only on their real date.
       for (const s of broker?.data.snapshots ?? [])
         if (s.complete && s.totalValue !== null && s.currencyCode === currencyCode)
-          values.set(s.asOf.slice(0, 10), s.totalValue);
+          values.set(investmentPriceDate(s.asOf), s.totalValue);
     }
     byPortfolio.set(id, values);
     for (const [date, value] of values) if (value !== null) known.set(date, value);
@@ -205,7 +218,7 @@ export function buildHistory({
       knownMarketValue: knownValues.length ? sum(knownValues) : null,
       knownNetInvested: transfers.length ? contributions.minus(withdrawals).toString() : null,
       coverage: ids.length ? (Object.values(portfolios).filter((v) => v !== null).length / ids.length) * 100 : 0,
-      source: ids.some((id) => byBroker.get(id)?.data.snapshots.some((s) => s.asOf.slice(0, 10) === date))
+      source: ids.some((id) => byBroker.get(id)?.data.snapshots.some((s) => investmentPriceDate(s.asOf) === date))
         ? 'Recorded broker observations / native history'
         : 'Native historical valuation; missing prices remain unavailable',
     };

@@ -40,7 +40,9 @@ const props = withDefaults(
   }>(),
   { settings: () => ({}) },
 );
-const emit = defineEmits<{ 'settings-change': [patch: Record<string, unknown>] }>();
+const emit = defineEmits<{
+  'settings-change': [patch: Record<string, unknown>];
+}>();
 const containerRef = ref<HTMLElement | null>(null);
 const inlineInformation = !inject('investment-full-page', false);
 const showInformation = ref(false);
@@ -157,6 +159,7 @@ function displayedMetric(key: string) {
         costBasis: ['knownCostBasis', 'Known open-position basis'],
         unrealizedGain: ['knownUnrealizedGain', 'Known unrealized gain / loss'],
         realizedGain: ['reportedRealizedGain', 'Broker-reported realized gains'],
+        netInvested: ['knownNetInvested', 'Recorded net funding'],
       } as Record<string, string[]>
     )[key];
     const partial = fallback && props.analytics.metrics[fallback[0]!];
@@ -218,6 +221,7 @@ const historyLabels: Record<string, string> = {
   realizedGain: 'Realized gains',
   returnPercent: 'Investment return',
   contributions: 'Contributions',
+  knownNetInvested: 'Recorded net funding · partial history',
   withdrawals: 'Withdrawals',
 };
 const allHistory = computed(() => withinRange(props.analytics.history, range.value.from, range.value.through));
@@ -312,7 +316,14 @@ const dividendGrouping = computed(() => (props.settings.dividendGrouping === 'po
 const incomeBreakdown = computed(() => {
   const groups = new Map<
     string,
-    { id: string; label: string; name: string; dividends: number | null; interest: number | null; total: number }
+    {
+      id: string;
+      label: string;
+      name: string;
+      dividends: number | null;
+      interest: number | null;
+      total: number;
+    }
   >();
   const known = (key: string) =>
     props.analytics.metrics[key]?.value !== null &&
@@ -362,22 +373,40 @@ const dividendGrowth = computed(() => {
       value: null,
       reason: 'Two complete consecutive calendar years with a positive prior-year dividend total are required.',
     };
-  return { value: (current / previous - 1) * 100, reason: `Recorded dividend growth: ${latest - 1} to ${latest}.` };
+  return {
+    value: (current / previous - 1) * 100,
+    reason: `Recorded dividend growth: ${latest - 1} to ${latest}.`,
+  };
 });
 const chartSeries = computed<InvestmentChartSeries[]>(() => {
   if (props.kind === 'dividends')
     return [
       { key: 'cash', label: 'Cash dividends', color: colors[0]! },
       { key: 'reinvested', label: 'Reinvested dividends', color: colors[2]! },
-      { key: 'unknown', label: 'Distribution treatment unknown', color: colors[3]! },
+      {
+        key: 'unknown',
+        label: 'Distribution treatment unknown',
+        color: colors[3]!,
+      },
       { key: 'interest', label: 'Interest', color: colors[1]! },
     ];
   if (props.kind === 'portfolio-comparison' || recordedAccountFallback.value)
-    return recordedPortfolios.value.map((row, index) => ({
-      key: row.id,
-      label: row.name,
-      color: colors[index % colors.length]!,
-    }));
+    return [
+      ...recordedPortfolios.value.map((row, index) => ({
+        key: row.id,
+        label: row.name,
+        color: colors[index % colors.length]!,
+      })),
+      ...(props.kind === 'value-capital' && allHistory.value.some((p) => p.knownNetInvested != null)
+        ? [
+            {
+              key: 'knownNetInvested',
+              label: historyLabels.knownNetInvested!,
+              color: colors[3]!,
+            },
+          ]
+        : []),
+    ];
   if (props.kind === 'benchmark')
     return [
       {
@@ -400,7 +429,13 @@ const chartSeries = computed<InvestmentChartSeries[]>(() => {
       },
     ];
   if (props.kind === 'performance' && percent.value && priceRiskFallback.value)
-    return [{ key: 'returnPercent', label: 'Current holdings · price only', color: colors[0]! }];
+    return [
+      {
+        key: 'returnPercent',
+        label: 'Current holdings · price only',
+        color: colors[0]!,
+      },
+    ];
   return activeSeries.value.map((key, index) => ({
     key,
     label: historyLabels[key] ?? key,
@@ -421,7 +456,10 @@ const chartPoints = computed<InvestmentChartPoint[]>(() => {
           : props.settings.aggregation === 'quarterly'
             ? `${date.slice(0, 4)}-${String(Math.floor((month - 1) / 3) * 3 + 1).padStart(2, '0')}-01`
             : date.slice(0, 7) + '-01';
-      const point = buckets.get(key) ?? { date: key, values: { cash: 0, reinvested: 0, unknown: 0, interest: 0 } };
+      const point = buckets.get(key) ?? {
+        date: key,
+        values: { cash: 0, reinvested: 0, unknown: 0, interest: 0 },
+      };
       const series =
         payment.type === 'interest'
           ? 'interest'
@@ -485,10 +523,17 @@ const chartPoints = computed<InvestmentChartPoint[]>(() => {
     return (priceRiskFallback.value ? comparablePortfolioPoints.value : allHistory.value).map((row) => {
       const v = chartNumber(row.returnPercent);
       if (v == null)
-        return { date: row.date, values: { drawdown: null }, note: 'Cash-flow-adjusted return unavailable.' };
+        return {
+          date: row.date,
+          values: { drawdown: null },
+          note: 'Cash-flow-adjusted return unavailable.',
+        };
       const index = 1 + v / 100;
       peak = Math.max(peak, index);
-      return { date: row.date, values: { drawdown: peak > 0 ? (index / peak - 1) * 100 : null } };
+      return {
+        date: row.date,
+        values: { drawdown: peak > 0 ? (index / peak - 1) * 100 : null },
+      };
     });
   }
   if (props.kind === 'performance' && percent.value && priceRiskFallback.value) {
@@ -503,12 +548,13 @@ const chartPoints = computed<InvestmentChartPoint[]>(() => {
     date: row.date,
     values:
       props.kind === 'portfolio-comparison' || recordedAccountFallback.value
-        ? Object.fromEntries(
-            recordedPortfolios.value.map((p) => [
+        ? Object.fromEntries([
+            ...recordedPortfolios.value.map((p) => [
               p.id,
               chartNumber(row.portfolios[p.id] ?? row.knownPortfolios?.[p.id]),
             ]),
-          )
+            ...(props.kind === 'value-capital' ? [['knownNetInvested', chartNumber(row.knownNetInvested)]] : []),
+          ])
         : Object.fromEntries(
             activeSeries.value.map((key) => [key, chartNumber(row[key as keyof InvestmentHistoryPoint])]),
           ),
@@ -651,8 +697,14 @@ const performers = computed(() =>
 const performerGroups = computed(() => {
   const filtered = performers.value;
   return [
-    { label: 'Best', rows: filtered.slice(0, Number(props.settings.limit ?? 5)) },
-    { label: 'Worst', rows: [...filtered].reverse().slice(0, Number(props.settings.limit ?? 5)) },
+    {
+      label: 'Best',
+      rows: filtered.slice(0, Number(props.settings.limit ?? 5)),
+    },
+    {
+      label: 'Worst',
+      rows: [...filtered].reverse().slice(0, Number(props.settings.limit ?? 5)),
+    },
   ];
 });
 const largest = computed(() =>
@@ -681,7 +733,9 @@ const health = computed(() =>
     <template v-if="['overview', 'gains', 'risk', 'concentration'].includes(kind)">
       <div class="grid grid-cols-2 gap-x-4 gap-y-2" :class="!compact && kind === 'overview' ? '@3xl:grid-cols-4' : ''">
         <div v-for="key in metricKeys" :key="key">
-          <p class="text-muted-foreground text-xs">{{ displayedMetric(key).label }}</p>
+          <p class="text-muted-foreground text-xs">
+            {{ displayedMetric(key).label }}
+          </p>
           <button
             type="button"
             class="mt-1 text-sm font-semibold tracking-tight break-words tabular-nums @md:text-xl"
@@ -720,7 +774,9 @@ const health = computed(() =>
         <summary class="text-primary-text cursor-pointer text-xs">Income, cost basis and return details</summary>
         <dl class="mt-3 grid grid-cols-2 gap-3 @2xl:grid-cols-3">
           <div v-for="key in secondary" :key="key">
-            <dt class="text-muted-foreground text-xs">{{ displayedMetric(key).label }}</dt>
+            <dt class="text-muted-foreground text-xs">
+              {{ displayedMetric(key).label }}
+            </dt>
             <dd
               class="font-medium tabular-nums"
               :class="key.toLowerCase().includes('gain') ? signed(displayedMetric(key).value) : ''"
@@ -740,7 +796,8 @@ const health = computed(() =>
       v-if="kind === 'concentration'"
       class="text-muted-foreground text-xs"
     >
-      Dated fund composition coverage {{ pct(analytics.coverage.lookThroughPercent) }} · effective dates
+      Dated fund composition coverage
+      {{ pct(analytics.coverage.lookThroughPercent) }} · effective dates
       {{ compositionDates.join(', ') || 'unavailable' }}. Cash, commodities and derivatives are excluded from company
       concentration.
     </p>
@@ -757,7 +814,10 @@ const health = computed(() =>
                   :value="settings.unit ?? 'dollars'"
                   class="bg-background mt-1 w-full rounded border p-2"
                   @change="
-                    emit('settings-change', { unit: ($event.target as HTMLSelectElement).value, series: undefined })
+                    emit('settings-change', {
+                      unit: ($event.target as HTMLSelectElement).value,
+                      series: undefined,
+                    })
                   "
                 >
                   <option value="dollars">Dollars</option>
@@ -793,7 +853,9 @@ const health = computed(() =>
             <p v-if="total.status === 'partial'" class="text-muted-foreground text-[10px]">
               Recorded subtotal · partial history
             </p>
-            <p v-if="total.reason" class="text-muted-foreground text-[10px]">{{ total.reason }}</p>
+            <p v-if="total.reason" class="text-muted-foreground text-[10px]">
+              {{ total.reason }}
+            </p>
           </div>
         </div>
         <div class="flex flex-wrap gap-2">
@@ -802,7 +864,11 @@ const health = computed(() =>
               :value="settings.aggregation ?? 'monthly'"
               aria-label="Dividend aggregation"
               class="bg-background ml-2 rounded border px-2 py-1"
-              @change="emit('settings-change', { aggregation: ($event.target as HTMLSelectElement).value })"
+              @change="
+                emit('settings-change', {
+                  aggregation: ($event.target as HTMLSelectElement).value,
+                })
+              "
             >
               <option value="monthly">Monthly</option>
               <option value="quarterly">Quarterly</option>
@@ -813,7 +879,11 @@ const health = computed(() =>
               :value="settings.securityId ?? ''"
               aria-label="Dividend security filter"
               class="bg-background ml-2 max-w-40 rounded border px-2 py-1"
-              @change="emit('settings-change', { securityId: ($event.target as HTMLSelectElement).value })"
+              @change="
+                emit('settings-change', {
+                  securityId: ($event.target as HTMLSelectElement).value,
+                })
+              "
             >
               <option value="">All securities</option>
               <option v-for="holding in analytics.holdings" :key="holding.id" :value="holding.securityId">
@@ -828,7 +898,11 @@ const health = computed(() =>
           :value="settings.aggregation ?? 'monthly'"
           aria-label="Contribution aggregation"
           class="bg-background rounded-md border px-2 py-1.5"
-          @change="emit('settings-change', { aggregation: ($event.target as HTMLSelectElement).value })"
+          @change="
+            emit('settings-change', {
+              aggregation: ($event.target as HTMLSelectElement).value,
+            })
+          "
         >
           <option value="monthly">Monthly</option>
           <option value="quarterly">Quarterly</option>
@@ -884,7 +958,8 @@ const health = computed(() =>
         :key="benchmark.id"
         class="text-muted-foreground text-xs"
       >
-        {{ benchmark.symbol }} · {{ benchmark.status }} · {{ benchmark.reason ?? benchmark.returnType }}
+        {{ benchmark.symbol }} · {{ benchmark.status }} ·
+        {{ benchmark.reason ?? benchmark.returnType }}
       </p>
       <p
         v-show="inlineInformation && showInformation"
@@ -962,7 +1037,8 @@ const health = computed(() =>
           </p></ModuleBody
         >
         <p class="text-muted-foreground mt-3 text-xs">
-          <span class="font-medium">Dividend growth: {{ pct(dividendGrowth.value) }}.</span> {{ dividendGrowth.reason }}
+          <span class="font-medium">Dividend growth: {{ pct(dividendGrowth.value) }}.</span>
+          {{ dividendGrowth.reason }}
         </p>
       </details>
       <p
@@ -987,10 +1063,14 @@ const health = computed(() =>
           class="bg-background max-w-full rounded-md border px-2 py-1.5 text-xs"
           @change="
             selectedCategory = null;
-            emit('settings-change', { allocationMode: ($event.target as HTMLSelectElement).value });
+            emit('settings-change', {
+              allocationMode: ($event.target as HTMLSelectElement).value,
+            });
           "
         >
-          <option v-for="[id, label] in INVESTMENT_ALLOCATION_MODES" :key="id" :value="id">{{ label }}</option>
+          <option v-for="[id, label] in INVESTMENT_ALLOCATION_MODES" :key="id" :value="id">
+            {{ label }}
+          </option>
         </select></label
       >
       <ExpenseDonut
@@ -1174,7 +1254,9 @@ const health = computed(() =>
           <thead>
             <tr>
               <th class="p-2 text-left">Funds</th>
-              <th v-for="fund in funds" :key="fund.id" class="p-2">{{ fund.symbol }}</th>
+              <th v-for="fund in funds" :key="fund.id" class="p-2">
+                {{ fund.symbol }}
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -1213,7 +1295,11 @@ const health = computed(() =>
         </table>
       </ScrollArea>
       <div v-if="overlap" class="bg-muted/40 rounded-md p-3 text-xs">
-        <OverlapDetails :pair="overlap" :currency-code="analytics.currencyCode" />
+        <OverlapDetails
+          :pair="overlap"
+          :currency-code="analytics.currencyCode"
+          :portfolio-ids="analytics.selectedPortfolioIds"
+        />
         <Button size="sm" variant="ghost" class="mt-2" @click="overlap = null">Close details</Button>
       </div>
       <p v-if="funds.length < 2" class="text-muted-foreground text-sm">

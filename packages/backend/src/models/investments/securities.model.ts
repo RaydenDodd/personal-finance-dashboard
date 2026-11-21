@@ -1,5 +1,5 @@
 import { RecordId } from '@bt/shared/types';
-import { SECURITY_PROVIDER, ASSET_CLASS } from '@bt/shared/types/investments';
+import { SECURITY_PROVIDER, ASSET_CLASS, type CompanyClassifications } from '@bt/shared/types/investments';
 import { IdColumn } from '@common/types/id-column';
 import { Table, Column, Model, DataType, HasMany, Index, BeforeCreate, BeforeUpdate } from 'sequelize-typescript';
 
@@ -18,6 +18,8 @@ export default class Securities extends Model {
 
   @Column({ type: DataType.STRING, allowNull: true })
   name!: string | null;
+  @Column({ type: DataType.JSONB, allowNull: true })
+  companyClassifications!: CompanyClassifications | null;
 
   @Index
   @Column({ type: DataType.STRING, allowNull: true })

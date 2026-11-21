@@ -35,6 +35,8 @@ export interface PriceData {
   providerSymbol: ProviderSymbol;
   date: Date;
   priceClose: number;
+  unadjustedClose?: number;
+  dailyBar?: boolean;
   /**
    * The moment the upstream provider reports the price was valid. Always set
    * by every leaf provider — required so the daily/intraday sync can use it as
@@ -121,6 +123,12 @@ export interface BulkPriceFetchOptions {
 
 export abstract class BaseSecurityDataProvider {
   abstract readonly providerName: SECURITY_PROVIDER;
+  /** Optional public equity metadata; providers without it retain source gaps. */
+  async getCompanyClassifications(
+    _symbol: ProviderSymbol,
+  ): Promise<{ symbol: string; sector?: string; industry?: string } | null> {
+    return null;
+  }
 
   /**
    * Fetches the historical price data (OHLC) for a single security.

@@ -55,6 +55,12 @@ export default class SecurityPricing extends Model {
    */
   @MoneyField({ storage: 'decimal', precision: 20, scale: 10 })
   declare priceClose: Money;
+  /** Original-share close for dated position valuation; priceClose remains split-adjusted for charts. */
+  @MoneyField({ storage: 'decimal', precision: 20, scale: 10, allowNull: true })
+  declare unadjustedClose: Money | null;
+  /** Prior close in the current quote's share units, not a backdated historical observation. */
+  @Column({ type: DataType.JSONB, allowNull: true })
+  previousClose!: { date: string; price: string } | null;
 
   /**
    * (Optional) The timestamp indicating the specific time the priceClose was recorded. This is particularly

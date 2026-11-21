@@ -1,3 +1,4 @@
+import { investmentPriceDate } from '@bt/shared/types/investment-market';
 import { INVESTMENT_TRANSACTION_CATEGORY } from '@bt/shared/types/investments';
 import { INVESTMENT_DECIMAL_SCALE, Money } from '@common/types/money';
 import { logger } from '@js/utils';
@@ -173,6 +174,21 @@ const getHoldingValuesImpl = async ({ portfolioId, date, userId }: GetHoldingVal
     string,
     SecurityPricing
   >;
+  if (date) {
+    const weak = prices.filter((p) => p.source === 'yahoo' && p.unadjustedClose == null);
+    if (weak.length) {
+      const originalUnitRows = await SecurityPricing.findAll({
+        where: {
+          [Op.or]: weak.map((p) => ({
+            securityId: p.securityId,
+            date: new Date(investmentPriceDate(p.priceAsOf ?? p.date, p.priceAsOf ? false : undefined) + 'T00:00:00Z'),
+          })),
+          unadjustedClose: { [Op.ne]: null },
+        },
+      });
+      for (const row of originalUnitRows) pricesBySecurityId[row.securityId] = row;
+    }
+  }
 
   // Base and display rates are resolved once per distinct holding currency below:
   // every rate lookup queries the user's currency connection before any cache,
@@ -293,10 +309,11 @@ const getHoldingValuesImpl = async ({ portfolioId, date, userId }: GetHoldingVal
     let baseRate: number | null = null;
 
     if (price) {
-      latestPrice = price.priceClose.toDecimalString(INVESTMENT_DECIMAL_SCALE);
+      const valuationPrice = price.unadjustedClose ?? price.priceClose;
+      latestPrice = valuationPrice.toDecimalString(INVESTMENT_DECIMAL_SCALE);
       priceDate = price.priceAsOf ?? price.date;
       valuationSource = price.source ?? holding.security?.providerName;
-      const priceClose = price.priceClose.toBig();
+      const priceClose = valuationPrice.toBig();
       marketValue = quantity.times(priceClose).toFixed(10);
 
       if (parseFloat(marketValue) > 0) {

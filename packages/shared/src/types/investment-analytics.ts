@@ -7,6 +7,7 @@ export interface InvestmentMetric {
   reason?: string;
 }
 export interface InvestmentClassification {
+  classificationSources?: Partial<Record<'sector' | 'industry', string>>;
   sector?: string;
   industry?: string;
   country?: string;
@@ -204,6 +205,8 @@ export interface FundCompositionProvenance {
   refreshRunAt?: string;
 }
 export interface InvestmentFundSnapshot {
+  holdingsOmitted?: boolean;
+  holdingCount?: number;
   /** Matches the held fund's InvestmentHolding.id; nested fund ids must match child snapshots. */
   fundId: string;
   symbol: string;
@@ -254,6 +257,7 @@ export interface InvestmentCategoryOverlap {
   categories: { label: string; leftWeight: string; rightWeight: string; overlapWeight: string }[];
 }
 export interface InvestmentFundOverlap {
+  detailsLoaded?: boolean;
   leftId: string;
   rightId: string;
   leftSymbol: string;

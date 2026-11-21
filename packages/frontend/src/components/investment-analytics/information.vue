@@ -37,12 +37,32 @@ defineProps<{ analytics: InvestmentAnalytics }>();
         <p v-for="method in analytics.coverage.methodology" :key="method" class="text-muted-foreground mt-2">
           {{ method }}
         </p>
-        <p class="text-muted-foreground mt-2">{{ analytics.priceRisk?.methodology }}</p>
+        <p class="text-muted-foreground mt-2">
+          {{ analytics.priceRisk?.methodology }}
+        </p>
       </details>
       <CompositionHealth :rows="analytics.composition ?? []" compact />
       <details>
+        <summary class="cursor-pointer">Company classifications</summary>
+        <p class="text-muted-foreground mt-2">
+          Issuer classifications take priority. Missing sectors and industries use cached Yahoo Finance company profiles
+          where the instrument identity is verified. Headquarters locations are never substituted for issuer countries.
+        </p>
+        <p
+          v-for="source in [
+            ...new Set(analytics.exposure.flatMap((row) => Object.values(row.classificationSources ?? {}))),
+          ]"
+          :key="source"
+          class="text-muted-foreground mt-2 break-words"
+        >
+          {{ source }}
+        </p>
+      </details>
+      <details>
         <summary class="cursor-pointer">Prices and updates</summary>
-        <p class="text-muted-foreground mt-2">{{ analytics.refresh.schedule }}</p>
+        <p class="text-muted-foreground mt-2">
+          {{ analytics.refresh.schedule }}
+        </p>
       </details>
     </div>
   </details>

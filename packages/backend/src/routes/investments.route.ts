@@ -10,6 +10,7 @@ import {
   compositionRefresh,
   compositionSchedule,
   getAnalytics,
+  getOverlapDetail,
   importFundHoldings,
 } from '@controllers/investments/analytics';
 import { getBrokerRecords, importBrokerRecords } from '@controllers/investments/broker-records';
@@ -69,6 +70,7 @@ const router = Router({});
 // endpoints enforce their own access checks.
 router.use(authenticateSession);
 router.get('/analytics', getAnalytics);
+router.get('/analytics/overlap-detail', getOverlapDetail);
 router.get('/analytics/composition', compositionCatalog);
 router.post('/analytics/composition/file', blockDemoUsers, compositionFile);
 router.post('/analytics/composition/refresh', blockDemoUsers, compositionRefresh);

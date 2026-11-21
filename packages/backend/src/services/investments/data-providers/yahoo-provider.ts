@@ -1,4 +1,9 @@
-import { easternDate, previousUsEquitySession, usEquityCloseInstant } from '@bt/shared/types/investment-market';
+import {
+  easternDate,
+  investmentPriceDate,
+  previousUsEquitySession,
+  usEquityCloseInstant,
+} from '@bt/shared/types/investment-market';
 import { SECURITY_PROVIDER, SecuritySearchResult } from '@bt/shared/types/investments';
 import { sleep } from '@common/helpers';
 import { logger } from '@js/utils';
@@ -6,6 +11,7 @@ import SecurityCurrencyCache from '@models/investments/security-currency-cache.m
 import { subYears } from 'date-fns';
 import { Op } from 'sequelize';
 import YahooFinance from 'yahoo-finance2';
+import { z } from 'zod';
 
 import {
   BaseSecurityDataProvider,
@@ -17,6 +23,7 @@ import {
   SecurityPriceFetchInput,
   toProviderSymbol,
 } from './base-provider';
+import { originalShareClose, candleCloseTime } from './yahoo/historical-close';
 import { resolveByIsinFallback } from './yahoo/isin-resolver';
 import { ISIN_PATTERN, mapYahooTypeToAssetClass, remapUcitsType, toIsoCurrency, toMajorUnit } from './yahoo/utils';
 
@@ -186,6 +193,32 @@ export class YahooDataProvider extends BaseSecurityDataProvider {
     }
   }
 
+  public async getCompanyClassifications(providerSymbol: ProviderSymbol) {
+    const raw = await this.client.quoteSummary(
+      providerSymbol,
+      { modules: ['assetProfile', 'quoteType'] },
+      { validateResult: false },
+    );
+    const parsed = z
+      .object({
+        quoteType: z.object({ symbol: z.string(), quoteType: z.string() }),
+        assetProfile: z.object({ sector: z.string().optional(), industry: z.string().optional() }).optional(),
+      })
+      .safeParse(raw);
+    if (!parsed.success) return null;
+    const result = parsed.data;
+    if (
+      result.quoteType?.symbol?.toUpperCase() !== providerSymbol.toUpperCase() ||
+      String(result.quoteType?.quoteType).toUpperCase() !== 'EQUITY'
+    )
+      return null;
+    const valid = (value: string | undefined) =>
+      value?.trim() && !/^(unknown|n\/a|-)$/i.test(value.trim()) ? value.trim() : undefined;
+    const sector = valid(result.assetProfile?.sector),
+      industry = valid(result.assetProfile?.industry);
+    return sector || industry ? { symbol: providerSymbol, sector, industry } : null;
+  }
+
   public async getHistoricalPrices(
     providerSymbol: ProviderSymbol,
     options?: HistoricalPriceOptions,
@@ -203,7 +236,7 @@ export class YahooDataProvider extends BaseSecurityDataProvider {
 
       const chartResult = await this.client.chart(providerSymbol, {
         period1: options?.interval === '5m' ? period1 : period1.toISOString().split('T')[0]!,
-        period2: options?.interval === '5m' ? period2 : period2.toISOString().split('T')[0]!,
+        period2: new Date(Math.max(period2.getTime(), Date.now())),
         ...(options?.interval && { interval: options.interval }),
       });
 
@@ -213,14 +246,33 @@ export class YahooDataProvider extends BaseSecurityDataProvider {
 
       const results: PriceData[] = [];
       const currency = chartResult.meta?.currency;
+      const splits = Object.values(chartResult.events?.splits ?? {});
+      const dailyBar = chartResult.meta?.dataGranularity !== '5m';
+      const usSession =
+        currency === 'USD' &&
+        ['NMS', 'NGM', 'NCM', 'NYQ', 'PCX', 'ASE', 'BTS', 'PNK', 'OBB', 'NAS'].includes(
+          chartResult.meta?.exchangeName ?? '',
+        );
       for (const q of chartResult.quotes) {
         if (q.close == null) continue;
+        if (endDate && new Date(q.date).getTime() >= endDate.getTime()) continue;
+        if (
+          dailyBar &&
+          usSession &&
+          investmentPriceDate(new Date(q.date)) === easternDate() &&
+          Date.now() < usEquityCloseInstant(easternDate())
+        )
+          continue;
+        const date = dailyBar ? new Date(q.date) : candleCloseTime(new Date(q.date), usSession);
+        if (!date) continue;
 
         results.push({
           providerSymbol,
-          date: new Date(q.date),
-          priceClose: toMajorUnit({ price: q.adjclose ?? q.close, currency }),
-          priceAsOf: new Date(q.date),
+          date,
+          priceClose: toMajorUnit({ price: q.close, currency }),
+          unadjustedClose: toMajorUnit({ price: originalShareClose(q.close, new Date(q.date), splits), currency }),
+          dailyBar,
+          priceAsOf: date,
           providerName: SECURITY_PROVIDER.yahoo,
         });
       }

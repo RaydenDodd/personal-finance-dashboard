@@ -33,7 +33,16 @@ export function positionPeriodReturns(input: {
   dates: Record<string, string>;
   through?: string;
   openingValue: (portfolioId: string, securityId: string, date: string) => string | null;
-  trades: { securityId: string; portfolioId: string; date: string; category: string; amount: string }[];
+  positionQuantity?: (portfolioId: string, securityId: string, date: string) => string | null;
+  shareUnitFactor?: (securityId: string, date: string) => number;
+  trades: {
+    securityId: string;
+    portfolioId: string;
+    date: string;
+    category: string;
+    amount: string;
+    quantity?: string;
+  }[];
 }) {
   const result: NonNullable<InvestmentHolding['personalReturns']> = {};
   const h = input.holding;
@@ -57,13 +66,37 @@ export function positionPeriodReturns(input: {
     let net = new Big(0),
       buys = new Big(0),
       income = new Big(0);
-    for (const t of input.trades.filter(
+    const periodTrades = input.trades.filter(
       (t) =>
         t.securityId === h.securityId &&
         h.accounts.some((a) => a.portfolioId === t.portfolioId) &&
         t.date > date &&
         (period !== 'custom' || !input.through || t.date <= input.through),
-    )) {
+    );
+    if (input.positionQuantity) {
+      const matches = h.accounts.every((a) => {
+        const start = input.positionQuantity!(a.portfolioId, h.securityId, date);
+        const end =
+          period === 'custom' && input.through
+            ? input.positionQuantity!(a.portfolioId, h.securityId, input.through)
+            : a.quantity;
+        if (start == null || end == null) return false;
+        let expected = new Big(start);
+        for (const t of periodTrades.filter(
+          (t) => t.portfolioId === a.portfolioId && (t.category === 'buy' || t.category === 'sell'),
+        )) {
+          if (t.quantity == null) return false;
+          const quantity = new Big(t.quantity).times(input.shareUnitFactor?.(h.securityId, t.date) ?? 1);
+          expected = t.category === 'buy' ? expected.plus(quantity) : expected.minus(quantity);
+        }
+        return expected.minus(end).abs().lte(new Big(end).abs().plus(1).times('0.000000001'));
+      });
+      if (!matches) {
+        result[key] = null;
+        continue;
+      }
+    }
+    for (const t of periodTrades) {
       if (t.category === 'buy') {
         net = net.plus(t.amount);
         buys = buys.plus(t.amount);

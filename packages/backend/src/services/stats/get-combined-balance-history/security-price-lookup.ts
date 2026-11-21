@@ -7,6 +7,9 @@ import { formatDateKey } from './types';
 // string; Money is still allowed for hydrated callers (unit tests).
 type SecurityPriceRow = Pick<SecurityPricing, 'securityId' | 'date'> & {
   priceClose: Money | string;
+  unadjustedClose?: Money | string | null;
+  source?: string | null;
+  priceAsOf?: Date | string | null;
 };
 
 interface PriceLookup {
@@ -24,14 +27,63 @@ interface PriceLookup {
  * binary-search fallback; last-write-wins on the exact-match map then picks the
  * latest intraday close for that day.
  */
-export const buildPriceLookup = (rows: SecurityPriceRow[]): PriceLookup => {
+export function createShareUnitFactor(
+  rows: SecurityPriceRow[],
+  dateKey: (date: Date | string, dateOnly?: boolean) => string = formatDateKey,
+) {
+  const maps = new Map<string, Map<string, number>>();
+  const ordered = [...rows.filter((p) => !!p.priceAsOf), ...rows.filter((p) => !p.priceAsOf)];
+  for (const p of ordered) {
+    if (p.unadjustedClose == null || p.source !== 'yahoo') continue;
+    const close = Money.isMoney(p.priceClose) ? p.priceClose.toNumber() : Number(p.priceClose);
+    const raw = Money.isMoney(p.unadjustedClose) ? p.unadjustedClose.toNumber() : Number(p.unadjustedClose);
+    if (close <= 0 || raw <= 0) continue;
+    const map = maps.get(p.securityId) ?? new Map<string, number>();
+    map.set(dateKey(p.priceAsOf ?? p.date, p.priceAsOf ? false : undefined), raw / close);
+    maps.set(p.securityId, map);
+  }
+  const arrays = new Map([...maps].map(([id, map]) => [id, [...map].sort(([a], [b]) => a.localeCompare(b))]));
+  return (id: string, day: string) => {
+    const exact = maps.get(id)?.get(day);
+    if (exact !== undefined) return exact;
+    const entries = arrays.get(id);
+    if (!entries) return 1;
+    let lo = 0,
+      hi = entries.length - 1,
+      result = 1;
+    while (lo <= hi) {
+      const mid = (lo + hi) >>> 1;
+      if (entries[mid]![0] <= day) {
+        result = entries[mid]![1];
+        lo = mid + 1;
+      } else hi = mid - 1;
+    }
+    return result;
+  };
+}
+export const buildPriceLookup = (
+  rows: SecurityPriceRow[],
+  dateKey: (date: Date | string, dateOnly?: boolean) => string = formatDateKey,
+  currentShareUnits = false,
+): PriceLookup => {
   const pricesBySecurity = new Map<string, Array<{ date: string; price: number }>>();
   const pricesBySecurityAndDate = new Map<string, number>();
 
+  const rawDays = new Set(
+    rows
+      .filter((p) => p.unadjustedClose != null)
+      .map((p) => `${p.securityId}_${dateKey(p.priceAsOf ?? p.date, p.priceAsOf ? false : undefined)}`),
+  );
+  const unitFactor = currentShareUnits ? createShareUnitFactor(rows, dateKey) : null;
   for (const price of rows) {
-    const dateStr = formatDateKey(price.date);
+    const dateStr = dateKey(price.priceAsOf ?? price.date, price.priceAsOf ? false : undefined);
+    if (price.unadjustedClose == null && price.source === 'yahoo' && rawDays.has(`${price.securityId}_${dateStr}`))
+      continue;
     // Raw rows carry priceClose as a decimal string; hydrated callers pass Money.
-    const priceValue = Money.isMoney(price.priceClose) ? price.priceClose.toNumber() : Number(price.priceClose);
+    const value = price.unadjustedClose ?? price.priceClose;
+    const rawValue = Money.isMoney(value) ? value.toNumber() : Number(value);
+    const priceValue =
+      currentShareUnits && price.unadjustedClose != null ? rawValue / unitFactor!(price.securityId, dateStr) : rawValue;
 
     if (!pricesBySecurity.has(price.securityId)) {
       pricesBySecurity.set(price.securityId, []);

@@ -10,8 +10,9 @@ import { dataProviderFactory } from '@services/investments/data-providers';
 import { PriceData, toProviderSymbol } from '@services/investments/data-providers/base-provider';
 import { fetchCoinbaseHistory } from '@services/investments/data-providers/coinbase-quotes';
 import { subYears, subDays } from 'date-fns';
+import { Op } from 'sequelize';
 
-import { bucketByUtcDay } from './pricing-anchor';
+import { bucketByUtcDay, startOfDayUtc } from './pricing-anchor';
 
 // CoinGecko Demo tier only serves up to 1 year of history. Stocks (Yahoo etc.)
 // happily go back further, so keep the longer backfill for them. Extending the
@@ -35,6 +36,8 @@ const syncHistoricalPricesImpl = async (securityId: string, intraday = false): P
     // transactions establish that the instrument is needed further back.
     const firstTrade = await InvestmentTransaction.min('date', { where: { securityId } });
     if (firstTrade && new Date(String(firstTrade)) < startDate) startDate = new Date(String(firstTrade));
+    const firstStored = await SecurityPricing.min('date', { where: { securityId } });
+    if (firstStored && new Date(String(firstStored)) < startDate) startDate = new Date(String(firstStored));
   }
 
   // Use composite provider which automatically handles US vs non-US routing and fallbacks
@@ -76,7 +79,7 @@ const syncHistoricalPricesImpl = async (securityId: string, intraday = false): P
           assetClass: security.assetClass,
         },
         startDate,
-        prices.length ? firstReturned : endDate,
+        prices.length ? new Date(firstReturned.getTime() - 1) : endDate,
         intraday ? 3600 : 86400,
       );
       prices = [...older, ...prices].sort((a, b) => a.date.getTime() - b.date.getTime());
@@ -97,18 +100,33 @@ const syncHistoricalPricesImpl = async (securityId: string, intraday = false): P
     return { count: 0 };
   }
 
-  const dailyPrices = intraday ? prices : bucketByUtcDay(prices);
+  const dailyPrices = intraday
+    ? prices.map((p) => (p.dailyBar ? { ...p, date: startOfDayUtc(p.date) } : p))
+    : bucketByUtcDay(prices);
 
   const pricesToCreate = dailyPrices.map((price) => ({
     securityId: security.id,
     date: price.date,
     priceClose: price.priceClose.toString(),
-    ...(intraday && { priceAsOf: price.priceAsOf }),
+    unadjustedClose:
+      price.unadjustedClose?.toString() ??
+      (security.assetClass === ASSET_CLASS.crypto ? price.priceClose.toString() : null),
+    priceAsOf: (intraday && !price.dailyBar) || security.assetClass === ASSET_CLASS.crypto ? price.priceAsOf : null,
     source: price.providerName,
   }));
 
-  await SecurityPricing.bulkCreate(pricesToCreate, {
-    ignoreDuplicates: true, // Don't error if a price for a specific date already exists
+  const existing = await SecurityPricing.findAll({
+    where: { securityId, date: { [Op.in]: pricesToCreate.map((p) => p.date) } },
+    attributes: ['date', 'source', 'priceAsOf'],
+    raw: true,
+  });
+  const existingByDate = new Map(existing.map((p) => [new Date(p.date).toISOString(), p]));
+  const editable = pricesToCreate.filter((p) => {
+    const prior = existingByDate.get(p.date.toISOString());
+    return !prior || (prior.source === p.source && (p.priceAsOf !== null || !prior.priceAsOf));
+  });
+  await SecurityPricing.bulkCreate(editable, {
+    updateOnDuplicate: ['priceClose', 'unadjustedClose', 'priceAsOf', 'source'],
   });
 
   // Update the main security record
@@ -117,7 +135,7 @@ const syncHistoricalPricesImpl = async (securityId: string, intraday = false): P
 
   logger.info(
     `Submitted ${dailyPrices.length} historical price points (bucketed from ${prices.length} provider points; ` +
-      `existing rows were skipped via ignoreDuplicates) for ${security.symbol ?? security.providerSymbol}.`,
+      `provider rows were repaired idempotently; manual sources retained) for ${security.symbol ?? security.providerSymbol}.`,
   );
   return { count: dailyPrices.length };
 };

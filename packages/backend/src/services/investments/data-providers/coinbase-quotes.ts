@@ -55,13 +55,15 @@ export async function fetchCoinbaseHistory(
         close <= 0
       )
         continue;
-      const date = new Date(time);
+      const date = new Date(granularity === 86400 ? time : time + bucketMs);
       points.set(time, {
         providerSymbol: input.providerSymbol,
         providerName: SECURITY_PROVIDER.coinbase,
         date,
-        priceAsOf: date,
+        priceAsOf: new Date(time + bucketMs),
         priceClose: close,
+        unadjustedClose: close,
+        dailyBar: granularity === 86400,
       });
     }
     await new Promise((resolve) => setTimeout(resolve, 400));

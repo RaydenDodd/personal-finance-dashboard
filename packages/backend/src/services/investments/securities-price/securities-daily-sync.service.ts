@@ -1,5 +1,5 @@
 import { ASSET_CLASS, SECURITY_PROVIDER } from '@bt/shared/types';
-import { usEquityMarketOpen } from '@bt/shared/types/investment-market';
+import { usEquityMarketOpen, easternDate, investmentPriceDate } from '@bt/shared/types/investment-market';
 import { logger } from '@js/utils';
 import Holdings from '@models/investments/holdings.model';
 import Portfolios from '@models/investments/portfolios.model';
@@ -11,6 +11,7 @@ import { sseManager, SSE_EVENT_TYPES } from '@services/common/sse';
 import { subDays } from 'date-fns';
 import { Op, WhereOptions } from 'sequelize';
 
+import { refreshCompanyClassifications } from '../company-classifications';
 import { dataProviderFactory } from '../data-providers';
 import { BulkPriceData, toProviderSymbol } from '../data-providers/base-provider';
 import { fetchCoinbaseQuotes } from '../data-providers/coinbase-quotes';
@@ -220,6 +221,8 @@ const securitiesPricesSyncImpl = async (options: SyncOptions): Promise<Securitie
     securityId: string;
     date: Date;
     priceClose: string;
+    unadjustedClose: string | null;
+    previousClose: { date: string; price: string } | null;
     priceAsOf: Date | null;
     source: SECURITY_PROVIDER | undefined;
   }[] = [];
@@ -244,23 +247,18 @@ const securitiesPricesSyncImpl = async (options: SyncOptions): Promise<Securitie
         securityId,
         date: priceData.date,
         priceClose: priceData.priceClose.toString(),
+        unadjustedClose:
+          priceData.unadjustedClose?.toString() ??
+          (label === 'crypto-hourly' ||
+          (currentQuotes && investmentPriceDate(priceData.priceAsOf, false) === easternDate())
+            ? priceData.priceClose.toString()
+            : null),
+        previousClose: priceData.previousClose
+          ? { date: priceData.previousClose.date.toISOString(), price: priceData.previousClose.price.toString() }
+          : null,
         priceAsOf: currentQuotes || label === 'crypto-hourly' ? priceData.priceAsOf : null,
         source: priceData.providerName,
       });
-      if (
-        currentQuotes &&
-        priceData.previousClose &&
-        Number.isFinite(priceData.previousClose.price) &&
-        priceData.previousClose.price > 0
-      ) {
-        securityPricesToUpsert.push({
-          securityId,
-          date: priceData.previousClose.date,
-          priceClose: priceData.previousClose.price.toString(),
-          priceAsOf: priceData.previousClose.date,
-          source: priceData.providerName,
-        });
-      }
     }
 
     securitiesIdsToPatch.push(securityId);
@@ -289,9 +287,16 @@ const securitiesPricesSyncImpl = async (options: SyncOptions): Promise<Securitie
       // validator with "createdAt cannot be null". The DB still enforces
       // NOT NULL at INSERT and the Money setter validates priceClose, so
       // dropping app-layer validation loses no real coverage.
-      await SecurityPricing.bulkCreate(securityPricesToUpsert, {
-        updateOnDuplicate: ['priceClose', 'source', 'priceAsOf'],
-      });
+      const rawKnown = securityPricesToUpsert.filter((p) => p.unadjustedClose !== null);
+      const rawUnknown = securityPricesToUpsert.filter((p) => p.unadjustedClose === null);
+      if (rawKnown.length)
+        await SecurityPricing.bulkCreate(rawKnown, {
+          updateOnDuplicate: ['priceClose', 'unadjustedClose', 'previousClose', 'source', 'priceAsOf'],
+        });
+      if (rawUnknown.length)
+        await SecurityPricing.bulkCreate(rawUnknown, {
+          updateOnDuplicate: ['priceClose', 'previousClose', 'source', 'priceAsOf'],
+        });
 
       result.successfulUpdates = fetchedSecuritiesCount;
       logger.info(
@@ -310,7 +315,8 @@ const securitiesPricesSyncImpl = async (options: SyncOptions): Promise<Securitie
       const failedBySecurityId = new Map<string, string>();
       for (const priceData of securityPricesToUpsert) {
         try {
-          await SecurityPricing.upsert(priceData);
+          const { unadjustedClose, ...rest } = priceData;
+          await SecurityPricing.upsert(unadjustedClose === null ? rest : priceData);
         } catch (individualError) {
           failedPricesUpdates.push(priceData);
 
@@ -412,6 +418,13 @@ const securitiesPricesSyncImpl = async (options: SyncOptions): Promise<Securitie
     );
   }
 
+  if (label !== 'crypto-hourly') {
+    try {
+      await refreshCompanyClassifications(securitiesFromDb);
+    } catch {
+      logger.info('Company classification refresh incomplete; retained cached classifications.');
+    }
+  }
   if (result.successfulUpdates > 0) {
     try {
       const positions = await Holdings.findAll({

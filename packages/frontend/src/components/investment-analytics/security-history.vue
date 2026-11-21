@@ -14,12 +14,26 @@ const open = defineModel<boolean>({ default: false });
 const props = defineProps<{
   holding: Pick<InvestmentHolding, 'id' | 'symbol' | 'name' | 'securityType' | 'priceDate' | 'currencyCode'>;
 }>();
-type Quote = { date: string; priceAsOf: string | null; priceClose: number; source: string | null };
+type Quote = {
+  date: string;
+  priceAsOf: string | null;
+  priceClose: number;
+  graphPriceClose?: string | null;
+  source: string | null;
+};
 const query = useQuery({
   queryKey: computed(() => ['investment-security-prices', props.holding.id]),
   queryFn: async () => {
-    const result = await api.get('/investments/prices', { securityId: props.holding.id });
-    return [...((result.data ?? result) as Quote[])].sort((a, b) => a.date.localeCompare(b.date));
+    const result = await api.get('/investments/prices', {
+      securityId: props.holding.id,
+    });
+    return [...((result.data ?? result) as Quote[])]
+      .filter((p) => p.graphPriceClose !== null)
+      .map((p) => ({
+        ...p,
+        priceClose: Number(p.graphPriceClose ?? p.priceClose),
+      }))
+      .sort((a, b) => a.date.localeCompare(b.date));
   },
   enabled: () => open.value,
   staleTime: 300000,
@@ -33,7 +47,7 @@ const latestObservation = computed(() => query.data.value?.at(-1));
 const range = ref<PayrollRange>(payrollRange('1y'));
 const points = computed(() => {
   const rows = (query.data.value ?? []).filter((p) => {
-    const day = investmentPriceDate(p.date);
+    const day = investmentPriceDate(p.priceAsOf ?? p.date, p.priceAsOf ? false : undefined);
     return day >= range.value.from && day <= range.value.through;
   });
   const intraday = ['1d', '1w'].includes(range.value.preset) && rows.filter((p) => p.priceAsOf).length > 2;
@@ -46,7 +60,11 @@ const points = computed(() => {
         note: `${p.source ?? 'Stored market data'} · actual recorded observation`,
       }));
   const daily = new Map<string, Quote>();
-  for (const p of rows) daily.set(investmentPriceDate(p.date), p);
+  for (const p of rows) {
+    const key = investmentPriceDate(p.priceAsOf ?? p.date, p.priceAsOf ? false : undefined);
+    const isToday = key === investmentPriceDate(new Date(), false);
+    if (!daily.has(key) || (isToday ? !!p.priceAsOf : !p.priceAsOf || !!daily.get(key)?.priceAsOf)) daily.set(key, p);
+  }
   return [...daily].map(([date, p]) => ({
     date,
     values: { price: p.priceClose },
@@ -78,7 +96,13 @@ const points = computed(() => {
           <SeriesChart
             v-else
             :points="points"
-            :series="[{ key: 'price', label: holding.symbol + ' · unit price', color: 'var(--primary)' }]"
+            :series="[
+              {
+                key: 'price',
+                label: holding.symbol + ' · unit price',
+                color: 'var(--primary)',
+              },
+            ]"
             :currency-code="holding.currencyCode"
             :label="holding.symbol + ' recorded price history'"
           />

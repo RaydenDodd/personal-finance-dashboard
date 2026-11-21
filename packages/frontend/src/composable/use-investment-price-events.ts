@@ -13,6 +13,7 @@ export function useInvestmentPriceEvents() {
     () =>
       Promise.all([
         client.invalidateQueries({ queryKey: ['investment-analytics'] }),
+        client.invalidateQueries({ queryKey: ['investment-overlap'] }),
         client.invalidateQueries({ queryKey: ['investment-security-prices'] }),
         client.invalidateQueries({ queryKey: VUE_QUERY_CACHE_KEYS.holdingsList.slice(0, 1) }),
       ]),

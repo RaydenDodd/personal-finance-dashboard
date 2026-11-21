@@ -1,6 +1,8 @@
 import { SecurityModel } from './security.model';
 
 export interface SecurityPricingModel {
+  unadjustedClose?: string | null;
+  previousClose?: { date: string; price: string } | null;
   id: string; // PR
 
   securityId: string;

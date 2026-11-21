@@ -412,6 +412,7 @@ function categoryOverlap(
 export function fundOverlap(
   snapshots: InvestmentFundSnapshot[],
   holdings: InvestmentHolding[],
+  options?: { includeDetails?: boolean; pair?: [string, string] },
 ): InvestmentFundOverlap[] {
   const result: InvestmentFundOverlap[] = [];
   const active = holdings.filter((h) => h.isFund);
@@ -459,26 +460,32 @@ export function fundOverlap(
       const leftById = new Map(leftRows.map((row) => [row.id, row]));
       const rightById = new Map(rightRows.map((row) => [row.id, row]));
       const shared: InvestmentFundOverlap['shared'] = [];
+      const includeDetails =
+        options?.includeDetails !== false ||
+        Boolean(options?.pair?.includes(left.id) && options?.pair?.includes(right.id));
+      let sharedCount = 0;
       let overlap = new Big(0);
       for (const ah of leftRows) {
         const bh = rightById.get(ah.id);
         if (!bh) continue;
         overlap = overlap.plus(new Big(ah.totalValue).lt(bh.totalValue) ? ah.totalValue : bh.totalValue);
-        shared.push({
-          id: ah.id,
-          symbol: ah.symbol,
-          name: ah.name,
-          leftWeight: ah.totalValue,
-          rightWeight: bh.totalValue,
-          combinedValue:
-            left.marketValue === null || right.marketValue === null
-              ? null
-              : new Big(left.marketValue)
-                  .times(ah.totalValue)
-                  .plus(new Big(right.marketValue).times(bh.totalValue))
-                  .div(100)
-                  .toString(),
-        });
+        sharedCount++;
+        if (includeDetails)
+          shared.push({
+            id: ah.id,
+            symbol: ah.symbol,
+            name: ah.name,
+            leftWeight: ah.totalValue,
+            rightWeight: bh.totalValue,
+            combinedValue:
+              left.marketValue === null || right.marketValue === null
+                ? null
+                : new Big(left.marketValue)
+                    .times(ah.totalValue)
+                    .plus(new Big(right.marketValue).times(bh.totalValue))
+                    .div(100)
+                    .toString(),
+          });
       }
       result.push({
         leftId: left.id,
@@ -486,7 +493,8 @@ export function fundOverlap(
         leftSymbol: left.symbol,
         rightSymbol: right.symbol,
         weightedOverlap: a && b ? overlap.toString() : null,
-        sharedCount: shared.length,
+        sharedCount,
+        detailsLoaded: includeDetails,
         coverage:
           !a || !b
             ? 'unavailable'
@@ -509,7 +517,7 @@ export function fundOverlap(
               ? { reason: 'Composition weights are known; dollar exposures require both fund position valuations.' }
               : {}),
         leftUnique:
-          a && b
+          includeDetails && a && b
             ? leftRows
                 .filter((row) => !rightById.has(row.id))
                 .map((row) => ({
@@ -524,7 +532,7 @@ export function fundOverlap(
                 }))
             : [],
         rightUnique:
-          a && b
+          includeDetails && a && b
             ? rightRows
                 .filter((row) => !leftById.has(row.id))
                 .map((row) => ({

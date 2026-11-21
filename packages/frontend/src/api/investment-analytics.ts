@@ -1,6 +1,7 @@
 import { api } from '@/api/_api';
 import type {
   FundCompositionStatus,
+  InvestmentFundOverlap,
   InvestmentAnalytics,
   InvestmentFundSnapshot,
 } from '@bt/shared/types/investment-analytics';
@@ -19,6 +20,7 @@ export async function getInvestmentAnalytics({
   const response = await api.get('/investments/analytics', {
     portfolioIds: portfolioIds.join(','),
     benchmarkSymbols: benchmarks.join(','),
+    compact: true,
     performanceFrom,
     performanceThrough,
   });
@@ -27,6 +29,18 @@ export async function getInvestmentAnalytics({
 
 export async function importFundHoldings(snapshots: InvestmentFundSnapshot[]): Promise<void> {
   await api.post('/investments/analytics/fund-holdings', { snapshots });
+}
+export async function getInvestmentOverlapDetail(
+  leftId: string,
+  rightId: string,
+  portfolioIds: string[],
+): Promise<InvestmentFundOverlap> {
+  const result = await api.get('/investments/analytics/overlap-detail', {
+    leftId,
+    rightId,
+    portfolioIds: portfolioIds.join(','),
+  });
+  return result.data ?? result;
 }
 
 export async function refreshInvestmentPrices(): Promise<void> {

@@ -28,6 +28,7 @@ function createPricesSyncController(ownerScoped = false) {
         .object({
           historical: z.boolean().optional(),
           intraday: z.boolean().optional(),
+          daily: z.boolean().optional(),
           securityIds: z.array(z.string().uuid()).max(100).optional(),
           benchmarkSymbols: z
             .array(z.string().regex(/^[A-Z0-9.^=-]{1,30}$/))
@@ -74,7 +75,7 @@ function createPricesSyncController(ownerScoped = false) {
         const results: { securityId: string; ok: boolean; count: number }[] = [];
         for (const securityId of ids) {
           try {
-            if (body.intraday && (await SecurityPricing.count({ where: { securityId } })) < 30)
+            if (body.intraday && (body.daily || (await SecurityPricing.count({ where: { securityId } })) < 30))
               await syncHistoricalPrices(securityId);
             results.push({
               securityId,

@@ -4,6 +4,7 @@ import { InvestmentTransactionModel } from './investment-transaction.model';
 import { SecurityPricingModel } from './security-pricing.model';
 
 export interface SecurityModel {
+  companyClassifications?: CompanyClassifications | null;
   id: string;
   /**
    * The name of the security, typically the official name of the stock, bond,
@@ -137,6 +138,17 @@ export interface SecurityModel {
   holdings?: HoldingModel[];
   investmentTransactions?: InvestmentTransactionModel[];
   pricing?: SecurityPricingModel[];
+}
+
+/** Public descriptive metadata, separate from issuer-country and financial records. */
+export interface CompanyClassifications {
+  source: 'Yahoo Finance';
+  sourceUrl: string;
+  providerSymbol: string;
+  observedAt: string | null;
+  lastAttemptAt: string;
+  sector?: string;
+  industry?: string;
 }
 
 /**

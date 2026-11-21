@@ -1,4 +1,5 @@
 import type { InvestmentFundOverlap } from '@bt/shared/types/investment-analytics';
+import { QueryClient, VueQueryPlugin } from '@tanstack/vue-query';
 // @vitest-environment jsdom
 import { mount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
@@ -43,7 +44,13 @@ const fixture = (): InvestmentFundOverlap => ({
     categories: [{ label: 'United States', leftWeight: '20', rightWeight: '15', overlapWeight: '15' }],
   },
 });
-const open = (pair = fixture()) => mount(OverlapDetails, { props: { pair, currencyCode: 'USD' } });
+const open = (pair = fixture()) =>
+  mount(OverlapDetails, {
+    props: { pair, currencyCode: 'USD' },
+    global: {
+      plugins: [[VueQueryPlugin, { queryClient: new QueryClient({ defaultOptions: { queries: { retry: false } } }) }]],
+    },
+  });
 const choose = (wrapper: ReturnType<typeof open>, label: string) =>
   wrapper
     .findAll('button')
