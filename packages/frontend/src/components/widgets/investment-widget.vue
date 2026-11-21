@@ -26,7 +26,7 @@ const fullPage = inject('investment-full-page', false);
 provide(
   'investment-chart-height',
   computed(() => {
-    const base = fullPage ? 288 : 208;
+    const base = kind.value === 'heatmap' ? (fullPage ? 380 : 340) : fullPage ? 288 : 208;
     return base + Math.max(0, (widget.value.rowSpan ?? 1) - 1) * 180;
   }),
 );

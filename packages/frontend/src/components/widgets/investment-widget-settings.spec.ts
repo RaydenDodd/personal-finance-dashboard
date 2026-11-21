@@ -45,7 +45,7 @@ describe('investment widget settings controls', () => {
   });
 
   it('validates custom dates and retains exact recorded period selections', async () => {
-    const wrapper = create();
+    const wrapper = create('benchmark');
     await wrapper.get('select[aria-label="Widget date range"]').setValue('custom');
     await wrapper.get('form').trigger('submit');
     expect(wrapper.emitted('save')).toBeUndefined();
@@ -65,7 +65,7 @@ describe('investment widget settings controls', () => {
   });
 
   it('clears dates belonging to an earlier period when a different preset is selected', async () => {
-    const wrapper = create('allocation', { dateRange: '1Y', from: '2024-01-01', through: '2024-12-31' });
+    const wrapper = create('benchmark', { dateRange: '1Y', from: '2024-01-01', through: '2024-12-31' });
     await wrapper.get('select[aria-label="Widget date range"]').setValue('MAX');
     await wrapper.get('form').trigger('submit');
     const saved = wrapper.emitted('save')![0]![0] as Record<string, unknown>;

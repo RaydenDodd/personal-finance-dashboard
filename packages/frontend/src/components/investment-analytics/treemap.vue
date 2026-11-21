@@ -19,7 +19,7 @@ const money = (value: number | null, currency = props.analytics.currencyCode) =>
 const rows = computed(() => investmentTreemapRows(props.analytics, props.settings));
 const chartWidth = ref(0);
 const height = computed(() =>
-  Math.max(props.compact ? 300 : 380, Math.min(900, chartWidth.value * 0.8), chartHeight?.value ?? 0),
+  Math.max(props.compact ? 300 : 380, Math.min(900, chartWidth.value * 0.8, chartHeight?.value ?? 900)),
 );
 const averages = computed(() => {
   const eligible = visible.value.filter((row) => row.change !== null);
