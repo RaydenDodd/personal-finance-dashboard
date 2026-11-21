@@ -1,5 +1,5 @@
 import type { InvestmentAnalytics, InvestmentPortfolio, InvestmentMetric } from '@bt/shared/types/investment-analytics';
-import { previousUsEquitySession } from '@bt/shared/types/investment-market';
+import { easternDate, previousUsEquitySession } from '@bt/shared/types/investment-market';
 import { principalFor } from '@services/personal-finance/calculations';
 import { matchPrincipalEvidence } from '@services/personal-finance/principal-matching';
 import type { FinanceAccount, FinanceCashFlow } from '@services/personal-finance/types';
@@ -36,6 +36,7 @@ export interface GainInput {
 }
 const total = (values: (string | null | undefined)[]) =>
   values.reduce<Big>((n, v) => (v == null ? n : n.plus(v)), new Big(0)).toString();
+const valuationDate = (value: string) => (value.includes('T') ? easternDate(new Date(value)) : value);
 
 /** Read-only reconciliation of existing principal, cash-flow and valuation evidence. */
 export function reconcileAccountGains(input: GainInput): NonNullable<InvestmentAnalytics['accountValueAdjustments']> {
@@ -98,7 +99,7 @@ export function reconcileAccountGains(input: GainInput): NonNullable<InvestmentA
     c.valueSource = p.marketValue == null ? 'Priced holdings + recorded cash' : 'Native portfolio valuation';
     c.valueAsOf = c.valueAsOf ?? p.observationDate ?? latest?.date ?? today;
     c.estimated = p.marketValue == null || principal?.knownPrincipal == null || !!principal?.principalEstimated;
-    const currentReported = latest && !cashOnly && latest.date >= c.valueAsOf.slice(0, 10);
+    const currentReported = latest && !cashOnly && latest.date >= valuationDate(c.valueAsOf);
     if (currentReported) {
       c.currentValue = latest.value;
       c.valueSource = latest.source || 'Reported account total';
@@ -224,8 +225,8 @@ export function reconcileAccountGains(input: GainInput): NonNullable<InvestmentA
       c.daily = {
         currentValue: c.currentValue,
         previousValue: new Big(c.currentValue).minus(c.dailyChange).toString(),
-        currentDate: c.valueAsOf.slice(0, 10),
-        previousDate: previousUsEquitySession(c.valueAsOf.slice(0, 10)),
+        currentDate: valuationDate(c.valueAsOf),
+        previousDate: previousUsEquitySession(valuationDate(c.valueAsOf)),
         deposits: '0',
         withdrawals: '0',
         change: c.dailyChange,
@@ -242,7 +243,7 @@ export function reconcileAccountGains(input: GainInput): NonNullable<InvestmentA
   if (combined && m1All.length && m1.length === m1All.length && m1.every((p) => p.currencyCode === 'USD')) {
     const componentsValue = total(m1.map((p) => p.calculation!.currentValue));
     const adjustment: (typeof adjustments)[number] = {
-      applied: m1.every((p) => combined.date >= (p.calculation!.valueAsOf ?? today).slice(0, 10)),
+      applied: m1.every((p) => combined.date >= valuationDate(p.calculation!.valueAsOf ?? today)),
       label: 'M1 combined account reconciliation',
       portfolioIds: m1.map((p) => p.id),
       value: combined.value,

@@ -183,4 +183,18 @@ describe('reconciled account gains', () => {
     expect(adjustments[0]!.applied).toBe(false);
     expect(x.metrics.marketValue!.value).toBe('1000');
   });
+  it('matches a Friday evening quote to its Eastern valuation date, not UTC Saturday', () => {
+    const a = account();
+    a.nativeAccountIds = ['native'];
+    const x = input(portfolio(), a);
+    x.portfolios[0]!.calculation!.valueAsOf = '2026-11-21T00:59:59.000Z';
+    x.sources.valuations = [
+      { accountId: 'native', name: a.name, date: '2026-11-19', value: '1000', source: 'provider' },
+      { accountId: 'native', name: a.name, date: '2026-11-20', value: '1010', source: 'provider' },
+    ];
+    reconcileAccountGains(x);
+    expect(x.portfolios[0]!.calculation!.currentValue).toBe('1010');
+    expect(x.portfolios[0]!.calculation!.daily!.estimated).toBe(false);
+    expect(x.portfolios[0]!.calculation!.daily!.currentDate).toBe('2026-11-20');
+  });
 });

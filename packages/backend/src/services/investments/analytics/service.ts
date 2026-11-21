@@ -1133,7 +1133,7 @@ async function getAnalyticsImpl({
           accountId: `portfolio:${b.portfolioId}`,
           portfolioId: b.portfolioId,
           name: portfolioById.get(b.portfolioId)?.name ?? '',
-          date: s.asOf.slice(0, 10),
+          date: easternDate(new Date(s.asOf)),
           value: s.totalValue!,
           source: s.source,
         })),
