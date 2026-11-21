@@ -5,7 +5,7 @@ import { formatDateKey } from './types';
 
 // Loaded via raw SQL (no Money hydration), so priceClose is a raw DECIMAL
 // string; Money is still allowed for hydrated callers (unit tests).
-type SecurityPriceRow = Pick<SecurityPricing, 'securityId' | 'date'> & {
+export type SecurityPriceRow = Pick<SecurityPricing, 'securityId' | 'date'> & {
   priceClose: Money | string;
   unadjustedClose?: Money | string | null;
   source?: string | null;

@@ -19,8 +19,16 @@ const easternHourFormatter = new Intl.DateTimeFormat('en-US', {
   hourCycle: 'h23',
   hour: '2-digit',
 });
+const easternDateCache = new Map<number, string>();
 export function easternDate(date = new Date()): string {
-  return easternDateFormatter.format(date);
+  const minute = Math.floor(date.getTime() / 60000);
+  let value = easternDateCache.get(minute);
+  if (value === undefined) {
+    value = easternDateFormatter.format(date);
+    if (easternDateCache.size >= 10000) easternDateCache.delete(easternDateCache.keys().next().value!);
+    easternDateCache.set(minute, value);
+  }
+  return value;
 }
 const dayKey = (date: Date) => date.toISOString().slice(0, 10);
 function nthWeekday(year: number, month: number, weekday: number, nth: number) {
@@ -100,10 +108,15 @@ export function latestUsEquitySessionDate(date = easternDate()) {
 }
 
 /** Scheduled close, rather than the time a later quote request retrieved it. */
+const closeInstantCache = new Map<string, number>();
 export function usEquityCloseInstant(date: string) {
+  const cached = closeInstantCache.get(date);
+  if (cached !== undefined) return cached;
   const noon = new Date(date + 'T12:00:00Z');
   const easternHour = Number(easternHourFormatter.format(noon));
-  return (
-    new Date(date + 'T00:00:00Z').getTime() + (usEquitySession(date).closeMinute + (12 - easternHour) * 60) * 60000
-  );
+  const result =
+    new Date(date + 'T00:00:00Z').getTime() + (usEquitySession(date).closeMinute + (12 - easternHour) * 60) * 60000;
+  if (closeInstantCache.size >= 4096) closeInstantCache.delete(closeInstantCache.keys().next().value!);
+  closeInstantCache.set(date, result);
+  return result;
 }

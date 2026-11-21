@@ -4,7 +4,6 @@ import type BrokerPortfolioData from '@models/investments/broker-portfolio-data.
 import type PortfolioBalances from '@models/investments/portfolio-balances.model';
 import type PortfolioTransfers from '@models/investments/portfolio-transfers.model';
 import type Securities from '@models/investments/securities.model';
-import type SecurityPricing from '@models/investments/security-pricing.model';
 import { computeHoldingsValueByDate } from '@services/stats/get-combined-balance-history/holdings-replay';
 import {
   accumulateCashDeltas,
@@ -14,6 +13,7 @@ import {
   buildPriceLookup,
   createFindPriceForDate,
   createShareUnitFactor,
+  type SecurityPriceRow,
 } from '@services/stats/get-combined-balance-history/security-price-lookup';
 import type { TransactionRow } from '@services/stats/get-combined-balance-history/types';
 import Big from 'big.js';
@@ -39,7 +39,7 @@ export function buildHistory({
   transfers: PortfolioTransfers[];
   balances: PortfolioBalances[];
   securities: Securities[];
-  prices: SecurityPricing[];
+  prices: SecurityPriceRow[];
   onHoldingValue?: (row: {
     portfolioId: string;
     securityId: string;

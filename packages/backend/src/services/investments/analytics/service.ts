@@ -35,7 +35,10 @@ import {
 } from '@services/investments/composition/service';
 import { getHoldingValues } from '@services/investments/holdings/get-holding-values.service';
 import { getPortfolioSummary } from '@services/investments/portfolios/get-portfolio-summary.service';
-import { createShareUnitFactor } from '@services/stats/get-combined-balance-history/security-price-lookup';
+import {
+  createShareUnitFactor,
+  type SecurityPriceRow,
+} from '@services/stats/get-combined-balance-history/security-price-lookup';
 import type { TransactionRow } from '@services/stats/get-combined-balance-history/types';
 import Big from 'big.js';
 import { Op, literal } from 'sequelize';
@@ -143,7 +146,7 @@ async function getAnalyticsImpl({
   const benchmarksSecurities = await Securities.findAll({
     where: { symbol: { [Op.in]: benchmarkSymbols }, currencyCode },
   });
-  const prices = await SecurityPricing.findAll({
+  const prices = (await SecurityPricing.findAll({
     where: {
       securityId: { [Op.in]: [...new Set([...securityIds, ...benchmarksSecurities.map((s) => s.id)])] },
       date: { [Op.lte]: new Date() },
@@ -156,8 +159,10 @@ async function getAnalyticsImpl({
       ],
     },
     order: [['date', 'ASC']],
-  });
-  const pricesBySecurity = new Map<string, SecurityPricing[]>(Map.groupBy(prices, (p) => p.securityId));
+    attributes: ['securityId', 'date', 'priceClose', 'unadjustedClose', 'source', 'priceAsOf', 'previousClose'],
+    raw: true,
+  })) as unknown as (SecurityPriceRow & Pick<SecurityPricing, 'previousClose'>)[];
+  const pricesBySecurity = new Map<string, (typeof prices)[number][]>(Map.groupBy(prices, (p) => p.securityId));
   const health: InvestmentAnalytics['health'] = [];
   const holdingsByIdentity = new Map<string, InvestmentHolding>();
   for (const h of allHoldingValues) {
@@ -454,7 +459,7 @@ async function getAnalyticsImpl({
     const reference = priorReference
       ? { date: new Date(priorReference.date), price: new Big(priorReference.price) }
       : previous
-        ? { date: new Date(previous.date), price: previous.priceClose.toBig() }
+        ? { date: new Date(previous.date), price: new Big(decimal(previous.priceClose)) }
         : undefined;
     const freshPair =
       latest &&
