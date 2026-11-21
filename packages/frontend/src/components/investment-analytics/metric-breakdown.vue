@@ -69,6 +69,9 @@ function contribution(p: (typeof rows.value)[number]) {
               <span class="min-w-0 break-words">{{ p.name }}</span>
               <span class="shrink-0 tabular-nums" :class="signed(contribution(p))">{{ money(contribution(p)) }}</span>
             </summary>
+            <p v-if="p.observationDate" class="text-muted-foreground mt-2 text-xs">
+              Holdings / basis record: {{ new Date(p.observationDate).toLocaleString() }}
+            </p>
             <dl v-if="p.calculation" class="mt-3 grid grid-cols-2 gap-x-3 gap-y-2 text-xs tabular-nums">
               <dt class="text-muted-foreground">Priced holdings</dt>
               <dd class="text-right">{{ money(p.calculation.pricedValue) }}</dd>
