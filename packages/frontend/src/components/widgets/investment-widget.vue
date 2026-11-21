@@ -1,50 +1,77 @@
 <script setup lang="ts">
-import type { DashboardWidgetConfig } from '@/api/user-settings';
-import { Button } from '@/components/lib/ui/button';
-import AnalyticsPanel from '@/components/investment-analytics/analytics-panel.vue';
-import { useInvestmentAnalytics } from '@/composable/data-queries/investment-analytics';
-import { useInvestmentHistory } from '@/composable/data-queries/investment-history';
-import { usePortfolios } from '@/composable/data-queries/portfolios';
-import { ArrowUpRightIcon } from '@lucide/vue';
-import { ScrollArea } from '@/components/lib/ui/scroll-area';
-import { computed, inject, provide, ref, type Ref } from 'vue';
-import ErrorState from './components/error-state.vue';
-import LoadingState from './components/loading-state.vue';
-import WidgetWrapper from './components/widget-wrapper.vue';
-import InvestmentWidgetSettings from './investment-widget-settings.vue';
-import { INVESTMENT_WIDGET_DEFINITIONS, investmentWidgetKind, investmentWidgetSettings } from './investment-widgets';
+import type { DashboardWidgetConfig } from "@/api/user-settings";
+import { Button } from "@/components/lib/ui/button";
+import { investmentRange } from "@/components/investment-analytics/date-range";
+import AnalyticsPanel from "@/components/investment-analytics/analytics-panel.vue";
+import { useInvestmentAnalytics } from "@/composable/data-queries/investment-analytics";
+import { useInvestmentHistory } from "@/composable/data-queries/investment-history";
+import { usePortfolios } from "@/composable/data-queries/portfolios";
+import { ArrowUpRightIcon } from "@lucide/vue";
+import { ScrollArea } from "@/components/lib/ui/scroll-area";
+import { computed, inject, provide, ref, type Ref } from "vue";
+import ErrorState from "./components/error-state.vue";
+import LoadingState from "./components/loading-state.vue";
+import WidgetWrapper from "./components/widget-wrapper.vue";
+import InvestmentWidgetSettings from "./investment-widget-settings.vue";
+import {
+  INVESTMENT_WIDGET_DEFINITIONS,
+  investmentWidgetKind,
+  investmentWidgetSettings,
+} from "./investment-widgets";
 
-const widget = inject<Ref<DashboardWidgetConfig>>('dashboard-widget-config')!;
-const persist =
-  inject<(args: { widgetId: string; config: Record<string, unknown> }) => Promise<unknown>>(
-    'dashboard-save-widget-config',
-  );
-const kind = computed(() => investmentWidgetKind(widget.value.widgetId) ?? 'overview');
-const definition = computed(() => INVESTMENT_WIDGET_DEFINITIONS[widget.value.widgetId]);
+const widget = inject<Ref<DashboardWidgetConfig>>("dashboard-widget-config")!;
+const persist = inject<
+  (args: {
+    widgetId: string;
+    config: Record<string, unknown>;
+  }) => Promise<unknown>
+>("dashboard-save-widget-config");
+const kind = computed(
+  () => investmentWidgetKind(widget.value.widgetId) ?? "overview",
+);
+const definition = computed(
+  () => INVESTMENT_WIDGET_DEFINITIONS[widget.value.widgetId],
+);
 const optimisticSettings = ref<Record<string, unknown>>({});
-const pageSettings = inject<Ref<Record<string, unknown>> | null>('investment-page-settings', null);
-const fullPage = inject('investment-full-page', false);
+const pageSettings = inject<Ref<Record<string, unknown>> | null>(
+  "investment-page-settings",
+  null,
+);
+const fullPage = inject("investment-full-page", false);
 provide(
-  'investment-chart-height',
+  "investment-chart-height",
   computed(() => {
-    const base = kind.value === 'heatmap' ? (fullPage ? 380 : 340) : fullPage ? 288 : 208;
+    const base =
+      kind.value === "heatmap" ? (fullPage ? 380 : 340) : fullPage ? 288 : 208;
     return base + Math.max(0, (widget.value.rowSpan ?? 1) - 1) * 180;
   }),
 );
 const settings = computed(() =>
-  investmentWidgetSettings(kind.value, { ...pageSettings?.value, ...widget.value.config, ...optimisticSettings.value }),
+  investmentWidgetSettings(kind.value, {
+    ...pageSettings?.value,
+    ...widget.value.config,
+    ...optimisticSettings.value,
+  }),
 );
 const portfolioIds = computed(() => settings.value.portfolioIds);
-const benchmarks = computed(() => (kind.value === 'benchmark' ? settings.value.benchmarks : []));
+const benchmarks = computed(() =>
+  kind.value === "benchmark" ? settings.value.benchmarks : [],
+);
 const performanceFrom = computed(() =>
-  ['heatmap', 'performers'].includes(kind.value) && settings.value.from ? String(settings.value.from) : undefined,
+  ["heatmap", "performers"].includes(kind.value) && settings.value.from
+    ? String(settings.value.from)
+    : undefined,
 );
 const performanceThrough = computed(() =>
-  performanceFrom.value && settings.value.through ? String(settings.value.through) : undefined,
+  performanceFrom.value && settings.value.through
+    ? String(settings.value.through)
+    : undefined,
 );
 const focusedHistory = computed(
   () =>
-    ['performance', 'value-capital', 'portfolio-comparison'].includes(kind.value) && settings.value.unit !== 'percent',
+    ["performance", "value-capital", "portfolio-comparison"].includes(
+      kind.value,
+    ) && settings.value.unit !== "percent",
 );
 const broad = useInvestmentAnalytics({
   portfolioIds,
@@ -56,35 +83,45 @@ const broad = useInvestmentAnalytics({
 const narrow = useInvestmentHistory({
   portfolioIds,
   enabled: focusedHistory,
-  includeCapital: () => kind.value === 'value-capital',
+  includeCapital: () => ["performance", "value-capital"].includes(kind.value),
+  gainFrom: () => investmentRange(settings.value, "1900-01-01").from,
   includeEvents: () => Boolean(settings.value.showEvents),
 });
-const data = computed(() => (focusedHistory.value ? narrow.data.value : broad.data.value));
-const isPending = computed(() => (focusedHistory.value ? narrow.isPending.value : broad.isPending.value));
-const isFetching = computed(() => (focusedHistory.value ? narrow.isFetching.value : broad.isFetching.value));
-const error = computed(() => (focusedHistory.value ? narrow.error.value : broad.error.value));
-const refetch = () => (focusedHistory.value ? narrow.refetch() : broad.refetch());
+const data = computed(() =>
+  focusedHistory.value ? narrow.data.value : broad.data.value,
+);
+const isPending = computed(() =>
+  focusedHistory.value ? narrow.isPending.value : broad.isPending.value,
+);
+const isFetching = computed(() =>
+  focusedHistory.value ? narrow.isFetching.value : broad.isFetching.value,
+);
+const error = computed(() =>
+  focusedHistory.value ? narrow.error.value : broad.error.value,
+);
+const refetch = () =>
+  focusedHistory.value ? narrow.refetch() : broad.refetch();
 const { data: portfolios } = usePortfolios();
 const settingsOpen = ref(false);
 const saving = ref(false);
-const saveError = ref('');
+const saveError = ref("");
 const pageByKind: Record<string, string> = {
-  performance: 'performance',
-  'value-capital': 'performance',
-  benchmark: 'performance',
-  holdings: 'holdings',
-  performers: 'holdings',
-  dividends: 'dividends',
-  'dividend-calendar': 'dividends',
-  allocation: 'allocation',
-  heatmap: 'allocation',
-  exposure: 'allocation',
-  sector: 'allocation',
-  geography: 'allocation',
-  overlap: 'allocation',
-  'portfolio-comparison': 'performance',
+  performance: "performance",
+  "value-capital": "performance",
+  benchmark: "performance",
+  holdings: "holdings",
+  performers: "holdings",
+  dividends: "dividends",
+  "dividend-calendar": "dividends",
+  allocation: "allocation",
+  heatmap: "allocation",
+  exposure: "allocation",
+  sector: "allocation",
+  geography: "allocation",
+  overlap: "allocation",
+  "portfolio-comparison": "performance",
 };
-const page = computed(() => pageByKind[kind.value] ?? 'overview');
+const page = computed(() => pageByKind[kind.value] ?? "overview");
 
 let queuedSettings: Record<string, unknown> | null = null;
 let closeAfterSave = false;
@@ -97,21 +134,27 @@ const saveSettings = async (patch: Record<string, unknown>, close = false) => {
   closeAfterSave ||= close;
   if (saving.value) return;
   saving.value = true;
-  saveError.value = '';
+  saveError.value = "";
   try {
     while (queuedSettings) {
       const next = queuedSettings;
       queuedSettings = null;
       try {
-        await persist({ widgetId: widget.value.instanceId ?? widget.value.widgetId, config: next });
+        await persist({
+          widgetId: widget.value.instanceId ?? widget.value.widgetId,
+          config: next,
+        });
         for (const [key, value] of Object.entries(next)) {
-          if (JSON.stringify(optimisticSettings.value[key]) === JSON.stringify(value))
+          if (
+            JSON.stringify(optimisticSettings.value[key]) ===
+            JSON.stringify(value)
+          )
             delete optimisticSettings.value[key];
         }
       } catch {
         // Retain failed and subsequent changes for the next explicit retry.
         queuedSettings = { ...next, ...(queuedSettings ?? {}) };
-        saveError.value = 'Settings could not be saved. Try again.';
+        saveError.value = "Settings could not be saved. Try again.";
         return;
       }
     }
@@ -125,11 +168,16 @@ const saveSettings = async (patch: Record<string, unknown>, close = false) => {
 
 <template>
   <WidgetWrapper :is-fetching="isFetching" :data-investment-widget="kind">
-    <template #title>{{ definition?.name ?? 'Investment analytics' }}</template>
+    <template #title>{{ definition?.name ?? "Investment analytics" }}</template>
     <template #action>
-      <Button as-child variant="ghost" size="icon-sm" aria-label="Open Investments page"
+      <Button
+        as-child
+        variant="ghost"
+        size="icon-sm"
+        aria-label="Open Investments page"
         ><router-link :to="`/finances/investments/${page}`"
-          ><ArrowUpRightIcon class="text-muted-foreground size-4" /></router-link
+          ><ArrowUpRightIcon
+            class="text-muted-foreground size-4" /></router-link
       ></Button>
       <InvestmentWidgetSettings
         v-model:open="settingsOpen"
@@ -147,7 +195,11 @@ const saveSettings = async (patch: Record<string, unknown>, close = false) => {
       :data-investment-instance="widget.instanceId ?? widget.widgetId"
     >
       <LoadingState v-if="isPending" />
-      <ErrorState v-else-if="error" message="Investment analytics could not be loaded." @retry="refetch()" />
+      <ErrorState
+        v-else-if="error"
+        message="Investment analytics could not be loaded."
+        @retry="refetch()"
+      />
       <AnalyticsPanel
         v-else-if="data"
         :analytics="data"
@@ -157,9 +209,16 @@ const saveSettings = async (patch: Record<string, unknown>, close = false) => {
         @settings-change="saveSettings($event)"
       />
       <p v-else class="text-muted-foreground p-4 text-sm">
-        Investment analytics are unavailable. Check your portfolio records and data sources in Investments.
+        Investment analytics are unavailable. Check your portfolio records and
+        data sources in Investments.
       </p>
-      <p v-if="saveError && !settingsOpen" class="text-destructive mt-2 text-xs" role="alert">{{ saveError }}</p>
+      <p
+        v-if="saveError && !settingsOpen"
+        class="text-destructive mt-2 text-xs"
+        role="alert"
+      >
+        {{ saveError }}
+      </p>
     </ScrollArea>
   </WidgetWrapper>
 </template>
