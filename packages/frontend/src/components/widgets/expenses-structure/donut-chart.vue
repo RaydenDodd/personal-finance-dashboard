@@ -222,7 +222,7 @@ useResizeObserver(chartContainerRef, renderChart);
 
 watch(
   [() => props.data, () => props.totalAmount, () => props.percentageTotal, chartContainerRef],
-  async ([, , container]) => {
+  async ([, , , container]) => {
     if (container) {
       await nextTick();
       renderChart();
