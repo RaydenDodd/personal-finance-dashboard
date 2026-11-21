@@ -18,6 +18,34 @@ const tx = (
   date = '2026-11-10',
 ): FundingTransaction => ({ id, accountId, type, note, amount, date, nature: 'transfer_out_wallet', transferId: null });
 describe('planned vs actual funding boundary', () => {
+  it('recognizes exported brokerage funding descriptions and the closed M1 emergency fund', () => {
+    const notes = [
+      'Withdrawal from M1 PAYMENTS',
+      'Withdrawal from M1 Cash Acct Deposit',
+      'Withdrawal from FID BKG SVC LLC MONEYLINE',
+      'Withdrawal from VANGUARD FUNDING',
+      'Withdrawal from PUBLIC.COM FUNDING',
+      'Digital Card Purchase - RHS BROKERAGE DEPOSIT LAKE MARY FL',
+    ];
+    const events = buildFundingEvents(
+      accounts,
+      [],
+      notes.map((note, i) => tx(String(i), 'cash', 'expense', note)),
+    );
+    expect(events).toHaveLength(6);
+    expect(events.reduce((total, event) => total + event.amount, 0)).toBe(600);
+  });
+  it('nets a closed M1 emergency fund migration through checking without creating new savings', () => {
+    const events = buildFundingEvents(
+      accounts,
+      [],
+      [
+        tx('old', 'cash', 'income', 'Deposit from M1 Cash Acct Withdrawal 251220CA1243122', 1000),
+        tx('new', 'cash', 'expense', 'Withdrawal to Emergency Fund XXXXX2222', 1000),
+      ],
+    );
+    expect(events.reduce((total, event) => total + event.amount, 0)).toBe(0);
+  });
   it('treats the receiving account number as its own identifier, not as a savings source', () => {
     const deposit = tx(
       'in',

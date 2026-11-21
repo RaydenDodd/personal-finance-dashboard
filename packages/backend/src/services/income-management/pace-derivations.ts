@@ -50,7 +50,8 @@ export function buildFundingEvents(
         t.note + ' ' + (accounts.find((a) => a.id === t.accountId)?.name ?? ''),
       ) &&
       !isReturnOrAwardDescription(t.note) &&
-      !/\b(?:buy|bought|purchase|sell|sold|sale|fee|commission)\b/i.test(t.note),
+      (!/\b(?:buy|bought|purchase|sell|sold|sale|fee|commission)\b/i.test(t.note) ||
+        /^(?:digital|debit) card purchase - (?:RHS BROKERAGE DEPOSIT|ROBINHOOD SECURITIES)\b/i.test(t.note)),
   );
   const suffix = (note: string, ownAccountId?: string) =>
     accounts.find((a) => {
@@ -61,16 +62,21 @@ export function buildFundingEvents(
   const target = (note: string, ownAccountId: string) => {
     const exact = suffix(note, ownAccountId);
     if (exact) return exact.id;
-    const merchant = /^(M1|ROBINHOOD(?: FINANCIAL| SECURITIES)?|PUBLIC(?:\.COM)?)$/i
-      .exec(note.trim())?.[1]
-      ?.toLowerCase()
-      .split(' ')[0]
-      ?.replace(/\.com$/, '');
+    const merchant =
+      /^(?:(?:withdrawal|deposit) from |(?:digital|debit) card purchase - )?(M1|ROBINHOOD|RHS BROKERAGE|PUBLIC(?:\.COM)?|FID BKG SVC|FIDELITY|VANGUARD)(?:\b|$)/i
+        .exec(note.trim())?.[1]
+        ?.toLowerCase()
+        .split(' ')[0]
+        ?.replace(/\.com$/, '');
     if (!merchant) return null;
+    // The former M1 cash emergency fund is a savings destination even though
+    // that closed account is no longer present in the connected account list.
+    if (merchant === 'm1' && /cash acct/i.test(note)) return 'provider:m1-emergency';
+    const provider = merchant === 'rhs' ? 'robinhood' : merchant === 'fid' ? 'fidelity' : merchant;
     const candidates = accounts.filter(
-      (a) => boundary.has(a.id) && a.name.toLowerCase().includes(merchant) && !/crypto/i.test(a.name),
+      (a) => boundary.has(a.id) && a.name.toLowerCase().includes(provider) && !/crypto/i.test(a.name),
     );
-    return candidates.length === 1 ? candidates[0]!.id : candidates.length ? null : 'provider:' + merchant;
+    return candidates.length === 1 ? candidates[0]!.id : 'provider:' + provider;
   };
   const events: FundingEvent[] = [];
   const used = new Set<string>();
@@ -117,6 +123,17 @@ export function buildFundingEvents(
     });
   }
   for (const t of valid) {
+    if (!used.has(t.id) && !boundary.has(t.accountId) && t.type === 'income') {
+      const source = target(t.note, t.accountId);
+      if (
+        source &&
+        (boundary.has(source) || source.startsWith('provider:')) &&
+        /^(?:deposit from|transfer from)/i.test(t.note)
+      ) {
+        events.push({ id: t.id, date: t.date, amount: -round(t.amount), accountId: source, description: t.note });
+        used.add(t.id);
+      }
+    }
     if (used.has(t.id) || !eligible.has(t.accountId)) continue;
     if (t.type === 'income' && /\b(?:deposit|transfer|contribution|funding)\b/i.test(t.note)) {
       if (boundary.has(suffix(t.note, t.accountId)?.id ?? '')) continue;
