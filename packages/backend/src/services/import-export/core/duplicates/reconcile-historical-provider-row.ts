@@ -3,7 +3,7 @@ import { Money } from '@common/types/money';
 import { t } from '@i18n/index';
 import { ConflictError } from '@js/errors';
 import { findOneTransaction, findTransactions, updateTransactions } from '@models/transactions-query';
-import { Op, literal } from 'sequelize';
+import { Op, col, literal, where as sqlWhere } from 'sequelize';
 
 import { lockHistoricalAccount } from './historical-account-lock';
 import { reconcileHistoricalRows } from './reconcile-historical-rows';
@@ -47,9 +47,11 @@ export async function reconcileHistoricalProviderRow({
     where: {
       accountId,
       originalId: { [Op.like]: 'history:%' },
-      amount,
       time: { [Op.between]: [new Date(time.valueOf() - 4 * 86_400_000), new Date(time.valueOf() + 4 * 86_400_000)] },
-      [Op.and]: [literal(`"Transactions"."externalData"->'historicalSources' IS NOT NULL`)],
+      [Op.and]: [
+        sqlWhere(col('Transactions.amount'), Op.eq, amount.toCents()),
+        literal(`"Transactions"."externalData"->'historicalSources' IS NOT NULL`),
+      ],
     },
   });
   if (!near.length) return null;

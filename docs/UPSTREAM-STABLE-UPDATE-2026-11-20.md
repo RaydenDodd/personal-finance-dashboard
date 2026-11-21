@@ -16,3 +16,5 @@ Validation: backend/frontend typechecks and production builds; 205 targeted back
 Operational notes: repaired an interrupted older Debian package configuration and installed all pending APT upgrades. Docker restarted during its package upgrade; services recovered. Bootloader is current. No unbounded analytics query or financial backfill is part of this update. Kernel memory accounting is currently disabled, so Docker memory ceilings are not enforced; a separate controlled boot-configuration/reboot follow-up is needed. This update does not claim to resolve earlier Pi hangs.
 
 Release-specific backup names, image identities and live verification are recorded in the ignored private maintenance report.
+
+Final live checks also exposed a pre-existing American Express sync failure: the historical matcher used decimal dollars in a BIGINT cents predicate. The lookup now explicitly compares integer cents; a generated-SQL regression covers $7.71 ? 771. The scheduled fallback now waits up to six minutes (eight-minute service ceiling), allowing upstream?s five-minute provider timeout to complete. No stored amounts or category corrections are rewritten by this fix.

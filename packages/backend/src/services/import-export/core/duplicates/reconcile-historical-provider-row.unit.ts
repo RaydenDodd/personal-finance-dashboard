@@ -1,6 +1,7 @@
 import { TRANSACTION_TYPES } from '@bt/shared/types';
 import { Money } from '@common/types/money';
 import { beforeEach, describe, expect, it, jest } from '@jest/globals';
+import { Sequelize } from 'sequelize';
 
 jest.mock('@models/transactions-query', () => ({
   findOneTransaction: jest.fn(),
@@ -62,6 +63,20 @@ beforeEach(() => {
 });
 
 describe('later provider synchronization against historical imports', () => {
+  it('queries stored integer cents when a provider sends a fractional-dollar amount', async () => {
+    await reconcileHistoricalProviderRow({ ...incoming(), amount: Money.fromDecimal('7.71') });
+    const filter = jest.mocked(findTransactions).mock.calls.at(-1)![0].where;
+    const database = new Sequelize('postgres://unit:unit@localhost/unit_tests', { logging: false });
+    try {
+      const generator = (database.getQueryInterface() as any).queryGenerator;
+      const sql = generator.whereQuery(filter);
+      expect(sql).toContain('"Transactions"."amount" = 771');
+      expect(sql).not.toContain('7.71');
+    } finally {
+      await database.close();
+    }
+  });
+
   it('serializes with import execution before checking identifiers', async () => {
     await reconcileHistoricalProviderRow(incoming());
     expect(lockHistoricalAccount).toHaveBeenCalledWith({ accountId: 'owned-card' });

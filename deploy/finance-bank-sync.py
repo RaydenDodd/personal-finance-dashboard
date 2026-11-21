@@ -20,7 +20,7 @@ try:
         print('Recent successful bank sync; skipped')
     else:
         request('/bank-data-providers/sync/trigger', {})
-        for attempt in range(24):
+        for attempt in range(72):
             time.sleep(5)
             status = request('/bank-data-providers/sync/status')
             accounts = status.get('accounts', [])
