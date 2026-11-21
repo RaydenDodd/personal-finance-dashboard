@@ -47,8 +47,8 @@ const tabs = computed(() => [
   ['sector', 'Sector comparison'],
   ['country', 'Geographical comparison'],
 ]);
-const unique = computed(() => (view.value === 'left' ? (props.pair.leftUnique ?? []) : (props.pair.rightUnique ?? [])));
-const classification = computed(() => (view.value === 'sector' ? props.pair.sectorOverlap : props.pair.countryOverlap));
+const unique = computed(() => (view.value === 'left' ? (pair.value.leftUnique ?? []) : (pair.value.rightUnique ?? [])));
+const classification = computed(() => (view.value === 'sector' ? pair.value.sectorOverlap : pair.value.countryOverlap));
 </script>
 <template>
   <div class="min-w-0 space-y-3" data-testid="investment-overlap-details">

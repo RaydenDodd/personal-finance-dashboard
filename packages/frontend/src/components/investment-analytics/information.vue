@@ -16,8 +16,18 @@ defineProps<{ analytics: InvestmentAnalytics }>();
       </details>
       <details>
         <summary class="cursor-pointer">Account history</summary>
-        <div v-for="portfolio in analytics.portfolios" :key="portfolio.id" class="mt-2">
-          <p class="font-medium">{{ portfolio.name }}</p>
+        <details v-for="portfolio in analytics.portfolios" :key="portfolio.id" class="mt-2">
+          <summary class="cursor-pointer font-medium">{{ portfolio.name }}</summary>
+          <p class="text-muted-foreground mt-1">
+            {{
+              analytics.history.filter(
+                (row) => row.knownPortfolios?.[portfolio.id] != null || row.portfolios[portfolio.id] != null,
+              ).length
+            }}
+            dated known values;
+            {{ analytics.history.filter((row) => row.portfolios[portfolio.id] != null).length }} complete account
+            values.
+          </p>
           <p class="text-muted-foreground">
             {{
               portfolio.historyComplete
@@ -25,7 +35,14 @@ defineProps<{ analytics: InvestmentAnalytics }>();
                 : 'Import opening positions, deposits, withdrawals and trades to complete account returns.'
             }}
           </p>
-        </div>
+          <p v-if="portfolio.cash === null" class="text-muted-foreground">
+            Missing cash balance: import a dated brokerage balance or statement.
+          </p>
+          <p v-if="portfolio.costBasis === null" class="text-muted-foreground">
+            Missing position basis: import opening lots or a brokerage cost-basis export.
+          </p>
+          <p v-for="issue in portfolio.review" :key="issue" class="text-muted-foreground mt-1">{{ issue }}</p>
+        </details>
       </details>
       <details>
         <summary class="cursor-pointer">Calculations and coverage</summary>

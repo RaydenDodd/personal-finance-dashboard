@@ -1,8 +1,10 @@
+import { getInvestmentOverlapDetail } from '@/api/investment-analytics';
 import type { InvestmentFundOverlap } from '@bt/shared/types/investment-analytics';
 import { QueryClient, VueQueryPlugin } from '@tanstack/vue-query';
 // @vitest-environment jsdom
-import { mount } from '@vue/test-utils';
-import { describe, expect, it } from 'vitest';
+import { mount, flushPromises } from '@vue/test-utils';
+import { describe, expect, it, vi } from 'vitest';
+vi.mock('@/api/investment-analytics', () => ({ getInvestmentOverlapDetail: vi.fn() }));
 
 import OverlapDetails from './overlap-details.vue';
 const fixture = (): InvestmentFundOverlap => ({
@@ -57,6 +59,17 @@ const choose = (wrapper: ReturnType<typeof open>, label: string) =>
     .find((button) => button.text() === label)!
     .trigger('click');
 describe('fund overlap detail views', () => {
+  it('uses lazily loaded records in every comparison tab', async () => {
+    vi.mocked(getInvestmentOverlapDetail).mockResolvedValue({ ...fixture(), detailsLoaded: true });
+    const wrapper = open({ ...fixture(), detailsLoaded: false, shared: [], leftUnique: [], rightUnique: [] });
+    await flushPromises();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    await flushPromises();
+    await choose(wrapper, 'Observed only in SYNTH-L');
+    expect(wrapper.text()).toContain('LEFT-ONLY');
+    await choose(wrapper, 'Geographical comparison');
+    expect(wrapper.text()).toContain('United States');
+  });
   it('shows company weights as percentage units and keeps missing combined exposure unavailable', () => {
     const wrapper = open();
     expect(wrapper.text()).toContain('8.00% / 10.00%');
