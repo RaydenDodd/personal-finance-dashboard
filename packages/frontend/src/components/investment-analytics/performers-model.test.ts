@@ -1,4 +1,4 @@
-import type { InvestmentHolding } from '@bt/shared/types/investment-analytics';
+﻿import type { InvestmentHolding } from '@bt/shared/types/investment-analytics';
 import { describe, expect, it } from 'vitest';
 
 import { rankInvestmentPerformers } from './performers-model';
@@ -10,7 +10,7 @@ const rows = [
     name: 'Synthetic A',
     unrealizedPercent: '50',
     dailyChangePercent: '1',
-    periodReturns: { weekly: '-3', monthly: '2', ytd: '8', '1y': '10' },
+    personalReturns: { weekly: '-3', monthly: '2', ytd: '8', '1y': '10' },
     priceDate: '2026-11-20',
   },
   {
@@ -20,7 +20,7 @@ const rows = [
     name: 'Synthetic B',
     unrealizedPercent: '10',
     dailyChangePercent: '2',
-    periodReturns: { weekly: '4', monthly: '1', ytd: null, '1y': '-1' },
+    personalReturns: { weekly: '4', monthly: '1', ytd: null, '1y': '-1' },
     priceDate: '2026-11-20',
   },
   {
@@ -30,12 +30,12 @@ const rows = [
     name: 'Synthetic missing',
     unrealizedPercent: null,
     dailyChangePercent: null,
-    periodReturns: { weekly: null, monthly: null, ytd: null, '1y': null },
+    personalReturns: { weekly: null, monthly: null, ytd: null, '1y': null },
     priceDate: null,
   },
 ] as unknown as InvestmentHolding[];
 describe('investment performer period ranking', () => {
-  it('defaults to remaining-position unrealized return and changes order for recorded weekly prices', () => {
+  it('defaults to remaining-position unrealized return and changes order for recorded weekly position gains', () => {
     expect(rankInvestmentPerformers(rows).map((row) => [row.symbol, row.returnValue])).toEqual([
       ['SYNTH-A', 50],
       ['SYNTH-B', 10],
@@ -52,7 +52,7 @@ describe('investment performer period ranking', () => {
     expect(rankInvestmentPerformers(rows, '1y').map((row) => row.returnValue)).toEqual([10, -1]);
   });
   it('retains a recorded zero but excludes missing observations and respects the security filter', () => {
-    const zero = { ...rows[0]!, periodReturns: { weekly: '0' } };
+    const zero = { ...rows[0]!, personalReturns: { weekly: '0' } };
     expect(rankInvestmentPerformers([zero, rows[2]!], 'weekly')).toHaveLength(1);
     expect(rankInvestmentPerformers([zero, rows[2]!], 'weekly')[0]?.returnValue).toBe(0);
     expect(rankInvestmentPerformers(rows, 'weekly', 'two').map((row) => row.symbol)).toEqual(['SYNTH-B']);

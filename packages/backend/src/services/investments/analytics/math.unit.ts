@@ -51,6 +51,28 @@ const snapshot = (id: string, holdings: InvestmentFundSnapshot['holdings']): Inv
   holdings,
 });
 describe('consolidated financial arithmetic', () => {
+  it('fills absent classifications from identified constituent evidence while retaining genuine conflicts', () => {
+    const direct = { ...holding('AAPL', '100'), country: 'Unknown', sector: 'Unknown' };
+    const rows = lookThrough(
+      [direct, holding('FUND', '100', true)],
+      [
+        snapshot('FUND', [
+          {
+            id: 'AAPL',
+            symbol: 'AAPL',
+            name: 'Apple',
+            weight: '100',
+            country: 'US',
+            sector: 'Information Technology',
+            classificationStandard: 'GICS',
+          },
+        ]),
+      ],
+      '200',
+    );
+    expect(rows[0]?.country).toBe('US');
+    expect(rows[0]?.sector).toBe('GICS · Information Technology');
+  });
   it('retains fractional and cryptocurrency decimal precision; unavailable never becomes zero', () => {
     expect(sum(['0.000000000000000001', '0.000000000000000002'])).toBe('3e-18');
     expect(sum(['10', null])).toBeNull();

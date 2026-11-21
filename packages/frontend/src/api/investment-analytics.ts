@@ -8,10 +8,19 @@ import type {
 export async function getInvestmentAnalytics({
   portfolioIds = [],
   benchmarks = [],
-}: { portfolioIds?: string[]; benchmarks?: string[] } = {}): Promise<InvestmentAnalytics> {
+  performanceFrom,
+  performanceThrough,
+}: {
+  portfolioIds?: string[];
+  benchmarks?: string[];
+  performanceFrom?: string;
+  performanceThrough?: string;
+} = {}): Promise<InvestmentAnalytics> {
   const response = await api.get('/investments/analytics', {
     portfolioIds: portfolioIds.join(','),
     benchmarkSymbols: benchmarks.join(','),
+    performanceFrom,
+    performanceThrough,
   });
   return response.data ?? response;
 }

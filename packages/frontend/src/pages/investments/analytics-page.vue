@@ -9,6 +9,7 @@ import { RefreshCwIcon, FileInputIcon, FilterIcon } from '@lucide/vue';
 import DashboardPageLayout from '@/pages/dashboard/components/dashboard-page-layout.vue';
 import InvestmentWidget from '@/components/widgets/investment-widget.vue';
 import FundImport from '@/components/investment-analytics/fund-import.vue';
+import InvestmentInformation from '@/components/investment-analytics/information.vue';
 import InvestmentSettings from '@/components/widgets/investment-widget-settings.vue';
 import { INVESTMENT_WIDGET_DEFINITIONS, type InvestmentWidgetKind } from '@/components/widgets/investment-widgets';
 import { useInvestmentAnalytics } from '@/composable/data-queries/investment-analytics';
@@ -147,12 +148,12 @@ async function refresh() {
 </script>
 <template>
   <PageWrapper
-    ><div class="mx-auto w-full max-w-7xl space-y-4" :data-testid="'investments-' + page + '-page'">
-      <header class="flex flex-wrap items-start justify-between gap-3">
+    ><div class="mx-auto w-full max-w-7xl space-y-3" :data-testid="'investments-' + page + '-page'">
+      <header class="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2">
         <div class="min-w-0">
           <p class="text-muted-foreground text-xs">Investments</p>
           <h1 class="mt-0.5 text-2xl font-semibold">{{ titles[page] }}</h1>
-          <p class="text-muted-foreground mt-1 text-sm">{{ subtitles[page] }}</p>
+          <p class="sr-only">{{ subtitles[page] }}</p>
         </div>
         <div class="flex flex-wrap items-center gap-1">
           <Button v-if="page === 'allocation'" variant="outline" size="sm" @click="importOpen = true"
@@ -213,7 +214,14 @@ async function refresh() {
         <span>{{ portfolioIds.length ? portfolioIds.length + ' selected portfolios' : 'All portfolios' }}</span
         ><span v-if="groupFilter !== 'all'">{{ groupFilter }}</span
         ><span v-if="brokerFilter !== 'all'">{{ brokerFilter }}</span
-        ><span v-if="query.data.value?.refresh.lastSuccess">Price check {{ query.data.value.refresh.lastSuccess }}</span
+        ><span v-if="query.data.value?.refresh.lastSuccess"
+          >Checked
+          {{
+            new Date(query.data.value.refresh.lastSuccess).toLocaleTimeString([], {
+              hour: 'numeric',
+              minute: '2-digit',
+            })
+          }}</span
         ><span v-if="query.data.value">{{ query.data.value.currencyCode }} reporting currency</span>
       </div>
       <p v-if="refreshError" role="alert" class="text-app-expense-color rounded-md border p-3 text-sm">
@@ -238,6 +246,7 @@ async function refresh() {
         :default-layout="defaultLayout"
         ><template #default><InvestmentWidget /></template
       ></DashboardPageLayout>
+      <InvestmentInformation v-if="query.data.value" :analytics="query.data.value" />
       <FundImport
         v-if="query.data.value"
         v-model="importOpen"

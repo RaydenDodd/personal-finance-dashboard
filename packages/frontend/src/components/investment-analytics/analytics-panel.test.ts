@@ -158,7 +158,7 @@ describe('shared investment panels', () => {
     const wrapper = panel('value-capital', base(), { unit: 'percent' });
     expect(wrapper.findComponent({ name: 'SeriesChart' }).props('percent')).toBe(false);
   });
-  it('configures the performer period and labels historical ranking as price only', async () => {
+  it('ranks actual position changes instead of substituting historical price appreciation', async () => {
     const analytics = base();
     analytics.holdings = [
       {
@@ -168,17 +168,16 @@ describe('shared investment panels', () => {
         name: 'Synthetic',
         unrealizedPercent: '40',
         dailyChangePercent: '1',
-        periodReturns: { weekly: '-2' },
+        periodReturns: { daily: '579.96', weekly: '-2' },
       },
     ] as InvestmentAnalytics['holdings'];
     const wrapper = panel('performers', analytics);
-    const selector = wrapper.get('select[aria-label="Performer return period"]');
-    expect((selector.element as HTMLSelectElement).value).toBe('daily');
-    await selector.setValue('weekly');
-    expect(wrapper.emitted('settings-change')?.at(-1)).toEqual([{ performerPeriod: 'weekly' }]);
+    expect(wrapper.get('[data-testid="investment-performer-row"]').text()).toContain('1.00%');
+    expect(wrapper.text()).not.toContain('579.96%');
     await wrapper.setProps({ settings: { dateRange: 'MAX', performerPeriod: 'weekly' } });
-    expect(wrapper.text()).toContain('price-only changes');
-    expect(wrapper.get('[data-testid="investment-performer-row"]').text()).toContain('-2.00%');
+    expect(wrapper.find('[data-testid="investment-performer-row"]').exists()).toBe(false);
+    await wrapper.setProps({ settings: { dateRange: 'MAX', performerPeriod: 'unrealized' } });
+    expect(wrapper.get('[data-testid="investment-performer-row"]').text()).toContain('40.00%');
   });
   it('preserves unsupported risk as gaps instead of substituting account balance returns', () => {
     const analytics = base();

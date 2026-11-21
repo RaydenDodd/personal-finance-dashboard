@@ -35,7 +35,18 @@ const settings = computed(() =>
 );
 const portfolioIds = computed(() => settings.value.portfolioIds);
 const benchmarks = computed(() => (kind.value === 'benchmark' ? settings.value.benchmarks : []));
-const { data, isPending, isFetching, error, refetch } = useInvestmentAnalytics({ portfolioIds, benchmarks });
+const performanceFrom = computed(() =>
+  ['heatmap', 'performers'].includes(kind.value) && settings.value.from ? String(settings.value.from) : undefined,
+);
+const performanceThrough = computed(() =>
+  performanceFrom.value && settings.value.through ? String(settings.value.through) : undefined,
+);
+const { data, isPending, isFetching, error, refetch } = useInvestmentAnalytics({
+  portfolioIds,
+  benchmarks,
+  performanceFrom,
+  performanceThrough,
+});
 const { data: portfolios } = usePortfolios();
 const settingsOpen = ref(false);
 const saving = ref(false);

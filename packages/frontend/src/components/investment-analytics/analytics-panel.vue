@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, inject, ref, watch } from 'vue';
 import { Button } from '@/components/lib/ui/button';
 import { ScrollArea } from '@/components/lib/ui/scroll-area';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/lib/ui/popover';
@@ -21,7 +21,7 @@ import HoldingsTable from './holdings-table.vue';
 import Treemap from './treemap.vue';
 import OverlapDetails from './overlap-details.vue';
 import CompositionHealth from './composition-health.vue';
-import { INVESTMENT_PERFORMER_PERIODS, rankInvestmentPerformers } from './performers-model';
+import { INVESTMENT_PERFORMER_PERIODS, rankInvestmentPerformers, usesCustomPositionPeriod } from './performers-model';
 import {
   aggregateInvestmentFlows,
   chartNumber,
@@ -42,6 +42,9 @@ const props = withDefaults(
 );
 const emit = defineEmits<{ 'settings-change': [patch: Record<string, unknown>] }>();
 const containerRef = ref<HTMLElement | null>(null);
+const inlineInformation = !inject('investment-full-page', false);
+const showInformation = ref(false);
+const metricInformation = ref<Record<string, boolean>>({});
 const earliest = computed(() =>
   props.kind.startsWith('dividend')
     ? ([...props.analytics.dividends].map((row) => row.date.slice(0, 10)).sort()[0] ??
@@ -550,6 +553,21 @@ const isNonCompany = (row: InvestmentAnalytics['exposure'][number]) =>
     row.assetClass ?? '',
   );
 const nonCompany = computed(() => props.analytics.exposure.filter(isNonCompany));
+const nonCompanyTotal = computed(
+  () =>
+    props.analytics.metrics.nonCompanyValue?.value ??
+    nonCompany.value.reduce((sum, row) => sum + Number(row.totalValue), 0),
+);
+const overlapStrength = (left: string, right: string) => {
+  const value = Number(
+    props.analytics.overlap.find(
+      (row) => (row.leftId === left && row.rightId === right) || (row.leftId === right && row.rightId === left),
+    )?.weightedOverlap ?? 0,
+  );
+  return {
+    backgroundColor: `color-mix(in srgb, var(--primary) ${Math.min(32, Math.max(0, value) * 0.32)}%, transparent)`,
+  };
+};
 const compositionDates = computed(
   () =>
     props.analytics.coverage.compositionDates ?? [...new Set(props.analytics.fundSnapshots.map((s) => s.asOf))].sort(),
@@ -558,7 +576,6 @@ useChartInteraction({
   containerRef,
   clear: () => {
     selectedCategory.value = null;
-    selectedExposure.value = null;
   },
 });
 const exposed = computed(() =>
@@ -577,8 +594,59 @@ const performerPeriod = computed(() =>
     ? String(props.settings.performerPeriod)
     : 'daily',
 );
+const periodToPreset: Record<string, string> = {
+  daily: '1D',
+  weekly: '1W',
+  monthly: '1M',
+  '3m': '3M',
+  '6m': '6M',
+  ytd: 'YTD',
+  '1y': '1Y',
+  '2y': '2Y',
+  '5y': '5Y',
+  all: 'MAX',
+  unrealized: 'MAX',
+};
+const performanceRange = computed<PayrollRange>({
+  get: () =>
+    props.settings.from && props.settings.through
+      ? investmentRange(props.settings, earliest.value)
+      : investmentRange(
+          {
+            dateRange:
+              periodToPreset[
+                String(props.kind === 'heatmap' ? (props.settings.colorBy ?? 'daily') : performerPeriod.value)
+              ] ?? '1D',
+          },
+          earliest.value,
+        ),
+  set: (value) => {
+    const periods: Record<string, string> = {
+      '1d': 'daily',
+      '1w': 'weekly',
+      '1m': 'monthly',
+      '3m': '3m',
+      '6m': '6m',
+      ytd: 'ytd',
+      '1y': '1y',
+      '2y': '2y',
+      '5y': '5y',
+      all: 'unrealized',
+      custom: 'custom',
+    };
+    emit('settings-change', {
+      ...investmentRangeSettings(value),
+      [props.kind === 'heatmap' ? 'colorBy' : 'performerPeriod']: periods[value.preset] ?? 'daily',
+    });
+  },
+});
 const performers = computed(() =>
-  rankInvestmentPerformers(props.analytics.holdings, performerPeriod.value, String(props.settings.securityId ?? '')),
+  rankInvestmentPerformers(
+    props.analytics.holdings,
+    performerPeriod.value,
+    String(props.settings.securityId ?? ''),
+    usesCustomPositionPeriod(props.settings, performerPeriod.value),
+  ),
 );
 const performerGroups = computed(() => {
   const filtered = performers.value;
@@ -588,8 +656,15 @@ const performerGroups = computed(() => {
   ];
 });
 const largest = computed(() =>
-  [...props.analytics.holdings]
-    .sort((a, b) => Number(b.marketValue ?? 0) - Number(a.marketValue ?? 0))
+  props.analytics.exposure
+    .filter(
+      (row) =>
+        !row.unknown &&
+        !/derivative|cash|money market|commodity|gold|fixed income|repurchase|liabilit|unclassified asset|collateral|crypto|other reported assets/i.test(
+          row.assetClass ?? '',
+        ),
+    )
+    .sort((a, b) => Number(b.totalValue ?? 0) - Number(a.totalValue ?? 0))
     .slice(0, Number(props.settings.limit ?? 10)),
 );
 const healthFilter = ref('all');
@@ -604,17 +679,21 @@ const health = computed(() =>
     :data-testid="'investment-panel-' + kind"
   >
     <template v-if="['overview', 'gains', 'risk', 'concentration'].includes(kind)">
-      <div class="grid grid-cols-2 gap-x-5 gap-y-4" :class="!compact && kind === 'overview' ? '@3xl:grid-cols-4' : ''">
+      <div class="grid grid-cols-2 gap-x-4 gap-y-2" :class="!compact && kind === 'overview' ? '@3xl:grid-cols-4' : ''">
         <div v-for="key in metricKeys" :key="key">
           <p class="text-muted-foreground text-xs">{{ displayedMetric(key).label }}</p>
-          <p
+          <button
+            type="button"
             class="mt-1 text-sm font-semibold tracking-tight break-words tabular-nums @md:text-xl"
+            :aria-label="displayedMetric(key).label + (displayedMetric(key).reason ? ' · data details' : '')"
+            :aria-expanded="metricInformation[key] ?? false"
+            @click="metricInformation[key] = !metricInformation[key]"
             :class="
-              key.toLowerCase().includes('gain') || key === 'dailyChange' ? signed(analytics.metrics[key]?.value) : ''
+              key.toLowerCase().includes('gain') || key === 'dailyChange' ? signed(displayedMetric(key).value) : ''
             "
           >
             {{ percentMetrics.has(key) ? pct(displayedMetric(key).value) : money(displayedMetric(key).value) }}
-          </p>
+          </button>
           <p
             v-if="key === 'dailyChange' && analytics.metrics.dailyChangePercent?.value != null"
             class="text-xs tabular-nums"
@@ -622,9 +701,16 @@ const health = computed(() =>
           >
             {{ pct(analytics.metrics.dailyChangePercent.value) }} · covered positions
           </p>
-          <p v-if="displayedMetric(key).reason" class="text-muted-foreground mt-1 text-[11px]">
-            {{ displayedMetric(key).reason }}
-          </p>
+          <details
+            v-if="displayedMetric(key).reason"
+            :open="metricInformation[key]"
+            class="text-muted-foreground mt-1 text-[11px]"
+          >
+            <summary class="cursor-pointer" @click.prevent="metricInformation[key] = !metricInformation[key]">
+              {{ displayedMetric(key).value == null ? 'ⓘ' : 'Partial · ⓘ' }}
+            </summary>
+            <p class="mt-1">{{ displayedMetric(key).reason }}</p>
+          </details>
           <span v-else-if="analytics.metrics[key]?.status !== 'verified'" class="text-muted-foreground text-[10px]">{{
             analytics.metrics[key]?.status ?? 'unavailable'
           }}</span>
@@ -635,7 +721,11 @@ const health = computed(() =>
         <dl class="mt-3 grid grid-cols-2 gap-3 @2xl:grid-cols-3">
           <div v-for="key in secondary" :key="key">
             <dt class="text-muted-foreground text-xs">{{ displayedMetric(key).label }}</dt>
-            <dd class="font-medium tabular-nums" :title="analytics.metrics[key]?.reason">
+            <dd
+              class="font-medium tabular-nums"
+              :class="key.toLowerCase().includes('gain') ? signed(displayedMetric(key).value) : ''"
+              :title="analytics.metrics[key]?.reason"
+            >
               {{ percentMetrics.has(key) ? pct(displayedMetric(key).value) : money(displayedMetric(key).value) }}
             </dd>
             <p v-if="analytics.metrics[key]?.reason" class="text-muted-foreground text-[10px]">
@@ -645,7 +735,11 @@ const health = computed(() =>
         </dl>
       </details>
     </template>
-    <p v-if="kind === 'concentration'" class="text-muted-foreground text-xs">
+    <p
+      v-show="inlineInformation && showInformation"
+      v-if="kind === 'concentration'"
+      class="text-muted-foreground text-xs"
+    >
       Dated fund composition coverage {{ pct(analytics.coverage.lookThroughPercent) }} · effective dates
       {{ compositionDates.join(', ') || 'unavailable' }}. Cash, commodities and derivatives are excluded from company
       concentration.
@@ -754,6 +848,7 @@ const health = computed(() =>
         :label="kind === 'dividends' ? 'Recorded investment income history' : 'Consolidated investment ' + kind"
       />
       <p
+        v-show="inlineInformation && showInformation"
         v-if="recordedAccountFallback"
         class="text-muted-foreground text-xs"
         data-testid="investment-recorded-values-note"
@@ -762,7 +857,11 @@ const health = computed(() =>
         invested-capital history are incomplete. Missing observations remain gaps; these balances are not investment
         returns.
       </p>
-      <p v-if="kind === 'benchmark'" class="text-muted-foreground text-xs">
+      <p
+        v-show="inlineInformation && showInformation"
+        v-if="kind === 'benchmark'"
+        class="text-muted-foreground text-xs"
+      >
         Series share an actual common starting observation. Benchmarks use recorded price history.
         {{
           priceRiskFallback
@@ -771,6 +870,7 @@ const health = computed(() =>
         }}
       </p>
       <p
+        v-show="inlineInformation && showInformation"
         v-if="priceRiskFallback && ['performance', 'risk', 'benchmark'].includes(kind)"
         class="text-muted-foreground text-xs"
         data-testid="investment-price-risk-note"
@@ -786,15 +886,27 @@ const health = computed(() =>
       >
         {{ benchmark.symbol }} · {{ benchmark.status }} · {{ benchmark.reason ?? benchmark.returnType }}
       </p>
-      <p v-if="kind === 'portfolio-comparison'" class="text-muted-foreground text-xs">
+      <p
+        v-show="inlineInformation && showInformation"
+        v-if="kind === 'portfolio-comparison'"
+        class="text-muted-foreground text-xs"
+      >
         Recorded portfolio values in {{ analytics.currencyCode }}. Cash flows affect balances; these are not comparable
         investment returns.
       </p>
-      <p v-if="kind === 'performance' || kind === 'value-capital'" class="text-muted-foreground text-xs">
+      <p
+        v-show="inlineInformation && showInformation"
+        v-if="kind === 'performance' || kind === 'value-capital'"
+        class="text-muted-foreground text-xs"
+      >
         Only dated recorded valuations and supported historical prices are used. Gaps indicate unavailable observations.
         Contributions and withdrawals are separate from investment gains.
       </p>
-      <p v-if="kind === 'contributions'" class="text-muted-foreground text-xs">
+      <p
+        v-show="inlineInformation && showInformation"
+        v-if="kind === 'contributions'"
+        class="text-muted-foreground text-xs"
+      >
         {{
           analytics.metrics.contributions?.status !== 'verified' ||
           analytics.metrics.contributions?.value == null ||
@@ -804,12 +916,7 @@ const health = computed(() =>
             : 'Recorded external flows; transfers within the selected portfolio group are excluded.'
         }}
       </p>
-      <details
-        v-if="kind === 'dividends'"
-        :open="!compact"
-        class="border-t pt-3"
-        data-testid="investment-income-breakdown"
-      >
+      <details v-if="kind === 'dividends'" class="border-t pt-3" data-testid="investment-income-breakdown">
         <summary class="text-primary-text cursor-pointer text-xs">Recorded income by security or portfolio</summary>
         <div class="mt-3 flex flex-wrap gap-1" role="group" aria-label="Investment income breakdown grouping">
           <Button
@@ -858,18 +965,22 @@ const health = computed(() =>
           <span class="font-medium">Dividend growth: {{ pct(dividendGrowth.value) }}.</span> {{ dividendGrowth.reason }}
         </p>
       </details>
-      <p v-if="kind === 'dividends'" class="text-muted-foreground text-xs">
+      <p
+        v-show="inlineInformation && showInformation"
+        v-if="kind === 'dividends'"
+        class="text-muted-foreground text-xs"
+      >
         Recorded income only; incomplete transaction history may omit earlier payments. Current indicated yield, yield
         on cost, dividend growth and forecasts require reliable distribution schedules and complete basis; unavailable
         estimates are not invented.
       </p>
-      <p v-if="kind === 'risk'" class="text-muted-foreground text-xs">
+      <p v-show="inlineInformation && showInformation" v-if="kind === 'risk'" class="text-muted-foreground text-xs">
         Account return metrics require complete funding and valuation history. Available price risk is labeled
         separately; deposits and withdrawals are never counted as investment gains.
       </p>
     </template>
     <template v-if="['allocation', 'sector', 'geography'].includes(kind)">
-      <label v-if="false" class="text-muted-foreground flex flex-wrap items-center gap-2 text-xs"
+      <label class="text-muted-foreground flex flex-wrap items-center gap-2 text-xs"
         >Allocation by<select
           :value="allocationMode"
           aria-label="Investment allocation mode"
@@ -939,7 +1050,11 @@ const health = computed(() =>
           }}
         </p>
       </div>
-      <p v-if="!fullAllocationKnown" class="text-muted-foreground text-xs">
+      <p
+        v-show="inlineInformation && showInformation"
+        v-if="!fullAllocationKnown"
+        class="text-muted-foreground text-xs"
+      >
         Only known values are drawn; unvalued cash or positions prevent a complete portfolio total. Slice proportions
         describe this known subtotal. Listed weights use known investment assets; unknown cash and unpriced positions
         are excluded.
@@ -949,13 +1064,14 @@ const health = computed(() =>
       </p>
       <details class="text-xs">
         <summary class="text-primary-text cursor-pointer">Historical allocation availability</summary>
-        <p class="text-muted-foreground mt-2">
+        <p v-show="inlineInformation && showInformation" class="text-muted-foreground mt-2">
           Historical allocation changes require dated position valuations and fund compositions for each observation.
           This selection has no complete historical composition series. Current fund weights are never applied to past
           dates.
         </p>
       </details>
       <p
+        v-show="inlineInformation && showInformation"
         v-if="!['holdings', 'brokerage', 'accountType'].includes(allocationMode)"
         class="text-muted-foreground text-xs"
       >
@@ -973,19 +1089,13 @@ const health = computed(() =>
       :security-id="String(settings.securityId ?? '')"
     />
     <template v-if="kind === 'heatmap'"
-      ><label class="text-muted-foreground flex flex-wrap items-center gap-2 text-xs"
-        >Performance period<select
-          :value="settings.colorBy ?? 'daily'"
-          aria-label="Treemap performance period"
-          class="bg-background max-w-full min-w-0 rounded-md border px-2 py-1.5"
-          @change="emit('settings-change', { colorBy: ($event.target as HTMLSelectElement).value })"
-        >
-          <option v-for="[id, label] in INVESTMENT_PERFORMER_PERIODS" :key="id" :value="id">{{ label }}</option>
-        </select></label
-      ><Treemap :analytics="analytics" :settings="settings" :compact="compact"
+      ><DateRange v-model="performanceRange" :earliest="earliest" :compact="compact" subject="investment" /><Treemap
+        :analytics="analytics"
+        :settings="settings"
+        :compact="compact"
     /></template>
     <template v-if="kind === 'exposure'"
-      ><p class="text-muted-foreground text-xs">
+      ><p v-show="inlineInformation && showInformation" class="text-muted-foreground text-xs">
         Direct plus indirect company exposure · fund composition coverage
         {{ pct(analytics.coverage.lookThroughPercent) }}. Partial holdings are not normalized to 100%. Effective dates:
         {{ compositionDates.join(', ') || 'No dated compositions' }}.
@@ -1039,9 +1149,7 @@ const health = computed(() =>
         class="border-t pt-3 text-xs"
         data-testid="investment-noncompany-exposure"
       >
-        <summary class="text-primary-text cursor-pointer">
-          Gold, cash, derivatives and other non-company balances
-        </summary>
+        <summary class="text-primary-text cursor-pointer">Non-company assets · {{ money(nonCompanyTotal) }}</summary>
         <ModuleBody
           ><div v-for="row in nonCompany" :key="row.id" class="flex items-start justify-between gap-3 border-b py-2">
             <span class="min-w-0"
@@ -1057,7 +1165,7 @@ const health = computed(() =>
       </details>
     </template>
     <template v-if="kind === 'overlap'"
-      ><p class="text-muted-foreground text-xs">
+      ><p v-show="inlineInformation && showInformation" class="text-muted-foreground text-xs">
         Weighted overlap is the sum of minimum comparable company weights. Select a fund pair to inspect shared
         companies.
       </p>
@@ -1078,6 +1186,7 @@ const health = computed(() =>
                   v-else
                   type="button"
                   class="hover:bg-accent w-full rounded-md border p-2"
+                  :style="overlapStrength(left.securityId, right.securityId)"
                   :aria-label="'Overlap ' + left.symbol + ' and ' + right.symbol"
                   @click="
                     overlap =
@@ -1151,32 +1260,27 @@ const health = computed(() =>
               }}</span></span
             >
           </div>
-          <p v-if="!upcomingPayments.length" class="text-muted-foreground py-3 text-xs">
+          <p
+            v-show="inlineInformation && showInformation"
+            v-if="!upcomingPayments.length"
+            class="text-muted-foreground py-3 text-xs"
+          >
             No announced or supported estimated payment schedule is available.
           </p></ModuleBody
         >
       </div>
-      <p class="text-muted-foreground text-xs">
+      <p v-show="inlineInformation && showInformation" class="text-muted-foreground text-xs">
         Upcoming payments require announced source dates. Forecasts are estimates; recorded dividends are never
         duplicated as contributions.
       </p></template
     >
     <template v-if="kind === 'performers'"
-      ><label class="text-muted-foreground flex flex-wrap items-center gap-2 text-xs"
-        >Rank by<select
-          :value="performerPeriod"
-          aria-label="Performer return period"
-          class="bg-background max-w-full rounded-md border px-2 py-1.5"
-          @change="emit('settings-change', { performerPeriod: ($event.target as HTMLSelectElement).value })"
-        >
-          <option v-for="[id, label] in INVESTMENT_PERFORMER_PERIODS" :key="id" :value="id">{{ label }}</option>
-        </select></label
-      >
-      <p class="text-muted-foreground text-xs">
+      ><DateRange v-model="performanceRange" :earliest="earliest" :compact="compact" subject="investment" />
+      <p v-show="inlineInformation && showInformation" class="text-muted-foreground text-xs">
         {{
           performerPeriod === 'unrealized'
             ? 'Open-position unrealized return uses reliable remaining cost basis and valuation.'
-            : 'Security price-only changes use dated recorded prices through the latest supported quote; distributions and cash flows are excluded. These are not total investment returns.'
+            : 'Position returns use native opening valuations and recorded net trades, fees and distributions. Missing opening positions are excluded.'
         }}
         Missing or stale observations are excluded from ranking.
       </p>
@@ -1210,9 +1314,8 @@ const health = computed(() =>
             <div class="bg-primary h-full" :style="{ width: Math.min(Number(row.weight ?? 0), 100) + '%' }" />
           </div></div
       ></ModuleBody>
-      <p class="text-muted-foreground text-xs">
-        Bars show direct holdings; top-five and top-ten metrics use known underlying economic exposure. Missing fund
-        weights limit those metrics. Descriptive analytics do not predict losses.
+      <p v-show="inlineInformation && showInformation" class="text-muted-foreground text-xs">
+        Underlying companies · direct and fund exposure combined.
       </p></template
     >
     <template v-if="kind === 'health'"
@@ -1229,7 +1332,7 @@ const health = computed(() =>
           <p class="text-lg font-semibold">{{ pct(value) }}</p>
         </div>
       </div>
-      <p class="text-muted-foreground text-xs">
+      <p v-show="inlineInformation && showInformation" class="text-muted-foreground text-xs">
         {{ analytics.refresh.provider }} · last price check {{ analytics.refresh.lastSuccess ?? 'unavailable' }} ·
         {{ analytics.refresh.schedule }}
       </p>
@@ -1265,11 +1368,22 @@ const health = computed(() =>
     >
     <CompositionHealth
       v-if="
+        inlineInformation &&
+        showInformation &&
         analytics.composition?.length &&
         ['health', 'allocation', 'sector', 'geography', 'exposure', 'overlap'].includes(kind)
       "
       :rows="analytics.composition"
       :compact="compact"
     />
+    <button
+      v-if="inlineInformation"
+      type="button"
+      class="text-muted-foreground self-start text-xs"
+      :aria-expanded="showInformation"
+      @click="showInformation = !showInformation"
+    >
+      Information
+    </button>
   </div>
 </template>

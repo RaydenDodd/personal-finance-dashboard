@@ -1,4 +1,5 @@
 import { payrollRange, type PayrollRange, type PayrollRangePreset } from '@/pages/income-management/payroll/date-range';
+import { latestUsEquitySessionDate } from '@bt/shared/types/investment-market';
 
 /** Retain shifted fixed-length periods when persisted settings are read back. */
 export function investmentRange(settings: Record<string, unknown>, earliest: string): PayrollRange {
@@ -8,7 +9,7 @@ export function investmentRange(settings: Record<string, unknown>, earliest: str
   if (preset !== 'all' && typeof settings.from === 'string' && typeof settings.through === 'string') {
     return { preset, from: settings.from, through: settings.through };
   }
-  return payrollRange(preset, undefined, earliest);
+  return payrollRange(preset, preset === '1d' ? latestUsEquitySessionDate() : undefined, earliest);
 }
 
 export function investmentRangeSettings(range: PayrollRange): Record<string, unknown> {

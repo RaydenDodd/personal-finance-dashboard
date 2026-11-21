@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import PrecisionNumber from '@/components/common/precision-number.vue';
+import SecurityHistory from '@/components/investment-analytics/security-history.vue';
 import ResponsiveAlertDialog from '@/components/common/responsive-alert-dialog.vue';
 import ResponsiveDialog from '@/components/common/responsive-dialog.vue';
 import InvestmentTransactionForm from '@/components/forms/investment-transaction-form.vue';
@@ -24,6 +25,7 @@ import {
   ChevronDownIcon,
   ChevronRightIcon,
   ClockAlertIcon,
+  ChartNoAxesCombinedIcon,
   PackageOpenIcon,
   PlusIcon,
   SearchXIcon,
@@ -52,6 +54,20 @@ import {
 const QUANTITY_DECIMALS = { crypto: 4, default: 2 } as const;
 const decimalsForAssetClass = (assetClass: ASSET_CLASS | undefined) =>
   assetClass === ASSET_CLASS.crypto ? QUANTITY_DECIMALS.crypto : QUANTITY_DECIMALS.default;
+const historyHolding = ref<HoldingModel | null>(null);
+const historyOpen = ref(false);
+const historyInstrument = computed(() =>
+  historyHolding.value
+    ? {
+        id: String(historyHolding.value.securityId),
+        symbol: historyHolding.value.security?.symbol ?? String(historyHolding.value.securityId),
+        name: historyHolding.value.security?.name ?? '',
+        securityType: historyHolding.value.security?.assetClass ?? 'other',
+        currencyCode: historyHolding.value.currencyCode,
+        priceDate: historyHolding.value.priceDate ? new Date(historyHolding.value.priceDate).toISOString() : null,
+      }
+    : null,
+);
 
 const props = defineProps<{
   holdings: HoldingModel[];
@@ -441,6 +457,16 @@ const theadLabelStyles = 'block max-w-32 truncate';
                       </Button>
                       <SecurityLogo v-if="row.holding.security" :security="row.holding.security" />
                       <span>{{ row.holding.security?.symbol }}</span>
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        :aria-label="'Price history for ' + row.holding.security?.symbol"
+                        @click.stop="
+                          historyHolding = row.holding;
+                          historyOpen = true;
+                        "
+                        ><ChartNoAxesCombinedIcon class="size-4"
+                      /></Button>
                     </div>
                   </td>
                   <td :class="[cellStyles, 'text-muted-foreground max-w-50 truncate px-3']">
@@ -568,6 +594,7 @@ const theadLabelStyles = 'block max-w-32 truncate';
       </div>
     </ScrollArea>
 
+    <SecurityHistory v-if="historyInstrument" v-model="historyOpen" :holding="historyInstrument" />
     <ResponsiveDialog v-model:open="isTransactionModalOpen" dialog-content-class="sm:max-w-2xl">
       <template #title>{{ $t('portfolioDetail.holdingsTable.addTransactionDialog.title') }}</template>
       <template #description>

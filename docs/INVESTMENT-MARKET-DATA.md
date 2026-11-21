@@ -1,98 +1,17 @@
-# Investment market data and composition sources
+﻿# Investment market data and composition
 
-Audit date: November 20, 2026. This analytics extension reuses MoneyMatter's
-existing price persistence, providers, refresh endpoint and jobs. It does not
-install infrastructure, buy a subscription or add a duplicate pricing scheduler.
+Current deployed code: `bf1af9a16`, November 20, 2026 (Eastern).
 
-## Existing implementations
+MoneyMatter retains its native Securities, SecurityPricings, composite providers, holding values, portfolio summary, brokerage records and FIFO calculations. No new financial ledger or price cache was introduced.
 
-| Capability                        | Existing source                                                                      | Analytics treatment                                                                                            |
-| --------------------------------- | ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------- |
-| Stock, ETF and mutual-fund prices | Yahoo provider and composite fallback to configured FMP, Polygon and Alpha Vantage   | Reuse stored `SecurityPricing`, its effective date and provider; unavailable provider keys remain unavailable. |
-| Crypto                            | Existing CoinGecko provider plus existing Coinbase quote support                     | Preserve existing routing and precision.                                                                       |
-| Historical prices                 | Existing historical-sync service and persisted pricing rows                          | Historical valuations use prices appropriate to the date, never today's quote retroactively.                   |
-| Security identity                 | Securities UUID, ISIN/CUSIP, venue, currency, asset class and provider symbol        | A display ticker alone cannot establish equivalence.                                                           |
-| Current portfolio evidence        | `getHoldingValues`, brokerage records and actual snapshots                           | Keep source observation dates visible; missing basis and history remain unknown.                               |
-| Refresh                           | `POST /investments/sync/securities-prices` with existing admin and rate-limit guards | Refresh shared quotes; no share quantities or brokerage transactions changed.                                  |
-| Stock schedule                    | `securitiesDailySyncCron`, `0 6 * * *`, `America/New_York`                           | Existing daily 6 am Eastern schedule, with DST interpreted by the named timezone.                              |
-| Crypto schedule                   | `cryptoPricesSyncCron`, default 15 minutes UTC                                       | Existing `CRYPTO_PRICES_SYNC_INTERVAL_MINUTES` controls valid supported intervals.                             |
+The existing job registry now runs stocks and supported crypto approximately every five minutes during regular US equity sessions, 09:30–16:00 America/New_York. Exchange holidays, daylight saving and scheduled early closes are guarded. A closing check runs twenty minutes after the scheduled close; existing 06:00 stock maintenance remains. NAV instruments update when their provider publishes a new NAV. Provider observation times are stored without replacing them with retrieval time. Unsupported or failed quotes retain the last valid observation.
 
-The factory caches provider instances. Market price persistence and existing
-shared job behavior remain authoritative. No new promise of hourly equities or
-NAV updates is made. The source audit alone does not prove any particular live
-job succeeded; deployed evidence must establish actual refresh/price coverage.
+The owner-scoped Refresh endpoint is `/investments/analytics/prices/refresh`. It uses the existing provider jobs, locks and rate limiter, excludes hidden portfolios, and rejects foreign/hidden security IDs. The administrator refresh endpoint remains protected. Price writes notify the existing SSE channel; one application listener invalidates shared analytics, holding and security-history queries. Browser fallback polling is restricted to regular market hours.
 
-## Fund holdings source decisions
+NYSE session rules were checked against https://www.nyse.com/trade/hours-calendars . Unscheduled exchange closures cannot be predicted. Prices are labeled delayed during trading unless a provider contract establishes otherwise. Daily gains compare the previous recorded regular-session close, prefer official prior-close data returned with Yahoo quotes, and remove native net trade cash including fees. Same-day full exits contribute to the consolidated daily gain. Partial imported trade history remains explicitly labeled.
 
-**Vanguard:** the official [VOO product page](https://investor.vanguard.com/investment-products/etfs/profile/voo)
-provides portfolio information. Its [terms](https://investor.vanguard.com/terms-conditions)
-allow limited personal informational use and restrict repeated automated access
-outside Vanguard-provided mechanisms. A downloaded, permitted personal-use file
-can be imported with its source date. An unattended website scraper is not
-enabled or represented as a licensed API.
+Actual production evidence after the history backfill: 79 holdings priced, daily changes supported for 79/79 active positions, 1,574 recorded account-value dates, 104 common-date current-holdings price-risk observations, and 1,256 observations each for SPY, QQQ, VTI and VT. These counts establish stored data and deployed readback, not a naturally triggered market-open refresh. The backfill submitted dated observations through the native historical service; identical observations use its existing uniqueness constraint.
 
-**Invesco:** the official [QQQ product page](https://www.invesco.com/us/en/financial-products/etfs/invesco-qqq-trust-series-1.html)
-exposes dated holdings and an export action. The [QQQ description](https://www.invesco.com/qqq-etf/en/about.html)
-identifies ICB classifications. Retain that taxonomy rather than silently mixing
-it with GICS. Its [terms](https://www.invesco.com/us/en/resources/terms-of-use.html)
-restrict repeated automated access and data extraction tools. No authenticated
-or licensed automated API was verified in this audit, so scheduled issuer
-downloading is not enabled by assumption. Intended personal-use exports can
-supply dated manual imports.
+A scheduled five-minute market-open tick has not been observed during this evening verification. No claim of continuously live quotes or live composition is made. Source compositions are delayed disclosures; see [the per-fund matrix](INVESTMENT-COMPOSITION-COMPLETION.md).
 
-**SEC N-PORT:** [public data sets](https://www.sec.gov/data-research/sec-markets-data/form-n-port-data-sets)
-are derived from public fund filings and distributed as quarterly archives.
-These are suitable dated evidence, with issuer/series/security identity mapping
-and filing amendments checked. The [readme](https://www.sec.gov/files/nport_readme.pdf)
-documents as-filed caveats and tables. Whole quarterly archives are hundreds of
-megabytes, so they should not be fetched by each dashboard request. The SEC
-[access guidance](https://www.sec.gov/about/webmaster-frequently-asked-questions)
-requires an identified User-Agent and currently limits traffic to ten requests
-per second. No bulk archive downloader or unattended filing-resolution provider
-is claimed as operational until implemented and tested.
-
-**Other sources:** existing configured price providers are not automatically
-assumed to license full fund composition, security classifications, distribution
-forecasts or total-return benchmark series. No paid provider has been enabled.
-
-## Composition provenance and quality rules
-
-Import CSV/JSON snapshots through the separate composition interface. Require an
-effective date, provider/source, stable fund identity and decimal weights. Keep
-retrieval time, classification standard and coverage with the immutable snapshot.
-Repeated identical imports must be idempotent. Composition records must never
-create investment transactions, direct shares, tax lots or financial cash flows.
-
-Partial composition leaves a residual Unknown category; it is never scaled to
-100%. Recursive funds must stop cycles and avoid counting a wrapper alongside
-its children. Geography defaults to underlying issuer country; exchange listing,
-fund domicile and revenue geography are different information. Historical
-look-through requires a composition known for the historical date.
-
-Price-only benchmark data must be labeled price-only. Portfolio balances cannot
-be compared to index levels. Normalize comparable return series to a common
-start, and preserve missing source/history conditions instead of inventing
-returns, dividends, classifications or future payments.
-
-## Live coverage
-
-The deployed price provenance, native holding values, known subtotals and source
-quality gates passed actual-record verification. Existing scheduler startup was
-verified: daily equities at 06:00 America/New_York and cryptocurrency every
-15 minutes UTC. The existing bank synchronization timer remained active.
-
-A bounded, identified request to the public SEC fund registry returned HTTP 403
-with the page title "Request Rate Threshold Exceeded". The probe stopped after
-one request without retry, submissions traversal, bulk downloads or access
-workarounds. The automated SEC adapter remains unimplemented; this access failure
-blocked the initial identity-mapping feasibility check.
-
-The installed Yahoo SDK's top-holdings contract supplies percentages and names
-but does not guarantee composition effective dates or strong identifiers. A
-performance module's date cannot be substituted for a composition date.
-
-Manual composition storage and source preservation passed an isolated actual API
-and database test, including partial coverage, identical repeat and conflicting
-revision rejection. Production compositions remain unavailable until permitted
-dated source files or a verified provider integration are supplied. The
-completion matrix distinguishes this from a fully operational external feed.
+The new intraday data exposed repeated Intl date-formatter construction in analytics. The deployed helper reuses its Eastern formatter. Following deployment, actual analytics returned successfully and SSH/service checks remained responsive, with no swap use observed. This supports the fix but does not by itself prove the cause of the earlier host freezes.

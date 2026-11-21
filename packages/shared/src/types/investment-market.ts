@@ -87,6 +87,9 @@ export function previousUsEquitySession(date: string) {
   } while (!usEquitySession(dayKey(previous)).tradingDay);
   return dayKey(previous);
 }
+export function latestUsEquitySessionDate(date = easternDate()) {
+  return usEquitySession(date).tradingDay ? date : previousUsEquitySession(date);
+}
 
 /** Scheduled close, rather than the time a later quote request retrieved it. */
 export function usEquityCloseInstant(date: string) {

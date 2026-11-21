@@ -48,7 +48,7 @@ const title = computed(() => (def.value?.literalLabels ? def.value.name : t(def.
 const componentCache = new Map<string, ReturnType<typeof defineAsyncComponent>>();
 const asyncComponent = computed(() => {
   const builtin = WIDGET_REGISTRY[props.widgetConfig.widgetId];
-  if (props.definition || !builtin) return null;
+  if (!builtin) return null;
   const id = props.widgetConfig.widgetId;
   if (!componentCache.has(id)) {
     componentCache.set(id, defineAsyncComponent({ loader: builtin.component, loadingComponent: WidgetSkeleton }));
@@ -78,7 +78,7 @@ const rowSpanClass = computed(() => ROW_SPAN_CLASSES[props.widgetConfig.rowSpan 
 
 const componentProps = computed(() => {
   const builtin = WIDGET_REGISTRY[props.widgetConfig.widgetId];
-  return !props.definition && builtin?.needsPeriod ? { selectedPeriod: props.currentPeriod } : {};
+  return builtin?.needsPeriod ? { selectedPeriod: props.currentPeriod } : {};
 });
 
 const isSizeActive = (size: WidgetSize) =>

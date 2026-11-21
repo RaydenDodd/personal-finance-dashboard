@@ -1,4 +1,5 @@
 import type { InvestmentHolding } from '@bt/shared/types/investment-analytics';
+import { latestUsEquitySessionDate } from '@bt/shared/types/investment-market';
 
 import { chartNumber } from './chart-model';
 
@@ -13,11 +14,24 @@ export const INVESTMENT_PERFORMER_PERIODS = [
   ['1y', 'One-year price change'],
   ['2y', 'Two-year price change'],
   ['5y', 'Five-year price change'],
-  ['all', 'All recorded price history'],
+  ['all', 'Lifetime holding return'],
+  ['custom', 'Selected dates'],
 ] as const;
 
 /** Ranking uses shared-service returns; unsupported periods remain absent rather than zero. */
-export function rankInvestmentPerformers(holdings: InvestmentHolding[], period = 'unrealized', securityId = '') {
+export const usesCustomPositionPeriod = (settings: Record<string, unknown>, period: string) =>
+  Boolean(
+    settings.from &&
+    settings.through &&
+    !['unrealized', 'all'].includes(period) &&
+    (period !== 'daily' || settings.through !== latestUsEquitySessionDate()),
+  );
+export function rankInvestmentPerformers(
+  holdings: InvestmentHolding[],
+  period = 'unrealized',
+  securityId = '',
+  custom = false,
+) {
   return holdings
     .filter((row) => !securityId || row.securityId === securityId || row.symbol === securityId)
     .map((row) => ({
@@ -27,10 +41,13 @@ export function rankInvestmentPerformers(holdings: InvestmentHolding[], period =
       name: row.name,
       priceDate: row.priceDate,
       returnValue: chartNumber(
-        period === 'unrealized'
-          ? row.unrealizedPercent
-          : (row.periodReturns?.[period as keyof NonNullable<InvestmentHolding['periodReturns']>] ??
-              (period === 'daily' ? row.dailyChangePercent : null)),
+        custom
+          ? row.personalReturns?.custom
+          : period === 'unrealized' || period === 'all'
+            ? row.unrealizedPercent
+            : period === 'daily'
+              ? row.dailyChangePercent
+              : (row.personalReturns?.[period as keyof NonNullable<InvestmentHolding['personalReturns']>] ?? null),
       ),
     }))
     .filter((row): row is typeof row & { returnValue: number } => row.returnValue !== null)

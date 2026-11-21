@@ -129,7 +129,9 @@ export function lookThrough(holdings: InvestmentHolding[], snapshots: Investment
       'style',
       'assetClass',
     ] as const) {
-      if (!row[key] && classification[key]) row[key] = classification[key];
+      if (isUnknownClassification(classification[key])) continue;
+      if (!row[key] || (isUnknownClassification(row[key]) && !row[key]?.includes('conflicting')))
+        row[key] = classification[key];
       else if (row[key] && classification[key] && row[key] !== classification[key])
         row[key] = 'Unknown (conflicting classifications)';
     }

@@ -30,6 +30,7 @@ export const computeHoldingsValueByDate = ({
   floorValues = true,
   onMissingPrice,
   positionAnchorsByPortfolio,
+  onHoldingValue,
 }: {
   uniqueDates: string[];
   portfolioIds: string[];
@@ -40,6 +41,8 @@ export const computeHoldingsValueByDate = ({
   /** Truncates each holding's base value to a whole currency unit; pass false to keep the decimals. */
   floorValues?: boolean;
   onMissingPrice?: ({ securityId, dateStr }: { securityId: string; dateStr: string }) => void;
+  /** Read-only analytics hook; quantity and valuation still come from this native replay. */
+  onHoldingValue?: (row: { portfolioId: string; securityId: string; date: string; value: number }) => void;
   /** Real complete broker positions establish an opening balance only from their dated observation forward. */
   positionAnchorsByPortfolio?: Map<
     string,
@@ -155,6 +158,7 @@ export const computeHoldingsValueByDate = ({
           const unfloored = marketValueInSecurityCurrency * exchangeRate;
           const marketValueInBaseCurrency = floorValues ? Math.floor(unfloored) : unfloored;
           totalValueForDate += marketValueInBaseCurrency;
+          onHoldingValue?.({ portfolioId, securityId, date: dateStr, value: marketValueInBaseCurrency });
         } else {
           // No price for this day — value the holding at cost basis so the line
           // stays continuous instead of collapsing to zero. It is only an

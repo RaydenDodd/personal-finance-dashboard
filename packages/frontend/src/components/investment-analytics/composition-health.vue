@@ -6,7 +6,7 @@ const percent = (value: string) => `${Number(value).toFixed(4)}%`;
 const age = (date: string | null) => (date ? Math.floor((Date.now() - Date.parse(date)) / 86400000) : null);
 </script>
 <template>
-  <details :open="!compact" class="min-w-0 border-t pt-3" data-testid="fund-composition-health">
+  <details class="min-w-0 border-t pt-3" data-testid="fund-composition-health">
     <summary class="text-primary-text cursor-pointer text-xs">
       Fund composition sources · {{ rows.filter((row) => row.asOf).length }} / {{ rows.length }} populated
     </summary>

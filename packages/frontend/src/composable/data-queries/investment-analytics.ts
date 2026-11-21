@@ -9,15 +9,21 @@ export function useInvestmentAnalytics({
   portfolioIds = [],
   benchmarks = [],
   enabled = true,
+  performanceFrom,
+  performanceThrough,
 }: {
   portfolioIds?: MaybeRefOrGetter<string[]>;
   benchmarks?: MaybeRefOrGetter<string[]>;
   enabled?: MaybeRefOrGetter<boolean>;
+  performanceFrom?: MaybeRefOrGetter<string | undefined>;
+  performanceThrough?: MaybeRefOrGetter<string | undefined>;
 } = {}) {
   const { data: userSettings } = useUserSettings();
   const selection = computed(() => ({
     portfolioIds: [...toValue(portfolioIds)].sort(),
     benchmarks: [...toValue(benchmarks)].sort(),
+    performanceFrom: toValue(performanceFrom),
+    performanceThrough: toValue(performanceThrough),
   }));
   return useQuery({
     queryKey: computed(() => [

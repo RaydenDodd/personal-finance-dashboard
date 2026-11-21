@@ -120,7 +120,24 @@ const fieldClass = 'bg-background border-input min-h-9 w-full rounded-md border 
               </p>
             </fieldset>
 
-            <label class="block space-y-1 text-sm">
+            <label
+              v-if="
+                ![
+                  'allocation',
+                  'sector',
+                  'geography',
+                  'exposure',
+                  'overlap',
+                  'concentration',
+                  'holdings',
+                  'heatmap',
+                  'performers',
+                  'health',
+                  'overview',
+                ].includes(kind)
+              "
+              class="block space-y-1 text-sm"
+            >
               <span class="font-medium">Date range</span>
               <select v-model="draft.dateRange" :class="fieldClass" aria-label="Widget date range">
                 <option v-for="range in INVESTMENT_DATE_RANGES" :key="range" :value="range">

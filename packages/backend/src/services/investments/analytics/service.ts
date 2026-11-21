@@ -10,6 +10,7 @@ import {
   investmentPriceDate,
   usEquityMarketOpen,
   usEquitySession,
+  previousUsEquitySession,
 } from '@bt/shared/types/investment-market';
 import { Money } from '@common/types/money';
 import { ValidationError } from '@js/errors';
@@ -53,6 +54,7 @@ import {
   investmentIssuerCountry,
 } from './math';
 import { consolidatedReturns, normalizeComparableSeries, recordedPriceReturns } from './performance';
+import { positionPeriodDates, positionPeriodReturns } from './position-performance';
 import { currentHoldingsPriceRisk } from './price-risk';
 
 const decimal = (m: Money | string | number): string => (Money.isMoney(m) ? m.toDecimalString(18) : String(m));
@@ -73,12 +75,16 @@ async function getAnalyticsImpl({
   portfolioIds,
   benchmarkSymbols = ['SPY', 'QQQ', 'VTI', 'VT'],
   hiddenPortfolioIds = [],
+  performanceFrom,
+  performanceThrough,
 }: {
   userId: number;
   portfolioIds?: string[];
   benchmarkSymbols?: string[];
   hiddenPortfolioIds?: string[];
   compositionRevision?: string;
+  performanceFrom?: string;
+  performanceThrough?: string;
 }): Promise<InvestmentAnalytics> {
   const allPortfolios = await Portfolios.findAll({ where: { userId }, order: [['name', 'ASC']] });
   const ids = visiblePortfolioSelection(
@@ -542,7 +548,22 @@ async function getAnalyticsImpl({
   metrics.dailyChangePercent.status = metrics.dailyChange.status;
   metrics.dailyChangePercent.reason =
     'Change relative to the covered positions’ previous-close value, adjusted for recorded trades; cash and uncovered positions are excluded.';
+  if (performanceFrom && performanceThrough && (performanceFrom > performanceThrough || performanceThrough > today))
+    throw new ValidationError({ message: 'Choose a date range through today or earlier.' });
+  const periodDates = {
+    ...positionPeriodDates(today),
+    ...(performanceFrom && performanceThrough
+      ? { custom: performanceFrom === performanceThrough ? previousUsEquitySession(performanceFrom) : performanceFrom }
+      : {}),
+  };
+  const baselineDays = new Set(Object.values(periodDates));
+  if (performanceThrough) baselineDays.add(performanceThrough);
+  const positionBaselines = new Map<string, string>();
   const history = buildHistory({
+    onHoldingValue: (row) => {
+      if (baselineDays.has(row.date))
+        positionBaselines.set(`${row.portfolioId}:${row.securityId}:${row.date}`, String(row.value));
+    },
     ids,
     currencyCode,
     brokers,
@@ -562,6 +583,41 @@ async function getAnalyticsImpl({
       settlementCurrencyCode: t.settlementCurrencyCode,
     })) as TransactionRow[],
   });
+  const supportedFrom = new Map<string, string | undefined>(
+    scope.map((p) => {
+      const broker = brokerById.get(p.id);
+      const first =
+        broker?.data.historyComplete !== false
+          ? transactions
+              .find((t) => t.portfolioId === p.id)
+              ?.date.toISOString()
+              .slice(0, 10)
+          : broker?.data.snapshots
+              .filter((s) => s.complete && s.positions?.length)
+              .map((s) => s.asOf.slice(0, 10))
+              .sort()[0];
+      return [p.id, first];
+    }),
+  );
+  for (const h of holdings)
+    h.personalReturns = positionPeriodReturns({
+      holding: h,
+      dates: periodDates,
+      through: performanceThrough && performanceThrough < today ? performanceThrough : undefined,
+      openingValue: (portfolioId, securityId, date) => {
+        const first = supportedFrom.get(portfolioId);
+        const day = history.find((p) => p.date === date);
+        if (!first || first > date || day?.knownPortfolios?.[portfolioId] == null) return null;
+        return positionBaselines.get(`${portfolioId}:${securityId}:${date}`) ?? '0';
+      },
+      trades: transactions.map((t) => ({
+        portfolioId: t.portfolioId,
+        securityId: t.securityId,
+        date: investmentPriceDate(t.date),
+        category: t.category,
+        amount: decimal(t.refAmount),
+      })),
+    });
   const currentPoint = history.find((p) => p.date === today);
   if (currentPoint) {
     currentPoint.knownPortfolios = Object.fromEntries(
@@ -658,8 +714,21 @@ async function getAnalyticsImpl({
       percent: percent(knownCash, allocationValue),
       securityIds: [],
     });
+  const nonCompanyValue = sum([
+    ...exposure.filter((e) => !e.unknown && !isCompanyExposure(e)).map((e) => e.totalValue),
+    knownCash,
+  ])!;
+  metrics.nonCompanyValue = metric(nonCompanyValue);
+  metrics.nonCompanyWeight = metric(percent(nonCompanyValue, allocationValue));
   allocations.underlying = allocation(
-    exposure.map((e) => ({ key: e.id, label: e.unknown ? e.name : e.symbol, value: e.totalValue, id: e.id })),
+    [
+      ...exposure
+        .filter((e) => e.unknown || isCompanyExposure(e))
+        .map((e) => ({ key: e.id, label: e.unknown ? e.name : e.symbol, value: e.totalValue, id: e.id })),
+      ...(new Big(nonCompanyValue).eq(0)
+        ? []
+        : [{ key: 'non-company', label: 'Non-company assets', value: nonCompanyValue, id: 'non-company' }]),
+    ],
     allocationValue,
   );
   for (const mode of ['sector', 'industry', 'country', 'region', 'marketCap', 'style', 'assetClass'] as const)
@@ -667,7 +736,7 @@ async function getAnalyticsImpl({
       exposure.map((e) => {
         const label =
           mode !== 'assetClass' && !e.unknown && !isCompanyExposure(e)
-            ? `Not applicable (${e.assetClass ?? 'non-company'})`
+            ? 'Non-company assets'
             : mode === 'country'
               ? (investmentIssuerCountry(e.country) ?? 'Unknown')
               : (e[mode] ?? 'Unknown');
@@ -679,7 +748,7 @@ async function getAnalyticsImpl({
     exposure.map((e) => {
       const label =
         !e.unknown && !isCompanyExposure(e)
-          ? 'Not applicable (non-company)'
+          ? 'Non-company assets'
           : !investmentIssuerCountry(e.country)
             ? 'Unknown'
             : investmentIssuerCountry(e.country) === 'US'
@@ -690,9 +759,41 @@ async function getAnalyticsImpl({
     allocationValue,
   );
   allocations.development = allocation(
-    exposure.map((e) => ({ key: e.market ?? 'Unknown', label: e.market ?? 'Unknown', value: e.totalValue, id: e.id })),
+    exposure.map((e) => ({
+      key: !e.unknown && !isCompanyExposure(e) ? 'Non-company assets' : (e.market ?? 'Unknown'),
+      label: !e.unknown && !isCompanyExposure(e) ? 'Non-company assets' : (e.market ?? 'Unknown'),
+      value: e.totalValue,
+      id: e.id,
+    })),
     allocationValue,
   );
+  if (new Big(knownCash).gt(0)) {
+    for (const mode of [
+      'sector',
+      'industry',
+      'country',
+      'region',
+      'marketCap',
+      'style',
+      'usInternational',
+      'development',
+      'assetClass',
+    ]) {
+      const key = mode === 'assetClass' ? 'Cash' : 'Non-company assets';
+      const row = allocations[mode]?.find((r) => r.key === key);
+      if (row) {
+        row.value = new Big(row.value ?? 0).plus(knownCash).toString();
+        row.percent = percent(row.value, allocationValue);
+      } else
+        allocations[mode]?.push({
+          key,
+          label: key,
+          value: knownCash,
+          percent: percent(knownCash, allocationValue),
+          securityIds: [],
+        });
+    }
+  }
   for (const mode of ['brokerage', 'accountType'] as const)
     allocations[mode] = allocation(
       portfolios.map((p) => ({
@@ -895,8 +996,16 @@ async function getAnalyticsImpl({
 }
 
 const deduplicatedAnalytics = withDeduplication(getAnalyticsImpl, {
-  keyGenerator: ({ userId, portfolioIds, benchmarkSymbols, hiddenPortfolioIds, compositionRevision }) =>
-    `investment-analytics:${userId}:${portfolioIds?.toSorted().join(',') ?? 'all'}:${benchmarkSymbols?.join(',') ?? 'default'}:${hiddenPortfolioIds?.toSorted().join(',')}:${compositionRevision}`,
+  keyGenerator: ({
+    userId,
+    portfolioIds,
+    benchmarkSymbols,
+    hiddenPortfolioIds,
+    compositionRevision,
+    performanceFrom,
+    performanceThrough,
+  }) =>
+    `investment-analytics:${userId}:${portfolioIds?.toSorted().join(',') ?? 'all'}:${benchmarkSymbols?.join(',') ?? 'default'}:${hiddenPortfolioIds?.toSorted().join(',')}:${compositionRevision}:${performanceFrom}:${performanceThrough}`,
   ttl: 1000,
   maxCacheSize: 8,
 });

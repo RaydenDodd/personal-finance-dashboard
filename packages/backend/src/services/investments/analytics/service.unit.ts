@@ -43,6 +43,7 @@ jest.mock('./fund-snapshots', () => ({
 }));
 jest.mock('./history', () => ({ buildHistory: jest.fn().mockReturnValue([]) }));
 
+import { easternDate } from '@bt/shared/types/investment-market';
 import BrokerPortfolioData from '@models/investments/broker-portfolio-data.model';
 import InvestmentTransaction from '@models/investments/investment-transaction.model';
 import PortfolioBalances from '@models/investments/portfolio-balances.model';
@@ -213,13 +214,14 @@ describe('owner-scoped native portfolio analytics adapter', () => {
     expect(result.health.find((r) => r.id === 'fund-classification:security')?.status).toBe('partial');
   });
   it('preserves the complete available MAX range when only partial portfolio observations exist', async () => {
+    const currentDate = easternDate();
     jest.mocked(buildHistory).mockReturnValue([
       { date: '2019-12-12', marketValue: null, portfolios: { a: '100', b: null }, coverage: 50 },
-      { date: '2026-11-20', marketValue: null, portfolios: { a: null, b: '200' }, coverage: 50 },
+      { date: currentDate, marketValue: null, portfolios: { a: null, b: '200' }, coverage: 50 },
     ] as never);
     const result = await getInvestmentAnalytics({ userId: 1 });
     expect(result.coverage.historyStart).toBe('2019-12-12');
-    expect(result.coverage.historyEnd).toBe('2026-11-20');
+    expect(result.coverage.historyEnd).toBe(currentDate);
     expect(result.history).toHaveLength(2);
     expect(result.history[0]?.marketValue).toBeNull();
     expect(result.history.at(-1)?.marketValue).toBe(result.metrics.marketValue?.value);

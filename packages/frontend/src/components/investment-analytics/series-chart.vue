@@ -32,7 +32,9 @@ const visibleSeries = computed(() => props.series.filter((series) => !hidden.val
 const hasObservations = computed(() => props.points.some((p) => props.series.some((s) => p.values[s.key] != null)));
 const pointDate = (date: string) => new Date(date.includes('T') ? date : `${date.slice(0, 10)}T12:00:00Z`);
 const tooltipSeries = computed(() =>
-  props.bars ? visibleSeries.value.filter((series) => series.key === tooltip.segment) : visibleSeries.value,
+  (props.bars ? visibleSeries.value.filter((series) => series.key === tooltip.segment) : visibleSeries.value).filter(
+    (series) => tooltip.point?.values[series.key] != null,
+  ),
 );
 const tooltip = reactive({ visible: false, x: 0, y: 0, point: null as InvestmentChartPoint | null, segment: '' });
 const { formatBaseCurrency } = useFormatCurrency();

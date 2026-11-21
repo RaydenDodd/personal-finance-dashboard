@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { Button } from '@/components/lib/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/lib/ui/popover';
-import { CalendarIcon, ChevronLeftIcon, ChevronRightIcon } from '@lucide/vue';
+import { ChevronLeftIcon, ChevronRightIcon } from '@lucide/vue';
 import { computed, ref } from 'vue';
+import { latestUsEquitySessionDate } from '@bt/shared/types/investment-market';
 import {
   payrollRange,
   payrollToday,
@@ -36,7 +37,11 @@ const presets = computed<{ id: PayrollRangePreset; name: string }[]>(() => [
 ]);
 const forwardDisabled = computed(() => shiftPayrollRange(model.value, 1) === model.value);
 function choose(preset: PayrollRangePreset) {
-  model.value = payrollRange(preset, payrollToday(), props.earliest);
+  model.value = payrollRange(
+    preset,
+    props.subject === 'investment' && preset === '1d' ? latestUsEquitySessionDate() : payrollToday(),
+    props.earliest,
+  );
 }
 function apply() {
   if (
@@ -72,36 +77,37 @@ function apply() {
         >{{ preset.name }}</Button
       >
     </div>
-    <div class="flex shrink-0 items-center gap-0.5">
-      <Button
-        size="icon"
-        variant="ghost"
-        class="size-7"
-        :disabled="model.preset === 'all'"
-        :aria-label="'Previous ' + subject + ' period'"
-        @click="model = shiftPayrollRange(model, -1)"
-        ><ChevronLeftIcon class="size-4"
-      /></Button>
-      <p
-        class="text-muted-foreground flex items-center justify-center gap-x-1 text-[10px] whitespace-nowrap tabular-nums sm:text-[11px]"
-      >
-        <time class="whitespace-nowrap" :datetime="model.from">{{ model.from }}</time
-        ><span>&ndash;</span><time class="whitespace-nowrap" :datetime="model.through">{{ model.through }}</time>
-      </p>
-      <Button
-        size="icon"
-        variant="ghost"
-        class="size-7"
-        :disabled="forwardDisabled || model.preset === 'all'"
-        :aria-label="'Next ' + subject + ' period'"
-        @click="model = shiftPayrollRange(model, 1)"
-        ><ChevronRightIcon class="size-4"
-      /></Button>
-      <Popover v-model:open="open"
-        ><PopoverTrigger as-child
-          ><Button size="icon" variant="ghost" class="size-7" :aria-label="'Custom ' + subject + ' date range'"
-            ><CalendarIcon class="size-3.5" /></Button></PopoverTrigger
-        ><PopoverContent class="w-72" align="end"
+    <Popover v-model:open="open"
+      ><div class="flex shrink-0 items-center gap-0.5">
+        <Button
+          size="icon"
+          variant="ghost"
+          class="size-7"
+          :disabled="model.preset === 'all'"
+          :aria-label="'Previous ' + subject + ' period'"
+          @click="model = shiftPayrollRange(model, -1)"
+          ><ChevronLeftIcon class="size-4"
+        /></Button>
+        <PopoverTrigger as-child
+          ><button
+            type="button"
+            :aria-label="'Choose ' + subject + ' date range'"
+            class="text-muted-foreground flex items-center justify-center gap-x-1 text-[10px] whitespace-nowrap tabular-nums sm:text-[11px]"
+          >
+            <time class="whitespace-nowrap" :datetime="model.from">{{ model.from }}</time
+            ><span>&ndash;</span><time class="whitespace-nowrap" :datetime="model.through">{{ model.through }}</time>
+          </button></PopoverTrigger
+        >
+        <Button
+          size="icon"
+          variant="ghost"
+          class="size-7"
+          :disabled="forwardDisabled || model.preset === 'all'"
+          :aria-label="'Next ' + subject + ' period'"
+          @click="model = shiftPayrollRange(model, 1)"
+          ><ChevronRightIcon class="size-4"
+        /></Button>
+        <PopoverContent class="w-72" align="end"
           ><form class="space-y-3" @submit.prevent="apply">
             <p class="text-sm font-medium">Custom date range</p>
             <label class="block text-xs"
@@ -121,9 +127,8 @@ function apply() {
                 class="border-input bg-background mt-1 h-9 w-full rounded-md border px-2" /></label
             ><Button size="sm" type="submit">Apply</Button>
           </form></PopoverContent
-        ></Popover
-      >
-      <slot name="actions" />
-    </div>
+        >
+        <slot name="actions" /></div
+    ></Popover>
   </div>
 </template>

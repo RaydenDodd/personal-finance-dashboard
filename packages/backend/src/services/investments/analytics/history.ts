@@ -29,6 +29,7 @@ export function buildHistory({
   balances,
   securities,
   prices,
+  onHoldingValue,
 }: {
   ids: string[];
   currencyCode: string;
@@ -38,6 +39,7 @@ export function buildHistory({
   balances: PortfolioBalances[];
   securities: Securities[];
   prices: SecurityPricing[];
+  onHoldingValue?: (row: { portfolioId: string; securityId: string; date: string; value: number }) => void;
 }): InvestmentHistoryPoint[] {
   const today = easternDate();
   const starts = [
@@ -82,6 +84,8 @@ export function buildHistory({
             return 1;
           },
           onMissingPrice: ({ dateStr }) => missing.add(dateStr),
+          floorValues: false,
+          onHoldingValue,
           positionAnchorsByPortfolio: new Map([[id, anchors]]),
         });
         for (const d of supportedDates) if (!missing.has(d)) known.set(d, String(replay.get(d) ?? 0));
@@ -112,6 +116,8 @@ export function buildHistory({
         findPriceForDate: findPrice,
         getExchangeRate: rate,
         onMissingPrice: ({ dateStr }) => missing.add(dateStr),
+        floorValues: false,
+        onHoldingValue,
       });
       const cashValues = computePortfolioCashByDate({
         uniqueDates: dates,

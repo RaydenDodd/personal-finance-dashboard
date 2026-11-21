@@ -1,6 +1,7 @@
 import { ASSET_CLASS } from '@bt/shared/types/investments';
 import { NotFoundError } from '@js/errors';
 import { logger } from '@js/utils';
+import InvestmentTransaction from '@models/investments/investment-transaction.model';
 import Securities from '@models/investments/securities.model';
 import SecurityPricing from '@models/investments/security-pricing.model';
 import { withLock } from '@services/common/lock';
@@ -28,7 +29,13 @@ const syncHistoricalPricesImpl = async (securityId: string, intraday = false): P
 
   const endDate = new Date();
   const yearsBack = security.assetClass === ASSET_CLASS.crypto ? CRYPTO_BACKFILL_YEARS : STOCK_BACKFILL_YEARS;
-  const startDate = intraday ? subDays(endDate, 7) : subYears(endDate, yearsBack);
+  let startDate = intraday ? subDays(endDate, 7) : subYears(endDate, yearsBack);
+  if (!intraday) {
+    // Preserve the native default window, extending it only where actual native
+    // transactions establish that the instrument is needed further back.
+    const firstTrade = await InvestmentTransaction.min('date', { where: { securityId } });
+    if (firstTrade && new Date(String(firstTrade)) < startDate) startDate = new Date(String(firstTrade));
+  }
 
   // Use composite provider which automatically handles US vs non-US routing and fallbacks
   const compositeProvider = dataProviderFactory.getProvider();
@@ -55,18 +62,30 @@ const syncHistoricalPricesImpl = async (securityId: string, intraday = false): P
     if (security.assetClass !== ASSET_CLASS.crypto) throw error;
     prices = [];
   }
-  if (!prices.length && security.assetClass === ASSET_CLASS.crypto)
-    prices = await fetchCoinbaseHistory(
-      {
-        securityId: security.id,
-        symbol: security.symbol ?? '',
-        providerSymbol: toProviderSymbol(security.providerSymbol),
-        assetClass: security.assetClass,
-      },
-      startDate,
-      endDate,
-      intraday ? 3600 : 86400,
-    );
+  const firstReturned = prices.length ? new Date(Math.min(...prices.map((p) => p.date.getTime()))) : endDate;
+  if (
+    security.assetClass === ASSET_CLASS.crypto &&
+    (!prices.length || (!intraday && firstReturned.getTime() - startDate.getTime() > 3 * 86400000))
+  ) {
+    try {
+      const older = await fetchCoinbaseHistory(
+        {
+          securityId: security.id,
+          symbol: security.symbol ?? '',
+          providerSymbol: toProviderSymbol(security.providerSymbol),
+          assetClass: security.assetClass,
+        },
+        startDate,
+        prices.length ? firstReturned : endDate,
+        intraday ? 3600 : 86400,
+      );
+      prices = [...older, ...prices].sort((a, b) => a.date.getTime() - b.date.getTime());
+    } catch {
+      logger.warn(
+        `Older Coinbase history unavailable for ${security.symbol}; retained existing provider observations.`,
+      );
+    }
+  }
 
   if (prices.length === 0) {
     // When the row has an explicit `priceSourceSymbol` and the provider still

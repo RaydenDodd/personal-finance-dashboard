@@ -20,7 +20,12 @@ const list = z
 export const getAnalytics = createController(
   z.object({
     query: z
-      .object({ portfolioIds: list, benchmarkSymbols: list })
+      .object({
+        portfolioIds: list,
+        benchmarkSymbols: list,
+        performanceFrom: z.iso.date().optional(),
+        performanceThrough: z.iso.date().optional(),
+      })
       .default({ portfolioIds: undefined, benchmarkSymbols: undefined }),
   }),
   async ({ user, query }) => ({ data: await getInvestmentAnalytics({ userId: user.id, ...query }) }),

@@ -11,7 +11,9 @@ import { payrollRange, type PayrollRange } from '@/pages/income-management/payro
 import SeriesChart from './series-chart.vue';
 
 const open = defineModel<boolean>({ default: false });
-const props = defineProps<{ holding: InvestmentHolding }>();
+const props = defineProps<{
+  holding: Pick<InvestmentHolding, 'id' | 'symbol' | 'name' | 'securityType' | 'priceDate' | 'currencyCode'>;
+}>();
 type Quote = { date: string; priceAsOf: string | null; priceClose: number; source: string | null };
 const query = useQuery({
   queryKey: computed(() => ['investment-security-prices', props.holding.id]),

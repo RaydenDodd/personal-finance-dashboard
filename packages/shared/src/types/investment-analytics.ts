@@ -45,6 +45,10 @@ export interface InvestmentHoldingAccount {
   updatedAt: string | null;
 }
 export interface InvestmentHolding extends InvestmentClassification {
+  /** Position gains from native opening values and recorded trade/distribution cash. */
+  personalReturns?: Partial<
+    Record<'weekly' | 'monthly' | '3m' | '6m' | 'ytd' | '1y' | '2y' | '5y' | 'custom', InvestmentDecimal>
+  >;
   /** id/securityId are stable database instrument UUIDs, never ticker-only identifiers. */
   id: string;
   securityId: string;

@@ -42,7 +42,7 @@ function createPricesSyncController(ownerScoped = false) {
         const hidden =
           (await UserSettings.findOne({ where: { userId: user.id } }))?.settings.ui?.hiddenPortfolioIds ?? [];
         const positions = await Holdings.findAll({
-          where: { excluded: false, quantity: { [Op.ne]: 0 } },
+          where: { excluded: false, ...(!body.historical && { quantity: { [Op.ne]: 0 } }) },
           attributes: ['securityId'],
           include: [
             {

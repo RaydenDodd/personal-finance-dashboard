@@ -1,6 +1,7 @@
 import type { InvestmentAnalytics, InvestmentHolding } from '@bt/shared/types/investment-analytics';
 
 import { chartNumber } from './chart-model';
+import { usesCustomPositionPeriod } from './performers-model';
 
 export interface InvestmentTreemapRow {
   id: string;
@@ -63,14 +64,17 @@ export function investmentTreemapRows(
     });
   }
   const securityReturn = (row: InvestmentHolding, basis: string | null, gain: string | null) => {
-    if (settings.colorBy === 'unrealized' || !settings.colorBy) {
+    if (settings.colorBy === 'unrealized' || settings.colorBy === 'all' || !settings.colorBy) {
       const b = chartNumber(basis),
         g = chartNumber(gain);
       return b !== null && b > 0 && g !== null ? (g / b) * 100 : null;
     }
-    const periods = (row as InvestmentHolding & { periodReturns?: Record<string, string | null> }).periodReturns;
+    if (usesCustomPositionPeriod(settings, String(settings.colorBy))) return chartNumber(row.personalReturns?.custom);
     return chartNumber(
-      periods?.[String(settings.colorBy)] ?? (settings.colorBy === 'daily' ? row.dailyChangePercent : null),
+      settings.colorBy === 'daily'
+        ? row.dailyChangePercent
+        : (row.personalReturns?.[String(settings.colorBy) as keyof NonNullable<InvestmentHolding['personalReturns']>] ??
+            null),
     );
   };
   return analytics.holdings.flatMap((row) => {
