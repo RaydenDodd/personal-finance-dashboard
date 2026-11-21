@@ -9,6 +9,8 @@ import Portfolios from '@models/investments/portfolios.model';
 import Securities from '@models/investments/securities.model';
 import SecurityPricing from '@models/investments/security-pricing.model';
 import UserSettings from '@models/user-settings.model';
+import { sqlRows } from '@services/investments/analytics/daily-account-cache';
+import { resolveSourceSecurities } from '@services/investments/analytics/resolve-source-securities';
 import { sourceQuantityEvidence } from '@services/investments/analytics/source-quantity-evidence';
 import { dataProviderFactory } from '@services/investments/data-providers';
 import {
@@ -40,6 +42,7 @@ function createPricesSyncController(ownerScoped = false) {
       body: z
         .object({
           historical: z.boolean().optional(),
+          missingOnly: z.boolean().optional(),
           intraday: z.boolean().optional(),
           daily: z.boolean().optional(),
           securityIds: z.array(z.string().uuid()).max(100).optional(),
@@ -53,6 +56,9 @@ function createPricesSyncController(ownerScoped = false) {
     async ({ body, user }) => {
       let scope: string[] | undefined;
       const requiredFrom = new Map<string, string>();
+      let discovery:
+        | { added: { id: string; symbol: string | null }[]; unresolved: { symbol: string; reason: string }[] }
+        | undefined;
       if (ownerScoped) {
         const hidden =
           (await UserSettings.findOne({ where: { userId: user.id } }))?.settings.ui?.hiddenPortfolioIds ?? [];
@@ -102,15 +108,29 @@ function createPricesSyncController(ownerScoped = false) {
               ),
             ),
           ];
-          const sourceSecurities = await Securities.findAll({ where: { symbol: { [Op.in]: symbols } } });
+          const sourceSecurities = await Securities.findAll({
+            where: { symbol: { [Op.in]: symbols }, currencyCode: 'USD' },
+          });
+          const resolved = await resolveSourceSecurities(records, sourceSecurities);
+          sourceSecurities.push(...resolved.added);
+          discovery = {
+            added: resolved.added.map((s) => ({ id: s.id, symbol: s.symbol })),
+            unresolved: resolved.unresolved,
+          };
           for (const record of records)
             for (const t of sourceQuantityEvidence(record.portfolioId, record.data, sourceSecurities, []).rows) {
               const d = t.date.toISOString().slice(0, 10);
               scope.push(t.securityId);
               if (!requiredFrom.has(t.securityId) || d < requiredFrom.get(t.securityId)!)
                 requiredFrom.set(t.securityId, d);
+              if (resolved.added.some((s) => s.id === t.securityId))
+                await sqlRows('SELECT investment_history_dirty(CAST(:id AS uuid),CAST(:date AS date))', {
+                  id: record.portfolioId,
+                  date: d,
+                });
             }
           scope = [...new Set(scope)];
+          if (body.missingOnly) scope = resolved.added.map((s) => s.id);
         }
         if (body.securityIds?.some((id) => !scope!.includes(id)))
           throw new ValidationError({ message: 'Only securities in your visible portfolios may be refreshed.' });
@@ -156,6 +176,7 @@ function createPricesSyncController(ownerScoped = false) {
           data: {
             timestamp: new Date().toISOString(),
             historical: results,
+            discovery,
             stocks: summarize(current[0]!),
             crypto: summarize(current[1]!),
           },
