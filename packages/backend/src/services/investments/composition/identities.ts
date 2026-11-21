@@ -3,10 +3,12 @@ import type { FundHoldingInput, InvestmentFundSnapshot } from '@bt/shared/types/
 const issuerName = (name: string) =>
   name
     .toUpperCase()
+    .replace(/\bCL\.?\s+([A-Z])\b/g, 'CLASS $1')
+    .replace(/\b(CORP(?:ORATION)?|INC(?:ORPORATED)?|PLC|CO)\s*[-/]\s*([A-Z])$/g, '$1 CLASS $2')
     .replace(/\b(COMMON STOCK|CORPORATION|CORP|INCORPORATED|INC|PLC|LTD|LIMITED|CO|COMPANY)\b/g, '')
     .replace(/[^A-Z0-9]/g, '');
 const tickerKey = (symbol: string | null | undefined) => (symbol ?? '').toUpperCase().replace(/[.\- /]/g, '');
-const baseIssuerName = (name: string) => issuerName(name.replace(/\bCLASS\s+[A-Z]\b/gi, ''));
+const baseIssuerName = (name: string) => issuerName(name).replace(/CLASS[A-Z]$/, '');
 const usVenue = (venue: string | null | undefined) =>
   /^(XNAS|XNYS|ARCX|NASDAQ|NYSE|NMS|NAS|NGM|NCM|NYQ|PCX|ARCA|NYSEARCA|ASE|AMEX|XASE)$/i.test(venue ?? '');
 const strongId = (row: FundHoldingInput) => {

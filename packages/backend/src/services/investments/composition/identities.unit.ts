@@ -57,7 +57,7 @@ describe('verified source identifier bridges', () => {
       id: 'cusip:422806208',
       cusip: '422806208',
       symbol: 'HEI/A',
-      name: 'HEICO CORP CLASS A',
+      name: 'HEICO CORP-A',
     };
     const issuer = {
       ...base,
