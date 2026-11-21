@@ -76,7 +76,7 @@ const symbol = (p: InvestmentAccountHistoryResponse['accounts'][number], id: str
                 {{
                   m.kind === 'price'
                     ? 'Daily closing prices are missing. Supply price history or a dated broker valuation for these dates.'
-                    : 'Sales exceed evidenced shares. Supply earlier purchases, in-kind transfers, or corporate-action quantities for this security.'
+                    : 'A share movement is unresolved. Supply the missing purchase, transfer or post-action position record for this security.'
                 }}
               </p>
             </div>

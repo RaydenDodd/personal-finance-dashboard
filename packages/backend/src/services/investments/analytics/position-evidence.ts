@@ -21,7 +21,10 @@ export function positionEvidence(
   }[] = [];
   for (const id of new Set(trades.map((t) => t.securityId))) {
     const txs = trades.filter(
-      (t) => t.securityId === id && ['buy', 'sell', 'transfer'].includes(t.category) && Number(t.quantity) !== 0,
+      (t) =>
+        t.securityId === id &&
+        ['buy', 'sell', 'transfer'].includes(t.category) &&
+        (Number(t.quantity) !== 0 || t.quantityUnknown),
     );
     const first = txs[0];
     if (
@@ -39,7 +42,7 @@ export function positionEvidence(
     let opening = new Big(position?.quantity ?? '0').times(factor(id, investmentPriceDate(anchor.asOf)));
     let valid = true;
     for (const t of txs.filter((t) => new Date(t.date) <= new Date(anchor.asOf))) {
-      if (t.category === 'transfer' && !t.transactionType) {
+      if (t.quantityUnknown || (t.category === 'transfer' && !t.transactionType)) {
         valid = false;
         break;
       }

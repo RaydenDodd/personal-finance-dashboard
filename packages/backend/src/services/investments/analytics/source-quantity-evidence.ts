@@ -52,6 +52,37 @@ export function sourceQuantityEvidence(
       e.cashAmount != null &&
       Number.isFinite(Number(e.cashAmount)) &&
       (action === 'Buy' ? Number(e.cashAmount) < 0 : Number(e.cashAmount) > 0);
+    const unknownMovement =
+      ['SPR', 'SXCH'].includes(action) &&
+      e.quantity == null &&
+      matches.length === 1 &&
+      !(data.sourceEvents ?? []).some(
+        (other) =>
+          other.action === action && other.date === date && other.symbol === symbol && Number(other.quantity) > 0,
+      );
+    if (unknownMovement) {
+      rows.push({
+        portfolioId,
+        securityId: matches[0]!.id,
+        date: new Date(date + 'T12:00:00Z'),
+        category: 'transfer',
+        quantityUnknown: true,
+        quantity: '0',
+        refAmount: '0',
+        currencyCode: 'USD',
+        settlementCurrencyCode: 'USD',
+        settlementAmount: '0',
+        description: `[broker-row:${key}] unresolved ${action}`,
+      } as TransactionRow);
+      issues.push({
+        date,
+        symbol,
+        action,
+        reason:
+          'The corporate action does not establish the post-action holding. Supply a dated post-action position or cash-in-lieu statement; later shares are not assumed.',
+      });
+      continue;
+    }
     if (
       (receipt || validTrade || cancellation) &&
       matches.length === 1 &&
@@ -79,7 +110,7 @@ export function sourceQuantityEvidence(
         symbol,
         action,
         reason: !matches.length
-          ? 'Historical security identity / closing-price series is not registered.'
+          ? `No verified matching historical price identity${cusip ? ' for CUSIP ' + cusip : ''}. Supply dated broker values/prices or a verified issuer successor mapping.`
           : 'Cancellation requires a matching original trade; it has not been applied twice.',
       });
     }

@@ -152,7 +152,8 @@ export const computeHoldingsValueByDate = ({
               ...(event.anchor.complete ? holdings.keys() : []),
             ]);
             for (const id of ids) {
-              const old = holdings.get(id)?.quantity ?? null,
+              const previousQuantity = holdings.get(id)?.quantity;
+              const old = previousQuantity != null && Number.isFinite(previousQuantity) ? previousQuantity : null,
                 p = event.anchor.positions.find((p) => p.securityId === id);
               const observed = Number(p?.quantity ?? 0) * shareUnitFactor(id, dateKey(event.date));
               if (old === null ? observed > 0 : Math.abs(old - observed) > (Math.abs(observed) + 1) * 1e-8)
@@ -200,7 +201,9 @@ export const computeHoldingsValueByDate = ({
 
         const holding = holdings.get(securityId)!;
 
-        if (mergePositionAnchors && tx.category === INVESTMENT_TRANSACTION_CATEGORY.transfer && quantity !== 0) {
+        if (mergePositionAnchors && tx.quantityUnknown) {
+          holding.quantity = NaN;
+        } else if (mergePositionAnchors && tx.category === INVESTMENT_TRANSACTION_CATEGORY.transfer && quantity !== 0) {
           holding.quantity =
             tx.transactionType === 'income'
               ? holding.quantity + quantity

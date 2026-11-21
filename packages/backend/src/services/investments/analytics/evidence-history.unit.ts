@@ -35,6 +35,19 @@ const run = (extra: Record<string, unknown>) =>
   } as never);
 
 describe('security evidence rather than account-completeness gates', () => {
+  it('does not assume continued ownership after an unresolved corporate share movement', () => {
+    const points = run({
+      from: '2019-12-12',
+      through: '2019-12-13',
+      transactions: [
+        tx('a', '2019-12-12', 'buy', '2'),
+        { ...tx('a', '2019-12-13', 'buy', '0'), category: 'transfer', quantityUnknown: true },
+      ],
+      prices: [price('a', '2019-12-12', '10'), price('a', '2019-12-13', '11')],
+    });
+    expect(points[0]?.knownMarketValue).toBe('20');
+    expect(points[1]?.knownMarketValue).toBeNull();
+  });
   it('keeps a crypto daily bar on its recorded UTC day and handles the 2025 exchange closure', () => {
     const daily = price('a', '2019-12-12', '10');
     expect(

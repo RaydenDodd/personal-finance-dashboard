@@ -14,7 +14,7 @@ import { QueryTypes, Op, type Transaction } from 'sequelize';
 import { usesUsEquitySession } from '../securities-price/regular-session';
 import { buildHistory } from './history';
 import { sourceQuantityEvidence } from './source-quantity-evidence';
-export const ACCOUNT_HISTORY_VERSION = 3;
+export const ACCOUNT_HISTORY_VERSION = 4;
 
 export const sqlRows = <T extends object>(sql: string, replacements: Record<string, unknown> = {}) =>
   connection.sequelize.query(sql, { replacements, type: QueryTypes.SELECT }) as Promise<T[]>;

@@ -36,6 +36,8 @@ export interface CombinedBalanceHistoryItem {
  * DECIMAL columns therefore arrive as Postgres decimal strings, not `Money`.
  */
 export interface TransactionRow {
+  /** Read-only evidence flag: a corporate movement is recorded but its resulting shares are unknown. */
+  quantityUnknown?: boolean;
   description?: string | null;
   transactionType?: 'income' | 'expense';
   portfolioId: RecordId;
