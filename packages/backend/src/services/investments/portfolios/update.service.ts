@@ -1,4 +1,4 @@
-import type { NonImageLogoPayload } from '@bt/shared/types';
+import type { EntityLogoWritePayload } from '@bt/shared/types';
 import { PORTFOLIO_TYPE } from '@bt/shared/types/investments';
 import { findOrThrowNotFound } from '@common/utils/find-or-throw-not-found';
 import { t } from '@i18n/index';
@@ -6,10 +6,10 @@ import { ValidationError } from '@js/errors';
 import BrokerPortfolioData from '@models/investments/broker-portfolio-data.model';
 import Portfolios from '@models/investments/portfolios.model';
 import * as UsersCurrencies from '@models/users-currencies.model';
-import { applyManualLogoPatch } from '@services/brand-logos';
+import { applyLogoWrite } from '@services/brand-logos';
 import { withTransaction } from '@services/common/with-transaction';
 
-interface UpdatePortfolioParams extends NonImageLogoPayload {
+interface UpdatePortfolioParams extends EntityLogoWritePayload {
   userId: number;
   portfolioId: string;
   name?: string;
@@ -31,6 +31,7 @@ const updatePortfolioImpl = async ({
   logoInitials,
   logoColor,
   logoIcon,
+  logoImage,
 }: UpdatePortfolioParams) => {
   // Find the portfolio and verify ownership
   const portfolio = await findOrThrowNotFound({
@@ -65,8 +66,8 @@ const updatePortfolioImpl = async ({
   if (displayCurrencyCode !== undefined) updateData.displayCurrencyCode = displayCurrencyCode;
   if (isEnabled !== undefined) updateData.isEnabled = isEnabled;
 
-  const logoPatch = applyManualLogoPatch({
-    patch: { logoDomain, logoInitials, logoColor, logoIcon },
+  const logoPatch = await applyLogoWrite({
+    write: { logoDomain, logoInitials, logoColor, logoIcon, logoImage },
     stored: portfolio,
   });
 

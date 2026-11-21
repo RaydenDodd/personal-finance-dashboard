@@ -1,6 +1,6 @@
 import { PORTFOLIO_TYPE } from '@bt/shared/types/investments';
 import { dateString, currencyCode, positiveAmountString, recordId } from '@common/lib/zod/custom-types';
-import { logoFieldsShape, refineLogoFields } from '@controllers/common/logo-fields.schema';
+import { logoFieldsShape, logoImageSchema, refineLogoFields } from '@controllers/common/logo-fields.schema';
 import { z } from 'zod';
 
 /** Body of `POST /investments/portfolios/:id/transfer`; the MCP `transfer_between_portfolios` tool reads its shape. */
@@ -44,6 +44,7 @@ export const updatePortfolioBodyShape = {
   displayCurrencyCode: currencyCode().nullable().optional(),
   isEnabled: z.boolean().optional(),
   ...logoFieldsShape,
+  logoImage: logoImageSchema,
 };
 
 export const updatePortfolioBodySchema = z
