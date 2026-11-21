@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import { Button } from '@/components/lib/ui/button';
+import { ScrollArea } from '@/components/lib/ui/scroll-area';
 import type { InvestmentFundOverlap } from '@bt/shared/types/investment-analytics';
 const props = defineProps<{ pair: InvestmentFundOverlap; currencyCode: string }>();
 const view = ref('shared');
@@ -56,7 +57,7 @@ const classification = computed(() => (view.value === 'sector' ? props.pair.sect
         Weighted company overlap {{ percent(pair.weightedOverlap) }}. Combined exposure includes the selected fund
         positions without their wrappers.
       </p>
-      <div class="max-h-64 overflow-auto">
+      <ScrollArea viewport-class="max-h-64" with-horizontal-scrollbar>
         <div
           v-for="row in pair.shared"
           :key="row.id"
@@ -71,14 +72,14 @@ const classification = computed(() => (view.value === 'sector' ? props.pair.sect
         <p v-if="!pair.shared.length" class="text-muted-foreground py-2">
           No comparable shared companies are available.
         </p>
-      </div></template
+      </ScrollArea></template
     >
     <template v-else-if="view === 'left' || view === 'right'"
       ><p class="text-muted-foreground">
         Constituents observed only in {{ view === 'left' ? pair.leftSymbol : pair.rightSymbol }}. Missing or partial
         composition data cannot prove that a company is absent from the other fund.
       </p>
-      <div class="max-h-64 overflow-auto">
+      <ScrollArea viewport-class="max-h-64" with-horizontal-scrollbar>
         <div
           v-for="row in unique"
           :key="row.id"
@@ -91,7 +92,7 @@ const classification = computed(() => (view.value === 'sector' ? props.pair.sect
         <p v-if="!unique.length" class="text-muted-foreground py-2">
           No unique constituents can be established from the available holdings.
         </p>
-      </div></template
+      </ScrollArea></template
     >
     <template v-else
       ><p class="font-medium">
@@ -106,7 +107,7 @@ const classification = computed(() => (view.value === 'sector' ? props.pair.sect
         matching and remain uncovered.
       </p>
       <p v-else class="text-muted-foreground">Comparable classification data is unavailable.</p>
-      <div class="max-h-64 overflow-auto">
+      <ScrollArea viewport-class="max-h-64" with-horizontal-scrollbar>
         <div
           class="text-muted-foreground grid grid-cols-[minmax(0,1fr)_repeat(3,minmax(3.5rem,auto))] gap-2 border-b py-2 text-[10px]"
         >
@@ -124,7 +125,7 @@ const classification = computed(() => (view.value === 'sector' ? props.pair.sect
           ><span class="text-right tabular-nums">{{ percent(row.rightWeight) }}</span
           ><span class="text-right tabular-nums">{{ percent(row.overlapWeight) }}</span>
         </div>
-      </div></template
+      </ScrollArea></template
     >
   </div>
 </template>

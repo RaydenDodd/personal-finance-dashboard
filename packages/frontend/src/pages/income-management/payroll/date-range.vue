@@ -18,7 +18,13 @@ const props = withDefaults(defineProps<{ earliest?: string; compact?: boolean; s
 const open = ref(false),
   customFrom = ref(''),
   customThrough = ref('');
-const presets: { id: PayrollRangePreset; name: string }[] = [
+const presets = computed<{ id: PayrollRangePreset; name: string }[]>(() => [
+  ...(props.subject === 'investment'
+    ? [
+        { id: '1d' as const, name: '1D' },
+        { id: '1w' as const, name: '1W' },
+      ]
+    : []),
   { id: '1m', name: '1M' },
   { id: '3m', name: '3M' },
   { id: '6m', name: '6M' },
@@ -27,7 +33,7 @@ const presets: { id: PayrollRangePreset; name: string }[] = [
   { id: '2y', name: '2Y' },
   { id: '5y', name: '5Y' },
   { id: 'all', name: 'MAX' },
-];
+]);
 const forwardDisabled = computed(() => shiftPayrollRange(model.value, 1) === model.value);
 function choose(preset: PayrollRangePreset) {
   model.value = payrollRange(preset, payrollToday(), props.earliest);
@@ -50,7 +56,10 @@ function apply() {
     :data-testid="subject + '-date-range'"
     data-chart-controls
   >
-    <div class="bg-muted/60 grid w-full max-w-full grid-cols-8 items-center gap-0.5 rounded-lg p-0.5 @2xl:w-auto">
+    <div
+      class="bg-muted/60 grid w-full max-w-full items-center gap-0.5 rounded-lg p-0.5 @2xl:w-auto"
+      :class="subject === 'investment' ? 'grid-cols-5 @2xl:grid-cols-10' : 'grid-cols-8'"
+    >
       <Button
         v-for="preset in presets"
         :key="preset.id"

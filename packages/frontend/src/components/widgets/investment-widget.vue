@@ -4,8 +4,9 @@ import { Button } from '@/components/lib/ui/button';
 import AnalyticsPanel from '@/components/investment-analytics/analytics-panel.vue';
 import { useInvestmentAnalytics } from '@/composable/data-queries/investment-analytics';
 import { usePortfolios } from '@/composable/data-queries/portfolios';
-import { ExternalLinkIcon } from '@lucide/vue';
-import { computed, inject, ref, type Ref } from 'vue';
+import { ArrowUpRightIcon } from '@lucide/vue';
+import { ScrollArea } from '@/components/lib/ui/scroll-area';
+import { computed, inject, provide, ref, type Ref } from 'vue';
 import ErrorState from './components/error-state.vue';
 import LoadingState from './components/loading-state.vue';
 import WidgetWrapper from './components/widget-wrapper.vue';
@@ -20,8 +21,17 @@ const persist =
 const kind = computed(() => investmentWidgetKind(widget.value.widgetId) ?? 'overview');
 const definition = computed(() => INVESTMENT_WIDGET_DEFINITIONS[widget.value.widgetId]);
 const optimisticSettings = ref<Record<string, unknown>>({});
+const pageSettings = inject<Ref<Record<string, unknown>> | null>('investment-page-settings', null);
+const fullPage = inject('investment-full-page', false);
+provide(
+  'investment-chart-height',
+  computed(() => {
+    const base = fullPage ? 288 : 208;
+    return base + Math.max(0, (widget.value.rowSpan ?? 1) - 1) * 180;
+  }),
+);
 const settings = computed(() =>
-  investmentWidgetSettings(kind.value, { ...widget.value.config, ...optimisticSettings.value }),
+  investmentWidgetSettings(kind.value, { ...pageSettings?.value, ...widget.value.config, ...optimisticSettings.value }),
 );
 const portfolioIds = computed(() => settings.value.portfolioIds);
 const benchmarks = computed(() => (kind.value === 'benchmark' ? settings.value.benchmarks : []));
@@ -91,7 +101,7 @@ const saveSettings = async (patch: Record<string, unknown>, close = false) => {
     <template #action>
       <Button as-child variant="ghost" size="icon-sm" aria-label="Open Investments page"
         ><router-link :to="`/finances/investments/${page}`"
-          ><ExternalLinkIcon class="text-muted-foreground size-4" /></router-link
+          ><ArrowUpRightIcon class="text-muted-foreground size-4" /></router-link
       ></Button>
       <InvestmentWidgetSettings
         v-model:open="settingsOpen"
@@ -103,7 +113,11 @@ const saveSettings = async (patch: Record<string, unknown>, close = false) => {
         @save="saveSettings($event, true)"
       />
     </template>
-    <div class="min-h-0 flex-1 overflow-auto" :data-investment-instance="widget.instanceId ?? widget.widgetId">
+    <ScrollArea
+      class="min-h-0 min-w-0 flex-1"
+      viewport-class="[&>div]:!block"
+      :data-investment-instance="widget.instanceId ?? widget.widgetId"
+    >
       <LoadingState v-if="isPending" />
       <ErrorState v-else-if="error" message="Investment analytics could not be loaded." @retry="refetch()" />
       <AnalyticsPanel
@@ -111,13 +125,13 @@ const saveSettings = async (patch: Record<string, unknown>, close = false) => {
         :analytics="data"
         :kind="kind"
         :settings="settings"
-        compact
+        :compact="!fullPage"
         @settings-change="saveSettings($event)"
       />
       <p v-else class="text-muted-foreground p-4 text-sm">
         Investment analytics are unavailable. Check your portfolio records and data sources in Investments.
       </p>
       <p v-if="saveError && !settingsOpen" class="text-destructive mt-2 text-xs" role="alert">{{ saveError }}</p>
-    </div>
+    </ScrollArea>
   </WidgetWrapper>
 </template>

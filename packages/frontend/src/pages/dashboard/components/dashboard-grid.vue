@@ -1,7 +1,7 @@
 <script lang="ts" setup>
 import { LayoutGridIcon } from '@lucide/vue';
 import { provide, computed } from 'vue';
-import type { DashboardWidgetConfig } from '@/api/user-settings';
+import type { DashboardWidgetConfig, DashboardPage } from '@/api/user-settings';
 import type { WidgetLayoutDefinition } from '@/components/widgets/widget-registry';
 import { VueDraggable } from 'vue-draggable-plus';
 
@@ -12,7 +12,7 @@ import DashboardWidgetSlot from './dashboard-widget-slot.vue';
 
 const props = defineProps<{
   currentPeriod?: Period;
-  page?: 'income' | 'actualIncome' | 'personalFinance';
+  page?: DashboardPage;
   registry?: Record<string, WidgetLayoutDefinition>;
   defaultLayout?: DashboardWidgetConfig[];
   naturalHeight?: boolean;

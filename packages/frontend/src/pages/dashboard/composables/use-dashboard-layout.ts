@@ -1,4 +1,4 @@
-import type { DashboardWidgetConfig } from '@/api/user-settings';
+import type { DashboardWidgetConfig, DashboardPage } from '@/api/user-settings';
 import {
   DEFAULT_DASHBOARD_LAYOUT,
   WIDGET_REGISTRY,
@@ -11,7 +11,7 @@ import { cloneDeep } from 'lodash-es';
 import { computed, ref, watch, toValue, type MaybeRefOrGetter } from 'vue';
 
 interface LayoutOptions {
-  page?: 'income' | 'actualIncome' | 'personalFinance';
+  page?: DashboardPage;
   registry?: MaybeRefOrGetter<Record<string, WidgetLayoutDefinition>>;
   defaultLayout?: MaybeRefOrGetter<DashboardWidgetConfig[]>;
 }

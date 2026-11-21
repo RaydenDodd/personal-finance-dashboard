@@ -1,5 +1,6 @@
 import { getInvestmentAnalytics } from '@/api/investment-analytics';
 import { useUserSettings } from '@/composable/data-queries/user-settings';
+import { usEquityMarketOpen } from '@bt/shared/types/investment-market';
 import { useQuery } from '@tanstack/vue-query';
 import { computed, toValue, type MaybeRefOrGetter } from 'vue';
 
@@ -31,6 +32,9 @@ export function useInvestmentAnalytics({
     refetchInterval: (query) =>
       query.state.data?.composition?.some((row) => row.scheduledRefreshEnabled && !row.lastScheduledRun)
         ? 10000
-        : false,
+        : usEquityMarketOpen()
+          ? 5 * 60 * 1000
+          : false,
+    refetchIntervalInBackground: false,
   });
 }

@@ -32,6 +32,7 @@ import { useUserSettings } from '@/composable/data-queries/user-settings';
 import { useAiCategorizationEvents } from '@/composable/use-ai-categorization-events';
 import { checkingForegroundSession, isConnectionBlocked } from '@/lib/connection-status';
 import { useSSE } from '@/composable/use-sse';
+import { useInvestmentPriceEvents } from '@/composable/use-investment-price-events';
 import { currencyDisplayPreference } from '@/js/helpers';
 import { ROUTES_NAMES } from '@/routes';
 import { useAuthStore, useCurrenciesStore, useRootStore } from '@/stores';
@@ -62,6 +63,7 @@ watch(
 
 // SSE for real-time updates
 const { disconnect: disconnectSSE } = useSSE();
+useInvestmentPriceEvents();
 const { initialize: initializeAiCategorizationEvents, cleanup: cleanupAiCategorizationEvents } =
   useAiCategorizationEvents();
 

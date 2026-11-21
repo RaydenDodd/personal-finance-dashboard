@@ -7,8 +7,13 @@ export const INVESTMENT_PERFORMER_PERIODS = [
   ['daily', 'Daily price change'],
   ['weekly', 'Weekly price change'],
   ['monthly', 'Monthly price change'],
+  ['3m', 'Three-month price change'],
+  ['6m', 'Six-month price change'],
   ['ytd', 'YTD price change'],
   ['1y', 'One-year price change'],
+  ['2y', 'Two-year price change'],
+  ['5y', 'Five-year price change'],
+  ['all', 'All recorded price history'],
 ] as const;
 
 /** Ranking uses shared-service returns; unsupported periods remain absent rather than zero. */

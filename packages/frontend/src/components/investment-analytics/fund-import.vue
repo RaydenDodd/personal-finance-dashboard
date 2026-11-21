@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue';
 import { useQuery, useQueryClient } from '@tanstack/vue-query';
 import { Button } from '@/components/lib/ui/button';
+import { ScrollArea } from '@/components/lib/ui/scroll-area';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/lib/ui/dialog';
 import {
   getCompositionCatalog,
@@ -171,151 +172,156 @@ async function schedule(enabled: boolean) {
 </script>
 <template>
   <Dialog v-model:open="open"
-    ><DialogContent class="max-h-[90dvh] overflow-y-auto sm:max-w-2xl"
-      ><DialogHeader
-        ><DialogTitle>Import fund composition</DialogTitle
-        ><DialogDescription
-          >Import original issuer or SEC files with their report date, source and checksum.</DialogDescription
-        ></DialogHeader
-      >
-      <div class="space-y-3">
-        <label class="block text-xs"
-          >Fund<select
-            v-model="fundId"
-            aria-label="Fund composition security"
-            class="bg-background mt-1 h-9 w-full rounded-md border px-2"
-          >
-            <option value="">Choose held fund</option>
-            <option v-for="fund in funds" :key="fund.id" :value="fund.id">
-              {{ fund.symbol }} · {{ fund.name }}{{ fund.excludedFromAnalytics ? ' · hidden portfolio (excluded)' : ''
-              }}{{ fund.identityConflict ? ' · identity review required' : '' }}
-            </option>
-          </select></label
+    ><DialogContent class="max-h-[90dvh] overflow-hidden sm:max-w-2xl"
+      ><ScrollArea viewport-class="max-h-[80dvh]" class="min-w-0"
+        ><DialogHeader
+          ><DialogTitle>Import fund composition</DialogTitle
+          ><DialogDescription
+            >Import original issuer or SEC files with their report date, source and checksum.</DialogDescription
+          ></DialogHeader
         >
-        <p v-if="selected?.identityConflict" role="alert" class="text-app-expense-color text-xs">
-          {{
-            'identityEvidence' in selected
-              ? selected.identityEvidence
-              : 'SPCX has conflicting native metadata. Verify its brokerage CUSIP/ISIN before attaching SPCK holdings.'
-          }}
-        </p>
-        <div v-if="source" class="text-muted-foreground flex flex-wrap gap-3 text-xs">
-          <a :href="source.issuerUrl" target="_blank" rel="noopener noreferrer" class="text-primary-text underline"
-            >Open issuer download page</a
-          ><a
-            v-if="source.secUrl"
-            :href="source.secUrl"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="text-primary-text underline"
-            >Open SEC filing list</a
-          >
-        </div>
-        <label class="block text-xs"
-          >File format<select
-            v-model="adapter"
-            aria-label="Fund composition file format"
-            class="bg-background mt-1 h-9 w-full rounded-md border px-2"
-          >
-            <option v-if="source?.seriesId" value="sec-nport">SEC N-PORT XML / single-filing ZIP</option>
-            <option v-if="selected?.symbol === 'GLD'" value="sec-gold-facts">SEC gold trust balance-sheet JSON</option>
-            <option
-              v-if="source?.adapter && !['canonical-csv', 'gld-xlsx'].includes(source.adapter)"
-              :value="source.adapter"
-            >
-              Original issuer {{ source.adapter }}
-            </option>
-            <option value="canonical-csv">Manual canonical CSV</option>
-            <option value="canonical-json">Legacy composition JSON</option>
-          </select></label
-        >
-        <div class="grid gap-3 sm:grid-cols-2">
+        <div class="space-y-3">
           <label class="block text-xs"
-            >Effective date (only if absent from file)<input
-              v-model="asOf"
-              type="date"
-              class="bg-background mt-1 h-9 w-full rounded-md border px-2" /></label
-          ><label class="block text-xs"
-            >Exact source URL<input
-              v-model="sourceUrl"
-              type="url"
-              placeholder="https://issuer.example/holdings.csv"
+            >Fund<select
+              v-model="fundId"
+              aria-label="Fund composition security"
               class="bg-background mt-1 h-9 w-full rounded-md border px-2"
-          /></label>
-        </div>
-        <input
-          type="file"
-          accept=".csv,.xlsx,.xml,.zip,.json,.tsv"
-          aria-label="Fund holdings file"
-          class="block max-w-full text-xs"
-          @change="file = ($event.target as HTMLInputElement).files?.[0] ?? null"
-        />
-        <p class="text-muted-foreground text-xs">
-          Use the original export with its metadata. CSV weights are percentages (5 = 5%). Partial files retain their
-          residual; derivatives and cash stay separate from companies. Restricted issuer downloads remain manual.
-        </p>
-        <Button variant="outline" size="sm" :disabled="busy || selected?.identityConflict" @click="inspect">{{
-          busy ? 'Validating…' : 'Preview holdings'
-        }}</Button>
-        <p v-if="error" role="alert" class="text-app-expense-color text-sm">{{ error }}</p>
-        <div
-          v-if="preview.length"
-          class="bg-muted/40 space-y-2 rounded-md p-3 text-xs"
-          data-testid="fund-import-preview"
-        >
-          <div v-for="snapshot in preview" :key="snapshot.fundId + snapshot.asOf">
-            <p class="font-semibold">
-              {{ snapshot.symbol }} · {{ snapshot.asOf }} ·
-              {{ snapshot.provenance?.parsedRowCount ?? snapshot.holdings.length }} source rows ·
-              {{ Number(snapshot.coverage).toFixed(4) }}% coverage
-            </p>
-            <p class="text-muted-foreground break-all">{{ snapshot.provenance?.sourceUrl ?? snapshot.provider }}</p>
-            <p v-for="warning in snapshot.provenance?.warnings ?? []" :key="warning" class="mt-1">{{ warning }}</p>
-          </div>
-          <Button size="sm" :disabled="busy" @click="save">Save composition snapshots</Button>
-        </div>
-        <details v-if="source?.seriesId || selected?.symbol === 'GLD'" class="border-t pt-3 text-xs">
-          <summary class="cursor-pointer">Fetch permitted SEC disclosure</summary>
-          <p class="text-muted-foreground my-2">
-            The SEC receives the contact email in an identified User-Agent. Requests are serialized and stop on access
-            restrictions. This button runs one refresh; no schedule is enabled.
-          </p>
-          <label
-            >SEC contact email<input
-              v-model="contact"
-              type="email"
-              class="bg-background mt-1 h-9 w-full rounded-md border px-2" /></label
-          ><Button
-            size="sm"
-            variant="outline"
-            class="mt-2"
-            :disabled="busy || selected?.identityConflict"
-            @click="refresh"
-            >Fetch latest SEC composition</Button
+            >
+              <option value="">Choose held fund</option>
+              <option v-for="fund in funds" :key="fund.id" :value="fund.id">
+                {{ fund.symbol }} · {{ fund.name
+                }}{{ fund.excludedFromAnalytics ? ' · hidden portfolio (excluded)' : ''
+                }}{{ fund.identityConflict ? ' · identity review required' : '' }}
+              </option>
+            </select></label
           >
-          <p v-if="result" class="mt-2 whitespace-pre-line" role="status">{{ result }}</p>
-        </details>
-        <details class="border-t pt-3 text-xs">
-          <summary class="cursor-pointer">Scheduled SEC refresh</summary>
-          <p class="text-muted-foreground my-2">{{ catalog.data.value?.schedule }}</p>
-          <p class="text-muted-foreground mb-2">
-            Weekly checks use only permitted SEC sources and visible portfolios. More recent manual issuer imports
-            remain preferred. Enabling queues an initial background run.
+          <p v-if="selected?.identityConflict" role="alert" class="text-app-expense-color text-xs">
+            {{
+              'identityEvidence' in selected
+                ? selected.identityEvidence
+                : 'SPCX has conflicting native metadata. Verify its brokerage CUSIP/ISIN before attaching SPCK holdings.'
+            }}
           </p>
-          <label
-            >SEC contact email<input
-              v-model="contact"
-              type="email"
-              class="bg-background mt-1 h-9 w-full rounded-md border px-2"
-          /></label>
-          <div class="mt-2 flex flex-wrap gap-2">
-            <Button size="sm" variant="outline" :disabled="busy" @click="schedule(true)"
-              >Enable weekly SEC refresh</Button
-            ><Button size="sm" variant="ghost" :disabled="busy" @click="schedule(false)">Disable schedule</Button>
+          <div v-if="source" class="text-muted-foreground flex flex-wrap gap-3 text-xs">
+            <a :href="source.issuerUrl" target="_blank" rel="noopener noreferrer" class="text-primary-text underline"
+              >Open issuer download page</a
+            ><a
+              v-if="source.secUrl"
+              :href="source.secUrl"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="text-primary-text underline"
+              >Open SEC filing list</a
+            >
           </div>
-          <p v-if="result" class="mt-2 whitespace-pre-line" role="status">{{ result }}</p>
-        </details>
-      </div>
-    </DialogContent></Dialog
+          <label class="block text-xs"
+            >File format<select
+              v-model="adapter"
+              aria-label="Fund composition file format"
+              class="bg-background mt-1 h-9 w-full rounded-md border px-2"
+            >
+              <option v-if="source?.seriesId" value="sec-nport">SEC N-PORT XML / single-filing ZIP</option>
+              <option v-if="selected?.symbol === 'GLD'" value="sec-gold-facts">
+                SEC gold trust balance-sheet JSON
+              </option>
+              <option
+                v-if="source?.adapter && !['canonical-csv', 'gld-xlsx'].includes(source.adapter)"
+                :value="source.adapter"
+              >
+                Original issuer {{ source.adapter }}
+              </option>
+              <option value="canonical-csv">Manual canonical CSV</option>
+              <option value="canonical-json">Legacy composition JSON</option>
+            </select></label
+          >
+          <div class="grid gap-3 sm:grid-cols-2">
+            <label class="block text-xs"
+              >Effective date (only if absent from file)<input
+                v-model="asOf"
+                type="date"
+                class="bg-background mt-1 h-9 w-full rounded-md border px-2" /></label
+            ><label class="block text-xs"
+              >Exact source URL<input
+                v-model="sourceUrl"
+                type="url"
+                placeholder="https://issuer.example/holdings.csv"
+                class="bg-background mt-1 h-9 w-full rounded-md border px-2"
+            /></label>
+          </div>
+          <input
+            type="file"
+            accept=".csv,.xlsx,.xml,.zip,.json,.tsv"
+            aria-label="Fund holdings file"
+            class="block max-w-full text-xs"
+            @change="file = ($event.target as HTMLInputElement).files?.[0] ?? null"
+          />
+          <p class="text-muted-foreground text-xs">
+            Use the original export with its metadata. CSV weights are percentages (5 = 5%). Partial files retain their
+            residual; derivatives and cash stay separate from companies. Restricted issuer downloads remain manual.
+          </p>
+          <Button variant="outline" size="sm" :disabled="busy || selected?.identityConflict" @click="inspect">{{
+            busy ? 'Validating…' : 'Preview holdings'
+          }}</Button>
+          <p v-if="error" role="alert" class="text-app-expense-color text-sm">{{ error }}</p>
+          <div
+            v-if="preview.length"
+            class="bg-muted/40 space-y-2 rounded-md p-3 text-xs"
+            data-testid="fund-import-preview"
+          >
+            <div v-for="snapshot in preview" :key="snapshot.fundId + snapshot.asOf">
+              <p class="font-semibold">
+                {{ snapshot.symbol }} · {{ snapshot.asOf }} ·
+                {{ snapshot.provenance?.parsedRowCount ?? snapshot.holdings.length }} source rows ·
+                {{ Number(snapshot.coverage).toFixed(4) }}% coverage
+              </p>
+              <p class="text-muted-foreground break-all">{{ snapshot.provenance?.sourceUrl ?? snapshot.provider }}</p>
+              <p v-for="warning in snapshot.provenance?.warnings ?? []" :key="warning" class="mt-1">{{ warning }}</p>
+            </div>
+            <Button size="sm" :disabled="busy" @click="save">Save composition snapshots</Button>
+          </div>
+          <details v-if="source?.seriesId || selected?.symbol === 'GLD'" class="border-t pt-3 text-xs">
+            <summary class="cursor-pointer">Fetch permitted SEC disclosure</summary>
+            <p class="text-muted-foreground my-2">
+              The SEC receives the contact email in an identified User-Agent. Requests are serialized and stop on access
+              restrictions. This button runs one refresh; no schedule is enabled.
+            </p>
+            <label
+              >SEC contact email<input
+                v-model="contact"
+                type="email"
+                class="bg-background mt-1 h-9 w-full rounded-md border px-2" /></label
+            ><Button
+              size="sm"
+              variant="outline"
+              class="mt-2"
+              :disabled="busy || selected?.identityConflict"
+              @click="refresh"
+              >Fetch latest SEC composition</Button
+            >
+            <p v-if="result" class="mt-2 whitespace-pre-line" role="status">{{ result }}</p>
+          </details>
+          <details class="border-t pt-3 text-xs">
+            <summary class="cursor-pointer">Scheduled SEC refresh</summary>
+            <p class="text-muted-foreground my-2">{{ catalog.data.value?.schedule }}</p>
+            <p class="text-muted-foreground mb-2">
+              Weekly checks use only permitted SEC sources and visible portfolios. More recent manual issuer imports
+              remain preferred. Enabling queues an initial background run.
+            </p>
+            <label
+              >SEC contact email<input
+                v-model="contact"
+                type="email"
+                class="bg-background mt-1 h-9 w-full rounded-md border px-2"
+            /></label>
+            <div class="mt-2 flex flex-wrap gap-2">
+              <Button size="sm" variant="outline" :disabled="busy" @click="schedule(true)"
+                >Enable weekly SEC refresh</Button
+              ><Button size="sm" variant="ghost" :disabled="busy" @click="schedule(false)">Disable schedule</Button>
+            </div>
+            <p v-if="result" class="mt-2 whitespace-pre-line" role="status">{{ result }}</p>
+          </details>
+        </div>
+      </ScrollArea></DialogContent
+    ></Dialog
   >
 </template>

@@ -78,10 +78,19 @@ interface InvestmentTransactionsTableSettings {
   columnOrder: string[];
 }
 
+export type DashboardPage =
+  | 'income'
+  | 'actualIncome'
+  | 'personalFinance'
+  | 'investmentsOverview'
+  | 'investmentsPerformance'
+  | 'investmentsHoldings'
+  | 'investmentsAllocation'
+  | 'investmentsDividends';
 export interface UiSettings {
   /** Presentation only; hiding a portfolio never changes its net-worth inclusion. */
   hiddenPortfolioIds?: string[];
-  pageLayouts?: Partial<Record<'income' | 'actualIncome' | 'personalFinance', { widgets: DashboardWidgetConfig[] }>>;
+  pageLayouts?: Partial<Record<DashboardPage, { widgets: DashboardWidgetConfig[] }>>;
   transactionsTable?: TransactionsTableSettings;
   transactionsList?: TransactionsListSettings;
   transactionForm?: TransactionFormSettings;

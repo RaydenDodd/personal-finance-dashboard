@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import { Button } from '@/components/lib/ui/button';
+import { ScrollArea } from '@/components/lib/ui/scroll-area';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/lib/ui/popover';
 import { SettingsIcon } from '@lucide/vue';
 import type {
@@ -66,7 +67,11 @@ const money = (value: string | number | null | undefined, currency = props.analy
     ? 'Unavailable'
     : new Intl.NumberFormat(undefined, { style: 'currency', currency }).format(Number(value));
 const pct = (value: string | number | null | undefined) =>
-  value == null ? 'Unavailable' : `${Number(value).toFixed(2)}%`;
+  value == null
+    ? 'Unavailable'
+    : Number(value) < 100 && Number(value) > 99.99
+      ? '<100%'
+      : `${Number(value).toFixed(2)}%`;
 const signed = (value: string | number | null | undefined) =>
   value == null ? 'text-muted-foreground' : Number(value) >= 0 ? 'text-app-income-color' : 'text-app-expense-color';
 const metricLabels: Record<string, string> = {
@@ -122,12 +127,38 @@ const metricKeys = computed(() =>
 );
 function displayedMetric(key: string) {
   const full = props.analytics.metrics[key];
+  if (props.kind === 'risk' && full?.value == null && props.analytics.priceRisk?.points.length) {
+    const value =
+      key === 'volatility'
+        ? props.analytics.priceRisk.volatility
+        : key === 'maxDrawdown'
+          ? props.analytics.priceRisk.maxDrawdown
+          : null;
+    if (value !== null)
+      return {
+        value,
+        status: 'partial',
+        label: key === 'volatility' ? 'Current holdings · price volatility' : 'Current holdings · price drawdown',
+        reason: props.analytics.priceRisk.methodology,
+      };
+  }
   if (key === 'marketValue' && full?.value == null && props.analytics.metrics.knownMarketValue?.value != null)
     return {
       ...props.analytics.metrics.knownMarketValue,
       label: 'Known investment value',
       reason: full?.reason ?? 'Partial subtotal. Some holdings or cash balances are unvalued.',
     };
+  if (full?.value == null) {
+    const fallback = (
+      {
+        costBasis: ['knownCostBasis', 'Known open-position basis'],
+        unrealizedGain: ['knownUnrealizedGain', 'Known unrealized gain / loss'],
+        realizedGain: ['reportedRealizedGain', 'Broker-reported realized gains'],
+      } as Record<string, string[]>
+    )[key];
+    const partial = fallback && props.analytics.metrics[fallback[0]!];
+    if (partial?.value != null) return { ...partial, label: fallback![1] };
+  }
   return { ...full, label: metricLabels[key] };
 }
 const secondary = [
@@ -187,6 +218,28 @@ const historyLabels: Record<string, string> = {
   withdrawals: 'Withdrawals',
 };
 const allHistory = computed(() => withinRange(props.analytics.history, range.value.from, range.value.through));
+const recordedAccountFallback = computed(
+  () =>
+    ['performance', 'value-capital'].includes(props.kind) &&
+    !percent.value &&
+    !allHistory.value.some((p) => p.marketValue !== null),
+);
+const recordedPortfolios = computed(() =>
+  props.analytics.portfolios.filter((p) =>
+    allHistory.value.some((row) => Number(row.knownPortfolios?.[p.id] ?? row.portfolios[p.id] ?? 0) > 0),
+  ),
+);
+const priceRiskFallback = computed(
+  () =>
+    !allHistory.value.some((row) => row.returnPercent !== null) && Boolean(props.analytics.priceRisk?.points.length),
+);
+const comparablePortfolioPoints = computed(() =>
+  priceRiskFallback.value
+    ? withinRange(props.analytics.priceRisk?.points ?? [], range.value.from, range.value.through)
+    : allHistory.value
+        .filter((row) => row.returnPercent !== null)
+        .map((row) => ({ date: row.date, returnPercent: row.returnPercent! })),
+);
 const selectedIncome = computed(() =>
   props.analytics.dividends.filter(
     (row) =>
@@ -316,15 +369,19 @@ const chartSeries = computed<InvestmentChartSeries[]>(() => {
       { key: 'unknown', label: 'Distribution treatment unknown', color: colors[3]! },
       { key: 'interest', label: 'Interest', color: colors[1]! },
     ];
-  if (props.kind === 'portfolio-comparison')
-    return props.analytics.portfolios.map((row, index) => ({
+  if (props.kind === 'portfolio-comparison' || recordedAccountFallback.value)
+    return recordedPortfolios.value.map((row, index) => ({
       key: row.id,
       label: row.name,
       color: colors[index % colors.length]!,
     }));
   if (props.kind === 'benchmark')
     return [
-      { key: 'portfolio', label: 'Selected portfolio · cash-flow adjusted', color: colors[0]! },
+      {
+        key: 'portfolio',
+        label: priceRiskFallback.value ? 'Current holdings · price only' : 'Selected portfolio · cash-flow adjusted',
+        color: colors[0]!,
+      },
       ...props.analytics.benchmarks.map((row, index) => ({
         key: row.id,
         label: `${row.symbol} · ${row.returnType}`,
@@ -332,7 +389,15 @@ const chartSeries = computed<InvestmentChartSeries[]>(() => {
       })),
     ];
   if (props.kind === 'risk')
-    return [{ key: 'drawdown', label: 'Drawdown from recorded peak', color: 'var(--app-expense-color)' }];
+    return [
+      {
+        key: 'drawdown',
+        label: priceRiskFallback.value ? 'Current holdings · price drawdown' : 'Drawdown from recorded peak',
+        color: 'var(--app-expense-color)',
+      },
+    ];
+  if (props.kind === 'performance' && percent.value && priceRiskFallback.value)
+    return [{ key: 'returnPercent', label: 'Current holdings · price only', color: colors[0]! }];
   return activeSeries.value.map((key, index) => ({
     key,
     label: historyLabels[key] ?? key,
@@ -371,7 +436,7 @@ const chartPoints = computed<InvestmentChartPoint[]>(() => {
     const series = props.analytics.benchmarks.filter((row) => row.points.length);
     const dates = [
       ...new Set([
-        ...allHistory.value.map((row) => row.date),
+        ...comparablePortfolioPoints.value.map((row) => row.date),
         ...series.flatMap((row) => row.points.map((point) => point.date)),
       ]),
     ]
@@ -380,11 +445,13 @@ const chartPoints = computed<InvestmentChartPoint[]>(() => {
     // Comparison starts only at an actual shared observation, with no forward-filled index values.
     const common = dates.find(
       (date) =>
-        allHistory.value.some((row) => row.date === date && row.returnPercent !== null) &&
+        (!comparablePortfolioPoints.value.length || comparablePortfolioPoints.value.some((row) => row.date === date)) &&
         series.every((row) => row.points.some((point) => point.date === date)),
     );
     if (!common) return [];
-    const portfolioBase = chartNumber(allHistory.value.find((row) => row.date === common)?.returnPercent);
+    const portfolioBase = chartNumber(
+      comparablePortfolioPoints.value.find((row) => row.date === common)?.returnPercent,
+    );
     const bases = new Map(
       series.map((row) => [row.id, Number(row.points.find((point) => point.date === common)!.returnPercent)]),
     );
@@ -394,7 +461,7 @@ const chartPoints = computed<InvestmentChartPoint[]>(() => {
         date,
         values: {
           portfolio: rebase(
-            chartNumber(allHistory.value.find((row) => row.date === date)?.returnPercent),
+            chartNumber(comparablePortfolioPoints.value.find((row) => row.date === date)?.returnPercent),
             portfolioBase,
           ),
           ...Object.fromEntries(
@@ -412,7 +479,7 @@ const chartPoints = computed<InvestmentChartPoint[]>(() => {
   }
   if (props.kind === 'risk') {
     let peak = 0;
-    return allHistory.value.map((row) => {
+    return (priceRiskFallback.value ? comparablePortfolioPoints.value : allHistory.value).map((row) => {
       const v = chartNumber(row.returnPercent);
       if (v == null)
         return { date: row.date, values: { drawdown: null }, note: 'Cash-flow-adjusted return unavailable.' };
@@ -421,16 +488,37 @@ const chartPoints = computed<InvestmentChartPoint[]>(() => {
       return { date: row.date, values: { drawdown: peak > 0 ? (index / peak - 1) * 100 : null } };
     });
   }
+  if (props.kind === 'performance' && percent.value && priceRiskFallback.value) {
+    const base = chartNumber(comparablePortfolioPoints.value[0]?.returnPercent);
+    return comparablePortfolioPoints.value.map((row) => ({
+      date: row.date,
+      values: { returnPercent: rebase(chartNumber(row.returnPercent), base) },
+      note: props.analytics.priceRisk!.methodology,
+    }));
+  }
   return allHistory.value.map((row) => ({
     date: row.date,
     values:
-      props.kind === 'portfolio-comparison'
-        ? Object.fromEntries(props.analytics.portfolios.map((p) => [p.id, chartNumber(row.portfolios[p.id])]))
+      props.kind === 'portfolio-comparison' || recordedAccountFallback.value
+        ? Object.fromEntries(
+            recordedPortfolios.value.map((p) => [
+              p.id,
+              chartNumber(row.portfolios[p.id] ?? row.knownPortfolios?.[p.id]),
+            ]),
+          )
         : Object.fromEntries(
             activeSeries.value.map((key) => [key, chartNumber(row[key as keyof InvestmentHistoryPoint])]),
           ),
-    note: row.coverage < 100 ? `${row.coverage}% historical coverage · ${row.source}` : row.source,
+    note:
+      row.coverage < 100 ? `Partial recorded values; some account cash/history is unknown. ${row.source}` : row.source,
   }));
+});
+const plottedPoints = computed(() => {
+  const points = chartPoints.value,
+    valid = (p: InvestmentChartPoint) => Object.values(p.values).some((v) => v !== null);
+  const first = points.findIndex(valid),
+    last = points.findLastIndex(valid);
+  return first < 0 ? [] : points.slice(first, last + 1);
 });
 function rebase(value: number | null, base: number | null) {
   return value === null || base === null || base <= -100 ? null : ((1 + value / 100) / (1 + base / 100) - 1) * 100;
@@ -487,7 +575,7 @@ const funds = computed(() => props.analytics.holdings.filter((row) => row.isFund
 const performerPeriod = computed(() =>
   INVESTMENT_PERFORMER_PERIODS.some(([period]) => period === props.settings.performerPeriod)
     ? String(props.settings.performerPeriod)
-    : 'unrealized',
+    : 'daily',
 );
 const performers = computed(() =>
   rankInvestmentPerformers(props.analytics.holdings, performerPeriod.value, String(props.settings.securityId ?? '')),
@@ -520,12 +608,19 @@ const health = computed(() =>
         <div v-for="key in metricKeys" :key="key">
           <p class="text-muted-foreground text-xs">{{ displayedMetric(key).label }}</p>
           <p
-            class="mt-1 text-xl font-semibold tracking-tight tabular-nums"
+            class="mt-1 text-sm font-semibold tracking-tight break-words tabular-nums @md:text-xl"
             :class="
               key.toLowerCase().includes('gain') || key === 'dailyChange' ? signed(analytics.metrics[key]?.value) : ''
             "
           >
             {{ percentMetrics.has(key) ? pct(displayedMetric(key).value) : money(displayedMetric(key).value) }}
+          </p>
+          <p
+            v-if="key === 'dailyChange' && analytics.metrics.dailyChangePercent?.value != null"
+            class="text-xs tabular-nums"
+            :class="signed(analytics.metrics.dailyChange?.value)"
+          >
+            {{ pct(analytics.metrics.dailyChangePercent.value) }} · covered positions
           </p>
           <p v-if="displayedMetric(key).reason" class="text-muted-foreground mt-1 text-[11px]">
             {{ displayedMetric(key).reason }}
@@ -539,9 +634,9 @@ const health = computed(() =>
         <summary class="text-primary-text cursor-pointer text-xs">Income, cost basis and return details</summary>
         <dl class="mt-3 grid grid-cols-2 gap-3 @2xl:grid-cols-3">
           <div v-for="key in secondary" :key="key">
-            <dt class="text-muted-foreground text-xs">{{ metricLabels[key] }}</dt>
+            <dt class="text-muted-foreground text-xs">{{ displayedMetric(key).label }}</dt>
             <dd class="font-medium tabular-nums" :title="analytics.metrics[key]?.reason">
-              {{ percentMetrics.has(key) ? pct(analytics.metrics[key]?.value) : money(analytics.metrics[key]?.value) }}
+              {{ percentMetrics.has(key) ? pct(displayedMetric(key).value) : money(displayedMetric(key).value) }}
             </dd>
             <p v-if="analytics.metrics[key]?.reason" class="text-muted-foreground text-[10px]">
               {{ analytics.metrics[key].reason }}
@@ -647,7 +742,7 @@ const health = computed(() =>
         </select></label
       >
       <SeriesChart
-        :points="chartPoints"
+        :points="plottedPoints"
         :series="chartSeries"
         :compact="compact"
         :percent="percent && kind !== 'portfolio-comparison'"
@@ -658,9 +753,31 @@ const health = computed(() =>
         "
         :label="kind === 'dividends' ? 'Recorded investment income history' : 'Consolidated investment ' + kind"
       />
+      <p
+        v-if="recordedAccountFallback"
+        class="text-muted-foreground text-xs"
+        data-testid="investment-recorded-values-note"
+      >
+        Showing available recorded account values and known securities subtotals. Full consolidated value and
+        invested-capital history are incomplete. Missing observations remain gaps; these balances are not investment
+        returns.
+      </p>
       <p v-if="kind === 'benchmark'" class="text-muted-foreground text-xs">
-        Returns share an actual common starting observation. Price-only benchmarks exclude distributions. A portfolio
-        without supported cash-flow-adjusted returns cannot be compared.
+        Series share an actual common starting observation. Benchmarks use recorded price history.
+        {{
+          priceRiskFallback
+            ? 'The holdings line is a fixed basket of current quantities, not historical account performance.'
+            : 'The portfolio line requires supported cash-flow-adjusted returns.'
+        }}
+      </p>
+      <p
+        v-if="priceRiskFallback && ['performance', 'risk', 'benchmark'].includes(kind)"
+        class="text-muted-foreground text-xs"
+        data-testid="investment-price-risk-note"
+      >
+        {{ analytics.priceRisk?.methodology }} Coverage: {{ pct(analytics.priceRisk?.coveragePercent) }} of known
+        securities value · {{ analytics.priceRisk?.included }} holdings.
+        {{ analytics.priceRisk?.excluded.length ? 'Excluded: ' + analytics.priceRisk.excluded.join(', ') + '.' : '' }}
       </p>
       <p
         v-for="benchmark in kind === 'benchmark' ? analytics.benchmarks : []"
@@ -747,12 +864,12 @@ const health = computed(() =>
         estimates are not invented.
       </p>
       <p v-if="kind === 'risk'" class="text-muted-foreground text-xs">
-        Drawdown uses supported cash-flow-adjusted returns. Missing return history keeps risk unavailable; balance
-        changes are not substituted.
+        Account return metrics require complete funding and valuation history. Available price risk is labeled
+        separately; deposits and withdrawals are never counted as investment gains.
       </p>
     </template>
     <template v-if="['allocation', 'sector', 'geography'].includes(kind)">
-      <label class="text-muted-foreground flex flex-wrap items-center gap-2 text-xs"
+      <label v-if="false" class="text-muted-foreground flex flex-wrap items-center gap-2 text-xs"
         >Allocation by<select
           :value="allocationMode"
           aria-label="Investment allocation mode"
@@ -780,7 +897,10 @@ const health = computed(() =>
         :total-label="allocationTotalLabel"
         chart-label="Investment allocation doughnut"
         :height-class="compact ? 'h-48' : 'h-64'"
-        :show-percentages="fullAllocationKnown"
+        :show-percentages="true"
+        :percentage-total="
+          Number(analytics.metrics.knownMarketValue?.value ?? analytics.metrics.marketValue?.value ?? 0)
+        "
         selection-mode="highlight"
         :highlight-category-id="selectedCategory"
         @category-click="({ categoryId }) => (selectedCategory = categoryId)"
@@ -821,7 +941,8 @@ const health = computed(() =>
       </div>
       <p v-if="!fullAllocationKnown" class="text-muted-foreground text-xs">
         Only known values are drawn; unvalued cash or positions prevent a complete portfolio total. Slice proportions
-        describe this known subtotal. Portfolio percentages remain unavailable.
+        describe this known subtotal. Listed weights use known investment assets; unknown cash and unpriced positions
+        are excluded.
       </p>
       <p v-if="!allocation.length" class="text-muted-foreground text-sm">
         Classification data is unavailable for this mode.
@@ -851,7 +972,18 @@ const health = computed(() =>
       :limit="Number(settings.limit ?? 20)"
       :security-id="String(settings.securityId ?? '')"
     />
-    <Treemap v-if="kind === 'heatmap'" :analytics="analytics" :settings="settings" :compact="compact" />
+    <template v-if="kind === 'heatmap'"
+      ><label class="text-muted-foreground flex flex-wrap items-center gap-2 text-xs"
+        >Performance period<select
+          :value="settings.colorBy ?? 'daily'"
+          aria-label="Treemap performance period"
+          class="bg-background max-w-full min-w-0 rounded-md border px-2 py-1.5"
+          @change="emit('settings-change', { colorBy: ($event.target as HTMLSelectElement).value })"
+        >
+          <option v-for="[id, label] in INVESTMENT_PERFORMER_PERIODS" :key="id" :value="id">{{ label }}</option>
+        </select></label
+      ><Treemap :analytics="analytics" :settings="settings" :compact="compact"
+    /></template>
     <template v-if="kind === 'exposure'"
       ><p class="text-muted-foreground text-xs">
         Direct plus indirect company exposure · fund composition coverage
@@ -929,7 +1061,7 @@ const health = computed(() =>
         Weighted overlap is the sum of minimum comparable company weights. Select a fund pair to inspect shared
         companies.
       </p>
-      <div class="overflow-auto">
+      <ScrollArea with-horizontal-scrollbar>
         <table class="w-full text-xs" data-testid="investment-overlap-matrix">
           <thead>
             <tr>
@@ -970,7 +1102,7 @@ const health = computed(() =>
             </tr>
           </tbody>
         </table>
-      </div>
+      </ScrollArea>
       <div v-if="overlap" class="bg-muted/40 rounded-md p-3 text-xs">
         <OverlapDetails :pair="overlap" :currency-code="analytics.currencyCode" />
         <Button size="sm" variant="ghost" class="mt-2" @click="overlap = null">Close details</Button>
@@ -1098,8 +1230,8 @@ const health = computed(() =>
         </div>
       </div>
       <p class="text-muted-foreground text-xs">
-        {{ analytics.refresh.provider }} · last successful refresh
-        {{ analytics.refresh.lastSuccess ?? 'unavailable' }} · {{ analytics.refresh.schedule }}
+        {{ analytics.refresh.provider }} · last price check {{ analytics.refresh.lastSuccess ?? 'unavailable' }} ·
+        {{ analytics.refresh.schedule }}
       </p>
       <label class="text-xs"
         >Show<select

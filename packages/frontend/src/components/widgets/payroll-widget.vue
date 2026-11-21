@@ -3,6 +3,7 @@ import { getPayroll } from '@/api/payroll';
 import { getIncomeDashboard } from '@/api/income-management';
 import type { DashboardWidgetConfig } from '@/api/user-settings';
 import { Button } from '@/components/lib/ui/button';
+import { ArrowUpRightIcon } from '@lucide/vue';
 import { useQuery } from '@tanstack/vue-query';
 import { computed, inject, type Ref } from 'vue';
 import { useRouter } from 'vue-router';
@@ -76,44 +77,56 @@ const detail = computed(
 </script>
 
 <template>
-  <div class="h-full min-h-0 min-w-0" :data-payroll-widget="id">
-    <template v-if="projected">
-      <LoadingState v-if="planPending" />
-      <ErrorState v-else-if="planError" message="Projected income could not be loaded." @retry="reloadPlans()" />
-      <template v-else-if="result && plan">
-        <ProjectedSummary
-          v-if="id === 'projected-income-summary'"
-          :result="result"
-          :allocation="allocation"
-          :divisor="divisor"
-          :period-label="periodLabel"
-          @edit="router.push({ path: '/finances/income/projected/edit', query: { plan: plan.id } })"
-        />
-        <IncomeAllocationView
-          v-else
-          :result="result"
-          :input="plan.input"
-          :divisor="divisor"
-          :period-label="periodLabel"
-          part="chart"
-          :view="config.config?.view === 'flow' ? 'flow' : 'donut'"
-        />
+  <div class="flex h-full min-h-0 min-w-0 flex-col" :data-payroll-widget="id">
+    <div class="flex h-7 shrink-0 justify-end">
+      <Button
+        as-child
+        variant="ghost"
+        size="icon-sm"
+        :aria-label="projected ? 'Open Projected Income' : 'Open Actual Income'"
+        ><router-link :to="projected ? '/finances/income/projected' : '/finances/income/actual'"
+          ><ArrowUpRightIcon class="text-muted-foreground size-4" /></router-link
+      ></Button>
+    </div>
+    <div class="min-h-0 flex-1">
+      <template v-if="projected">
+        <LoadingState v-if="planPending" />
+        <ErrorState v-else-if="planError" message="Projected income could not be loaded." @retry="reloadPlans()" />
+        <template v-else-if="result && plan">
+          <ProjectedSummary
+            v-if="id === 'projected-income-summary'"
+            :result="result"
+            :allocation="allocation"
+            :divisor="divisor"
+            :period-label="periodLabel"
+            @edit="router.push({ path: '/finances/income/projected/edit', query: { plan: plan.id } })"
+          />
+          <IncomeAllocationView
+            v-else
+            :result="result"
+            :input="plan.input"
+            :divisor="divisor"
+            :period-label="periodLabel"
+            part="chart"
+            :view="config.config?.view === 'flow' ? 'flow' : 'donut'"
+          />
+        </template>
+        <div v-else class="bg-card rounded-xl border p-5 text-sm">
+          Set up your projected income first.<Button as-child variant="link"
+            ><router-link to="/finances/income/projected">Projection settings</router-link></Button
+          >
+        </div>
       </template>
-      <div v-else class="bg-card rounded-xl border p-5 text-sm">
-        Set up your projected income first.<Button as-child variant="link"
-          ><router-link to="/finances/income/projected">Projection settings</router-link></Button
-        >
-      </div>
-    </template>
-    <template v-else>
-      <LoadingState v-if="isPending" />
-      <ErrorState v-else-if="isError" message="Actual payroll could not be loaded." @retry="refetch()" />
-      <template v-else-if="data">
-        <ActualSummary v-if="id === 'payroll-summary'" :data="data" :from="from" :through="through" />
-        <SalaryHistory v-else-if="id === 'payroll-salary-history'" :settings-key="key" />
-        <ReceivedIncome v-else-if="id === 'payroll-received-income'" :settings-key="key" />
-        <DetailSummary v-else :data="data" :kind="detail" :from="from" :through="through" />
+      <template v-else>
+        <LoadingState v-if="isPending" />
+        <ErrorState v-else-if="isError" message="Actual payroll could not be loaded." @retry="refetch()" />
+        <template v-else-if="data">
+          <ActualSummary v-if="id === 'payroll-summary'" :data="data" :from="from" :through="through" />
+          <SalaryHistory v-else-if="id === 'payroll-salary-history'" :settings-key="key" />
+          <ReceivedIncome v-else-if="id === 'payroll-received-income'" :settings-key="key" />
+          <DetailSummary v-else :data="data" :kind="detail" :from="from" :through="through" />
+        </template>
       </template>
-    </template>
+    </div>
   </div>
 </template>

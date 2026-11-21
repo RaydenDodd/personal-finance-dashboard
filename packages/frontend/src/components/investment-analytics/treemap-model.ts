@@ -23,7 +23,7 @@ export function investmentTreemapRows(
   const money = (value: number | null, currency = analytics.currencyCode) =>
     value == null ? 'Unavailable' : new Intl.NumberFormat(undefined, { style: 'currency', currency }).format(value);
   const split = settings.grouping === 'brokerage' || settings.grouping === 'accountType';
-  const total = chartNumber(analytics.metrics.marketValue?.value);
+  const total = chartNumber(analytics.metrics.marketValue?.value ?? analytics.metrics.knownMarketValue?.value);
   const weight = (value: number | null) =>
     total !== null && total > 0 && value !== null ? (value / total) * 100 : null;
   const portfolioGroup = (id: string) => {

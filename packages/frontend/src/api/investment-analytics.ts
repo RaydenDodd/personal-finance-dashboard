@@ -21,7 +21,7 @@ export async function importFundHoldings(snapshots: InvestmentFundSnapshot[]): P
 }
 
 export async function refreshInvestmentPrices(): Promise<void> {
-  await api.post('/investments/sync/securities-prices');
+  await api.post('/investments/analytics/prices/refresh');
 }
 export type CompositionCatalogFund = FundCompositionStatus & {
   id: string;

@@ -10,7 +10,7 @@ import {
   subYears,
 } from 'date-fns';
 
-export type PayrollRangePreset = '1m' | '3m' | '6m' | 'ytd' | '1y' | '2y' | '5y' | 'all' | 'custom';
+export type PayrollRangePreset = '1d' | '1w' | '1m' | '3m' | '6m' | 'ytd' | '1y' | '2y' | '5y' | 'all' | 'custom';
 export interface PayrollRange {
   preset: PayrollRangePreset;
   from: string;
@@ -30,14 +30,18 @@ export function payrollRange(
 ): PayrollRange {
   const end = parseISO(today);
   const from =
-    preset === 'all'
-      ? earliest
-      : preset === 'ytd'
-        ? format(startOfYear(end), 'yyyy-MM-dd')
-        : format(
-            /^\d+m$/.test(preset) ? subMonths(end, Number(preset[0])) : subYears(end, Number(preset[0]) || 1),
-            'yyyy-MM-dd',
-          );
+    preset === '1d'
+      ? today
+      : preset === '1w'
+        ? format(addDays(end, -6), 'yyyy-MM-dd')
+        : preset === 'all'
+          ? earliest
+          : preset === 'ytd'
+            ? format(startOfYear(end), 'yyyy-MM-dd')
+            : format(
+                /^\d+m$/.test(preset) ? subMonths(end, Number(preset[0])) : subYears(end, Number(preset[0]) || 1),
+                'yyyy-MM-dd',
+              );
   return { preset, from, through: today };
 }
 export function shiftPayrollRange(range: PayrollRange, direction: -1 | 1, today = payrollToday()): PayrollRange {

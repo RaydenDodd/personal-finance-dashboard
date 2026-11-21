@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, reactive, ref, watch } from 'vue';
+import { computed, inject, nextTick, reactive, ref, watch, useId, type Ref } from 'vue';
 import * as d3 from 'd3';
 import { useResizeObserver } from '@vueuse/core';
 import { ChartTooltip, ChartTooltipHeader, ChartTooltipRow } from '@/components/common/charts/chart-tooltip';
@@ -7,6 +7,8 @@ import { useChartTooltipPosition } from '@/composable/charts/use-chart-tooltip-p
 import type { InvestmentAnalytics } from '@bt/shared/types/investment-analytics';
 import { investmentTreemapRows } from './treemap-model';
 const props = defineProps<{ analytics: InvestmentAnalytics; settings: Record<string, unknown>; compact?: boolean }>();
+const chartHeight = inject<Ref<number> | null>('investment-chart-height', null);
+const clipPrefix = useId().replace(/[^a-zA-Z0-9_-]/g, '');
 const containerRef = ref<HTMLElement | null>(null),
   svgRef = ref<SVGSVGElement | null>(null),
   tooltipRef = ref<HTMLElement | null>(null);
@@ -77,6 +79,13 @@ function render() {
     .append('g')
     .attr('class', 'cell')
     .attr('transform', (node) => `translate(${node.x0},${node.y0})`);
+  cells
+    .append('clipPath')
+    .attr('id', (_node, index) => `${clipPrefix}-cell-${index}`)
+    .append('rect')
+    .attr('width', (node) => Math.max(0, node.x1 - node.x0 - 4))
+    .attr('height', (node) => Math.max(0, node.y1 - node.y0));
+  cells.attr('clip-path', (_node, index) => `url(#${clipPrefix}-cell-${index})`);
   cells
     .append('rect')
     .attr('width', (node) => Math.max(0, node.x1 - node.x0))
@@ -153,7 +162,12 @@ watch([visible, () => props.settings], () => nextTick(render), { deep: true });
     <button v-if="group" type="button" class="text-primary-text mb-2 text-xs underline" @click="group = null">
       All holdings / {{ group }} ×
     </button>
-    <div ref="containerRef" class="relative w-full" :class="compact ? 'h-56' : 'h-80'">
+    <div
+      ref="containerRef"
+      class="relative w-full"
+      :class="compact ? 'h-56' : 'h-80'"
+      :style="chartHeight ? { height: chartHeight + 'px' } : undefined"
+    >
       <svg ref="svgRef" class="h-full w-full" aria-label="Personal portfolio holdings treemap" />
       <div
         v-show="tooltip.visible"

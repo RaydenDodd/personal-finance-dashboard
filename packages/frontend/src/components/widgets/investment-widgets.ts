@@ -64,7 +64,7 @@ export const INVESTMENT_WIDGET_DEFINITIONS: Record<string, WidgetDefinition> = O
 export const investmentWidgetKind = (id: string): InvestmentWidgetKind | null =>
   INVESTMENT_WIDGETS.find(([kind]) => id === `investment-${kind}`)?.[0] ?? null;
 
-export const INVESTMENT_DATE_RANGES = ['1M', '3M', '6M', 'YTD', '1Y', '2Y', '5Y', 'MAX', 'custom'] as const;
+export const INVESTMENT_DATE_RANGES = ['1D', '1W', '1M', '3M', '6M', 'YTD', '1Y', '2Y', '5Y', 'MAX', 'custom'] as const;
 
 export const INVESTMENT_ALLOCATION_MODES = [
   ['holdings', 'Direct holdings'],
@@ -114,13 +114,11 @@ export const investmentWidgetSettings = (
         : '',
   grouping: typeof stored.grouping === 'string' ? stored.grouping : 'security',
   sizeBy: ['marketValue', 'costBasis', 'absoluteGain'].includes(String(stored.sizeBy)) ? stored.sizeBy : 'marketValue',
-  colorBy: ['daily', 'weekly', 'monthly', 'ytd', '1y', 'unrealized'].includes(String(stored.colorBy))
-    ? stored.colorBy
-    : 'daily',
+  colorBy: INVESTMENT_PERFORMER_PERIODS.some(([period]) => period === stored.colorBy) ? stored.colorBy : 'daily',
   aggregation: ['monthly', 'quarterly', 'yearly'].includes(String(stored.aggregation)) ? stored.aggregation : 'monthly',
   performerPeriod: INVESTMENT_PERFORMER_PERIODS.some(([period]) => period === stored.performerPeriod)
     ? stored.performerPeriod
-    : 'unrealized',
+    : 'daily',
   unit: stored.unit === 'percent' ? 'percent' : 'dollars',
   limit:
     typeof stored.limit === 'number' && Number.isInteger(stored.limit) && stored.limit >= 5 && stored.limit <= 100

@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { ref } from 'vue';
-import type { DashboardWidgetConfig } from '@/api/user-settings';
+import type { DashboardWidgetConfig, DashboardPage } from '@/api/user-settings';
 import type { WidgetLayoutDefinition } from '@/components/widgets/widget-registry';
 import DashboardGrid from './dashboard-grid.vue';
 import DashboardEditToolbar from './dashboard-edit-toolbar.vue';
 
 defineProps<{
-  page: 'income' | 'actualIncome' | 'personalFinance';
+  page: DashboardPage;
   registry: Record<string, WidgetLayoutDefinition>;
   defaultLayout: DashboardWidgetConfig[];
   columns?: 3 | 4;

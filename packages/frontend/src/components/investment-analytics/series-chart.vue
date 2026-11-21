@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, reactive, ref, watch } from 'vue';
+import { computed, inject, nextTick, reactive, ref, watch, type Ref } from 'vue';
 import { useResizeObserver } from '@vueuse/core';
 import * as d3 from 'd3';
 import { ChartTooltip, ChartTooltipHeader, ChartTooltipRow } from '@/components/common/charts/chart-tooltip';
@@ -19,21 +19,35 @@ const props = withDefaults(
     compact?: boolean;
     label?: string;
     shareLabel?: string;
+    currencyCode?: string;
   }>(),
   { events: () => [], label: 'Investment history', shareLabel: 'period income' },
 );
 const containerRef = ref<HTMLElement | null>(null);
+const chartHeight = inject<Ref<number> | null>('investment-chart-height', null);
 const svgRef = ref<SVGSVGElement | null>(null);
 const tooltipRef = ref<HTMLElement | null>(null);
 const hidden = ref<string[]>([]);
 const visibleSeries = computed(() => props.series.filter((series) => !hidden.value.includes(series.key)));
+const hasObservations = computed(() => props.points.some((p) => props.series.some((s) => p.values[s.key] != null)));
+const pointDate = (date: string) => new Date(date.includes('T') ? date : `${date.slice(0, 10)}T12:00:00Z`);
 const tooltipSeries = computed(() =>
   props.bars ? visibleSeries.value.filter((series) => series.key === tooltip.segment) : visibleSeries.value,
 );
 const tooltip = reactive({ visible: false, x: 0, y: 0, point: null as InvestmentChartPoint | null, segment: '' });
 const { formatBaseCurrency } = useFormatCurrency();
 const formatValue = (value: number | null | undefined) =>
-  value == null ? 'Unavailable' : props.percent ? `${value.toFixed(2)}%` : formatBaseCurrency(value);
+  value == null
+    ? 'Unavailable'
+    : props.percent
+      ? `${value.toFixed(2)}%`
+      : props.currencyCode
+        ? new Intl.NumberFormat(undefined, {
+            style: 'currency',
+            currency: props.currencyCode,
+            maximumFractionDigits: Math.abs(value) < 1 ? 8 : 2,
+          }).format(value)
+        : formatBaseCurrency(value);
 let clear = () => {};
 const { updateTooltipPosition, isChartScrolling } = useChartTooltipPosition({
   containerRef,
@@ -53,7 +67,7 @@ function render() {
   const w = Math.max(1, width - margin.left - margin.right),
     h = height - margin.top - margin.bottom;
   const points = [...props.points].sort((a, b) => a.date.localeCompare(b.date));
-  const dates = points.map((point) => new Date(`${point.date.slice(0, 10)}T12:00:00Z`));
+  const dates = points.map((point) => pointDate(point.date));
   let [minDate, maxDate] = d3.extent(dates) as [Date, Date];
   if (+minDate === +maxDate) {
     minDate = new Date(+minDate - 86400000);
@@ -69,11 +83,12 @@ function render() {
         ]
       : visibleSeries.value.map((series) => value(point, series.key)).filter((v): v is number => v != null),
   );
-  const low = Math.min(0, d3.min(values) ?? 0),
-    high = Math.max(0, d3.max(values) ?? 1);
+  const low = props.bars || props.percent ? Math.min(0, d3.min(values) ?? 0) : (d3.min(values) ?? 0),
+    high = props.bars || props.percent ? Math.max(0, d3.max(values) ?? 1) : (d3.max(values) ?? 1);
+  const padding = Math.max((high - low) * 0.08, Math.max(Math.abs(high), Math.abs(low)) * 0.005, 1e-10);
   const y = d3
     .scaleLinear()
-    .domain([low * 1.1, high > low ? high * 1.08 : high + 1])
+    .domain([low - padding, high + padding])
     .nice()
     .range([h, 0]);
   const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
@@ -94,7 +109,11 @@ function render() {
       d3
         .axisBottom(x)
         .ticks(width < 450 ? 3 : 6)
-        .tickFormat((date) => d3.timeFormat('%b %y')(date as Date)),
+        .tickFormat((date) =>
+          d3.timeFormat(
+            +maxDate - +minDate < 3 * 86400000 ? '%a %H:%M' : +maxDate - +minDate < 62 * 86400000 ? '%b %d' : '%b %y',
+          )(date as Date),
+        ),
     )
     .call((axis) => axis.select('.domain').remove())
     .call((axis) => axis.selectAll('text').attr('fill', 'var(--muted-foreground)').attr('font-size', 10));
@@ -114,7 +133,7 @@ function render() {
           .append('rect')
           .datum({ point, series })
           .attr('data-series', series.key)
-          .attr('x', x(new Date(`${point.date.slice(0, 10)}T12:00:00Z`)) - barWidth / 2)
+          .attr('x', x(pointDate(point.date)) - barWidth / 2)
           .attr('y', y(Math.max(base, base + v)))
           .attr('width', barWidth)
           .attr('height', Math.abs(y(base) - y(base + v)))
@@ -128,7 +147,7 @@ function render() {
       const line = d3
         .line<InvestmentChartPoint>()
         .defined((point) => value(point, series.key) != null)
-        .x((point) => x(new Date(`${point.date.slice(0, 10)}T12:00:00Z`)))
+        .x((point) => x(pointDate(point.date)))
         .y((point) => y(value(point, series.key)!));
       g.append('path')
         .datum(points)
@@ -137,12 +156,14 @@ function render() {
         .attr('stroke', series.color)
         .attr('stroke-width', 2.5)
         .attr('data-series', series.key);
-      if (points.length <= 62)
+      const observations = points.filter((point) => value(point, series.key) != null);
+      if (observations.length <= 62)
         g.selectAll(`.dot-${series.key.replace(/\W/g, '')}`)
-          .data(points.filter((point) => value(point, series.key) != null))
+          .data(observations)
           .enter()
           .append('circle')
-          .attr('cx', (point) => x(new Date(`${point.date.slice(0, 10)}T12:00:00Z`)))
+          .attr('data-observation-series', series.key)
+          .attr('cx', (point) => x(pointDate(point.date)))
           .attr('cy', (point) => y(value(point, series.key)!))
           .attr('r', 2)
           .attr('fill', series.color);
@@ -176,13 +197,9 @@ function render() {
   function move(event: PointerEvent | MouseEvent) {
     if (isChartScrolling()) return;
     const [px, py] = d3.pointer(event, g.node());
-    const point = nearestChartPoint(
-      points,
-      +x.invert(Math.max(0, Math.min(px, w))),
-      (p) => +new Date(`${p.date.slice(0, 10)}T12:00:00Z`),
-    );
+    const point = nearestChartPoint(points, +x.invert(Math.max(0, Math.min(px, w))), (p) => +pointDate(p.date));
     if (!point) return;
-    const cx = x(new Date(`${point.date.slice(0, 10)}T12:00:00Z`));
+    const cx = x(pointDate(point.date));
     guide.attr('x1', px).attr('x2', px).attr('opacity', 0.6);
     dots.selectAll('*').remove();
     visibleSeries.value.forEach((series) => {
@@ -250,7 +267,12 @@ watch(
 </script>
 <template>
   <div class="flex min-h-0 min-w-0 flex-col">
-    <div ref="containerRef" class="relative w-full" :class="compact ? 'h-52' : 'h-72'">
+    <div
+      ref="containerRef"
+      class="relative w-full"
+      :class="compact ? 'h-52' : 'h-72'"
+      :style="chartHeight ? { height: chartHeight + 'px' } : undefined"
+    >
       <svg ref="svgRef" class="h-full w-full" role="img" :aria-label="label" />
       <div
         v-show="tooltip.visible"
@@ -287,7 +309,7 @@ watch(
         </ChartTooltip>
       </div>
       <p
-        v-if="!points.length"
+        v-if="!hasObservations"
         class="text-muted-foreground absolute inset-0 flex items-center justify-center px-6 text-center text-sm"
       >
         No recorded observations in this date range.

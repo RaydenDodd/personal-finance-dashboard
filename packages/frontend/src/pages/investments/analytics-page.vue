@@ -1,30 +1,37 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, ref, provide } from 'vue';
 import { useLocalStorage } from '@vueuse/core';
+import { useQueryClient } from '@tanstack/vue-query';
 import PageWrapper from '@/components/common/page-wrapper.vue';
 import { Button } from '@/components/lib/ui/button';
-import { Card, CardHeader, CardContent } from '@/components/lib/ui/card';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/lib/ui/popover';
 import { RefreshCwIcon, FileInputIcon, FilterIcon } from '@lucide/vue';
-import AnalyticsPanel from '@/components/investment-analytics/analytics-panel.vue';
+import DashboardPageLayout from '@/pages/dashboard/components/dashboard-page-layout.vue';
+import InvestmentWidget from '@/components/widgets/investment-widget.vue';
 import FundImport from '@/components/investment-analytics/fund-import.vue';
 import InvestmentSettings from '@/components/widgets/investment-widget-settings.vue';
-import { INVESTMENT_WIDGETS, type InvestmentWidgetKind } from '@/components/widgets/investment-widgets';
+import { INVESTMENT_WIDGET_DEFINITIONS, type InvestmentWidgetKind } from '@/components/widgets/investment-widgets';
 import { useInvestmentAnalytics } from '@/composable/data-queries/investment-analytics';
 import { refreshInvestmentPrices } from '@/api/investment-analytics';
 
 const props = defineProps<{ page: 'overview' | 'performance' | 'holdings' | 'allocation' | 'dividends' }>();
-const settings = useLocalStorage<Record<string, unknown>>('investments:analytics:settings', {
-  portfolioIds: [],
-  benchmarks: ['SPY'],
-  dateRange: '1Y',
-  aggregation: 'monthly',
-  allocationMode: 'holdings',
-  sizeBy: 'marketValue',
-  colorBy: 'unrealized',
-  grouping: 'security',
-  holdingsMode: 'direct',
-});
+const queryClient = useQueryClient();
+const invalidateAnalytics = () =>
+  queryClient.invalidateQueries({ queryKey: ['investment-analytics'] }, { cancelRefetch: false });
+const settings = useLocalStorage<Record<string, unknown>>(
+  computed(() => 'investments:analytics:settings:' + props.page),
+  {
+    portfolioIds: [],
+    benchmarks: ['SPY'],
+    dateRange: '1Y',
+    aggregation: 'monthly',
+    allocationMode: 'holdings',
+    sizeBy: 'marketValue',
+    colorBy: 'unrealized',
+    grouping: 'security',
+    holdingsMode: 'direct',
+  },
+);
 const panelSettings = useLocalStorage<Record<string, Record<string, unknown>>>('investments:analytics:panels', {});
 const settingsOpen = ref(false),
   importOpen = ref(false),
@@ -74,7 +81,7 @@ const kinds = computed<InvestmentWidgetKind[]>(() =>
   props.page === 'overview'
     ? ['overview', 'value-capital', 'concentration', 'health']
     : props.page === 'performance'
-      ? ['performance', 'benchmark', 'contributions', 'gains', 'risk', 'portfolio-comparison']
+      ? ['performance', 'heatmap', 'performers', 'benchmark', 'contributions', 'gains', 'risk', 'portfolio-comparison']
       : props.page === 'holdings'
         ? ['holdings', 'heatmap', 'performers']
         : props.page === 'allocation'
@@ -83,7 +90,35 @@ const kinds = computed<InvestmentWidgetKind[]>(() =>
 );
 const brokers = computed(() => [...new Set((all.data.value?.portfolios ?? []).map((p) => p.broker))]);
 const groups = computed(() => [...new Set((all.data.value?.portfolios ?? []).map((p) => p.accountType))]);
-const titleFor = (kind: string) => INVESTMENT_WIDGETS.find(([id]) => id === kind)?.[1] ?? kind;
+const layoutPage = computed(
+  () =>
+    (
+      ({
+        overview: 'investmentsOverview',
+        performance: 'investmentsPerformance',
+        holdings: 'investmentsHoldings',
+        allocation: 'investmentsAllocation',
+        dividends: 'investmentsDividends',
+      }) as const
+    )[props.page],
+);
+provide('investment-full-page', true);
+provide(
+  'investment-page-settings',
+  computed(() => ({ ...settings.value, portfolioIds: portfolioIds.value })),
+);
+const defaultLayout = computed(() =>
+  kinds.value.map((kind) => ({
+    widgetId: 'investment-' + kind,
+    colSpan: 3,
+    rowSpan: 1,
+    config: {
+      ...panelSettings.value[kind],
+      ...(kind === 'heatmap' ? { colorBy: props.page === 'holdings' ? 'unrealized' : 'daily' } : {}),
+      ...(kind === 'performers' ? { performerPeriod: 'daily' } : {}),
+    },
+  })),
+);
 function patchSettings(patch: Record<string, unknown>) {
   if (['dateRange', 'from', 'through'].some((key) => patch[key] !== settings.value[key])) {
     panelSettings.value = Object.fromEntries(
@@ -96,17 +131,12 @@ function patchSettings(patch: Record<string, unknown>) {
   settings.value = { ...settings.value, ...patch };
   settingsOpen.value = false;
 }
-function patchPanel(kind: string, patch: Record<string, unknown>) {
-  panelSettings.value = { ...panelSettings.value, [kind]: { ...panelSettings.value[kind], ...patch } };
-}
-const effectiveSettings = (kind: string) => ({ ...settings.value, ...panelSettings.value[kind] });
 async function refresh() {
   refreshError.value = '';
   refreshing.value = true;
   try {
     await refreshInvestmentPrices();
-    await all.refetch();
-    await query.refetch();
+    await invalidateAnalytics();
   } catch (cause) {
     refreshError.value =
       cause instanceof Error ? cause.message : 'Price refresh failed. Your existing observations are preserved.';
@@ -183,8 +213,7 @@ async function refresh() {
         <span>{{ portfolioIds.length ? portfolioIds.length + ' selected portfolios' : 'All portfolios' }}</span
         ><span v-if="groupFilter !== 'all'">{{ groupFilter }}</span
         ><span v-if="brokerFilter !== 'all'">{{ brokerFilter }}</span
-        ><span v-if="query.data.value?.refresh.lastSuccess"
-          >Prices updated {{ query.data.value.refresh.lastSuccess }}</span
+        ><span v-if="query.data.value?.refresh.lastSuccess">Price check {{ query.data.value.refresh.lastSuccess }}</span
         ><span v-if="query.data.value">{{ query.data.value.currencyCode }} reporting currency</span>
       </div>
       <p v-if="refreshError" role="alert" class="text-app-expense-color rounded-md border p-3 text-sm">
@@ -201,32 +230,20 @@ async function refresh() {
       <p v-else-if="query.isPending.value" class="text-muted-foreground p-8 text-center text-sm" role="status">
         Loading consolidated investments…
       </p>
-      <template v-else-if="query.data.value"
-        ><div class="grid grid-cols-1 items-start gap-4" :class="page === 'overview' ? 'xl:grid-cols-2' : ''">
-          <Card
-            v-for="kind in kinds"
-            :key="kind"
-            class="min-w-0 overflow-hidden"
-            :class="kind === 'overview' || kind === 'value-capital' ? 'xl:col-span-2' : ''"
-            ><CardHeader class="py-4"
-              ><h2 class="text-base font-semibold">{{ titleFor(kind) }}</h2></CardHeader
-            ><CardContent
-              ><AnalyticsPanel
-                :analytics="query.data.value"
-                :kind="kind"
-                :settings="effectiveSettings(kind)"
-                @settings-change="patchPanel(kind, $event)" /></CardContent
-          ></Card></div
-      ></template>
+      <DashboardPageLayout
+        v-else-if="query.data.value"
+        :key="page"
+        :page="layoutPage"
+        :registry="INVESTMENT_WIDGET_DEFINITIONS"
+        :default-layout="defaultLayout"
+        ><template #default><InvestmentWidget /></template
+      ></DashboardPageLayout>
       <FundImport
         v-if="query.data.value"
         v-model="importOpen"
         :funds="query.data.value.holdings.filter((row) => row.isFund)"
         :securities="query.data.value.holdings"
-        @saved="
-          query.refetch();
-          all.refetch();
-        "
+        @saved="invalidateAnalytics"
       /></div
   ></PageWrapper>
 </template>

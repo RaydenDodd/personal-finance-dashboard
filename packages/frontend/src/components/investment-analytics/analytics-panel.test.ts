@@ -173,7 +173,7 @@ describe('shared investment panels', () => {
     ] as InvestmentAnalytics['holdings'];
     const wrapper = panel('performers', analytics);
     const selector = wrapper.get('select[aria-label="Performer return period"]');
-    expect((selector.element as HTMLSelectElement).value).toBe('unrealized');
+    expect((selector.element as HTMLSelectElement).value).toBe('daily');
     await selector.setValue('weekly');
     expect(wrapper.emitted('settings-change')?.at(-1)).toEqual([{ performerPeriod: 'weekly' }]);
     await wrapper.setProps({ settings: { dateRange: 'MAX', performerPeriod: 'weekly' } });
@@ -199,7 +199,7 @@ describe('shared investment panels', () => {
       },
     ];
     const wrapper = panel('risk', analytics);
-    expect(wrapper.findComponent({ name: 'SeriesChart' }).props('points')[0].values.drawdown).toBeNull();
+    expect(wrapper.findComponent({ name: 'SeriesChart' }).props('points')).toEqual([]);
   });
   it('shows announced future payments separately from the historical calendar range', () => {
     const analytics = base();

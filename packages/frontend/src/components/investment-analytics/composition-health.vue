@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { FundCompositionStatus } from '@bt/shared/types/investment-analytics';
+import { ScrollArea } from '@/components/lib/ui/scroll-area';
 defineProps<{ rows: FundCompositionStatus[]; compact?: boolean }>();
 const percent = (value: string) => `${Number(value).toFixed(4)}%`;
 const age = (date: string | null) => (date ? Math.floor((Date.now() - Date.parse(date)) / 86400000) : null);
@@ -13,7 +14,7 @@ const age = (date: string | null) => (date ? Math.floor((Date.now() - Date.parse
       Dated disclosures, not live composition. Coverage includes identified non-company assets. Signed residual balances
       remain unallocated; source weights are never scaled to 100%.
     </p>
-    <div class="mt-2 max-h-96 overflow-auto rounded-md border">
+    <ScrollArea class="mt-2 h-96 min-w-0 rounded-md border" with-horizontal-scrollbar>
       <table class="w-full min-w-[45rem] text-left text-xs">
         <thead class="bg-muted/80 sticky top-0">
           <tr>
@@ -80,6 +81,6 @@ const age = (date: string | null) => (date ? Math.floor((Date.now() - Date.parse
           </tr>
         </tbody>
       </table>
-    </div>
+    </ScrollArea>
   </details>
 </template>

@@ -4,15 +4,18 @@
 
     <!-- Center label: shows Total by default, category info on hover -->
     <div class="pointer-events-none absolute inset-0 flex items-center justify-center">
-      <div class="flex max-w-[68%] min-w-0 flex-col items-center gap-0.5 text-center">
+      <div
+        class="flex min-w-0 flex-col items-center gap-0.5 text-center break-words"
+        :style="{ width: centerWidth + 'px' }"
+      >
         <template v-if="centerLabel.isHovering">
           <div class="text-muted-foreground text-xs">{{ centerLabel.name }}</div>
-          <div class="text-base font-semibold">{{ centerLabel.amount }}</div>
+          <div class="max-w-full text-sm font-semibold">{{ centerLabel.amount }}</div>
           <div v-if="showPercentages" class="text-muted-foreground text-xs">{{ centerLabel.percent }}</div>
         </template>
         <template v-else>
           <div class="text-muted-foreground text-xs">{{ totalLabel ?? $t('common.labels.total') }}</div>
-          <div class="text-base font-semibold">{{ formatBaseCurrency(totalAmount) }}</div>
+          <div class="max-w-full text-sm font-semibold">{{ formatBaseCurrency(totalAmount) }}</div>
         </template>
       </div>
     </div>
@@ -52,6 +55,7 @@ const props = withDefaults(
   defineProps<{
     data: ChartDataItem[];
     totalAmount: number;
+    percentageTotal?: number;
     totalLabel?: string;
     chartLabel?: string;
     showPercentages?: boolean;
@@ -73,6 +77,7 @@ const isTouch = useMediaQuery('(pointer: coarse)');
 const chartContainerRef = ref<HTMLDivElement | null>(null);
 const svgRef = ref<SVGSVGElement | null>(null);
 const selectedCategoryId = ref<string | null>(null);
+const centerWidth = ref(120);
 watch(
   () => props.highlightCategoryId,
   (id) => {
@@ -112,6 +117,9 @@ const renderChart = () => {
   const glowSize = 10;
   const radius = Math.min(width, height) / 2 - glowSize;
   const innerRadius = radius * 0.7;
+  centerWidth.value = Math.max(48, innerRadius * 2 - 18);
+  const percentageTotal =
+    props.percentageTotal && props.percentageTotal > 0 ? props.percentageTotal : props.totalAmount;
 
   const pie = d3
     .pie<ChartDataItem>()
@@ -140,7 +148,7 @@ const renderChart = () => {
       glowGroup.append('path').attr('d', glowArc(datum)).attr('fill', datum.data.color).style('opacity', 0.5);
       centerLabel.name = datum.data.name;
       centerLabel.amount = formatBaseCurrency(datum.data.amount);
-      centerLabel.percent = `${((datum.data.amount / props.totalAmount) * 100).toFixed(1)}%`;
+      centerLabel.percent = `${((datum.data.amount / percentageTotal) * 100).toFixed(1)}%`;
     }
     centerLabel.isHovering = !!datum;
   };
@@ -163,7 +171,7 @@ const renderChart = () => {
     .attr('data-category-id', (d) => d.data.categoryId)
     .attr('role', 'button')
     .attr('tabindex', 0)
-    .attr('aria-label', (d) => `${d.data.name} ${((d.data.amount / props.totalAmount) * 100).toFixed(1)}%`)
+    .attr('aria-label', (d) => `${d.data.name} ${((d.data.amount / percentageTotal) * 100).toFixed(1)}%`)
     .style('outline', 'none')
     .style('cursor', 'pointer')
     .style('transition', 'opacity 0.2s ease')
@@ -178,7 +186,7 @@ const renderChart = () => {
         select(d);
       }
     });
-  if (props.showPercentages && props.totalAmount > 0) {
+  if (props.showPercentages && percentageTotal > 0) {
     arcs
       .filter((d) => d.endAngle - d.startAngle > 0.16)
       .append('text')
@@ -193,7 +201,7 @@ const renderChart = () => {
       .attr('font-size', 12)
       .attr('font-weight', 650)
       .attr('pointer-events', 'none')
-      .text((d) => `${((d.data.amount / props.totalAmount) * 100).toFixed(1)}%`);
+      .text((d) => `${((d.data.amount / percentageTotal) * 100).toFixed(1)}%`);
   }
   highlight(props.selectionMode === 'highlight' ? selectedCategoryId.value : null);
 };
@@ -213,7 +221,7 @@ watch(selectedCategoryId, (newId) => {
 useResizeObserver(chartContainerRef, renderChart);
 
 watch(
-  [() => props.data, () => props.totalAmount, chartContainerRef],
+  [() => props.data, () => props.totalAmount, () => props.percentageTotal, chartContainerRef],
   async ([, , container]) => {
     if (container) {
       await nextTick();
