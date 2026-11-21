@@ -64,6 +64,8 @@ export function usEquitySession(date: string) {
   memorial.setUTCDate(memorial.getUTCDate() - ((memorial.getUTCDay() + 6) % 7));
   const thanksgiving = nthWeekday(year, 10, 4, 4);
   const holidays = new Set([
+    // NYSE/ Nasdaq national day of mourning; verified against ICE's 2024-12-30 release.
+    '2025-01-09',
     observed(year, 0, 1, false),
     nthWeekday(year, 0, 1, 3),
     nthWeekday(year, 1, 1, 3),

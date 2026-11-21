@@ -119,7 +119,10 @@ export function buildHistory({
   const findPrice = createFindPriceForDate(buildPriceLookup(prices, investmentPriceDate, true));
   const shareUnitFactor = createShareUnitFactor(prices, investmentPriceDate);
   const observed = new Set(
-    prices.map((p) => `${p.securityId}:${investmentPriceDate(p.priceAsOf ?? p.date, p.priceAsOf ? false : undefined)}`),
+    prices.map((p) => {
+      const canonicalDaily = new Date(p.date).toISOString().endsWith('T00:00:00.000Z');
+      return `${p.securityId}:${canonicalDaily ? investmentPriceDate(p.date) : investmentPriceDate(p.priceAsOf ?? p.date, false)}`;
+    }),
   );
   const securityById = new Map<string, Securities>(securities.map((s) => [s.id, s]));
   for (const id of ids) {

@@ -35,6 +35,26 @@ const run = (extra: Record<string, unknown>) =>
   } as never);
 
 describe('security evidence rather than account-completeness gates', () => {
+  it('keeps a crypto daily bar on its recorded UTC day and handles the 2025 exchange closure', () => {
+    const daily = price('a', '2019-12-12', '10');
+    expect(
+      run({
+        from: '2019-12-12',
+        through: '2019-12-12',
+        securities: [{ ...security('a'), assetClass: 'crypto' }],
+        transactions: [tx('a', '2019-12-12', 'buy', '2')],
+        prices: [{ ...daily, priceAsOf: daily.date }],
+      })[0]?.knownMarketValue,
+    ).toBe('20');
+    expect(
+      run({
+        from: '2025-01-09',
+        through: '2025-01-09',
+        transactions: [tx('a', '2025-01-08', 'buy', '2')],
+        prices: [price('a', '2025-01-08', '10')],
+      })[0]?.knownMarketValue,
+    ).toBe('20');
+  });
   it('applies explicitly directed in-kind share transfers without inventing a cash movement', () => {
     const points = run({
       from: '2019-12-12',

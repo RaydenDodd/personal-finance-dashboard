@@ -6,7 +6,7 @@ import Securities from '@models/investments/securities.model';
 import SecurityPricing from '@models/investments/security-pricing.model';
 import { withLock } from '@services/common/lock';
 import { withTransaction } from '@services/common/with-transaction';
-import { dataProviderFactory } from '@services/investments/data-providers';
+import { dataProviderFactory, YahooDataProvider } from '@services/investments/data-providers';
 import { PriceData, toProviderSymbol } from '@services/investments/data-providers/base-provider';
 import { fetchCoinbaseHistory } from '@services/investments/data-providers/coinbase-quotes';
 import { subYears, subDays } from 'date-fns';
@@ -44,6 +44,7 @@ const syncHistoricalPricesImpl = async (
     if (firstTrade && new Date(String(firstTrade)) < startDate) startDate = new Date(String(firstTrade));
     const firstStored = await SecurityPricing.min('date', { where: { securityId } });
     if (firstStored && new Date(String(firstStored)) < startDate) startDate = new Date(String(firstStored));
+    startDate = startOfDayUtc(startDate);
   }
 
   // Use composite provider which automatically handles US vs non-US routing and fallbacks
@@ -93,6 +94,27 @@ const syncHistoricalPricesImpl = async (
       logger.warn(
         `Older Coinbase history unavailable for ${security.symbol}; retained existing provider observations.`,
       );
+    }
+  }
+
+  // Coinbase begins at the venue's listing date. Reuse the native Yahoo adapter
+  // for older USD coin daily observations; it does not create a second security.
+  const earliest = prices.length ? new Date(Math.min(...prices.map((p) => p.date.getTime()))) : endDate;
+  if (
+    !intraday &&
+    security.assetClass === ASSET_CLASS.crypto &&
+    /^[A-Z0-9]{2,15}$/.test(security.symbol ?? '') &&
+    earliest.getTime() - startDate.getTime() > 86400000
+  ) {
+    try {
+      const older = await new YahooDataProvider().getHistoricalPrices(toProviderSymbol(`${security.symbol}-USD`), {
+        startDate,
+        endDate: earliest,
+        assetClass: ASSET_CLASS.crypto,
+      });
+      prices = [...older, ...prices].sort((a, b) => a.date.getTime() - b.date.getTime());
+    } catch {
+      logger.warn(`Older Yahoo USD history unavailable for ${security.symbol}; retained sourced observations.`);
     }
   }
 
