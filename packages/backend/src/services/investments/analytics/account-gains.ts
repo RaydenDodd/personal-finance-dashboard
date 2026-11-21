@@ -201,7 +201,7 @@ export function reconcileAccountGains(input: GainInput): NonNullable<InvestmentA
       latest && !cashOnly
         ? providerRows.filter((v) => v.accountId === latest.accountId && v.date === previousDate).at(-1)
         : undefined;
-    if (latest && previous && currentReported) {
+    if (latest && previous && !cashOnly) {
       const flowsInPeriod = external.filter((f) => f.date > previous.date && f.date <= latest.date);
       const deposits = total(flowsInPeriod.filter((f) => new Big(f.amount).gt(0)).map((f) => f.amount));
       const withdrawals = new Big(total(flowsInPeriod.filter((f) => new Big(f.amount).lt(0)).map((f) => f.amount)))
@@ -217,7 +217,7 @@ export function reconcileAccountGains(input: GainInput): NonNullable<InvestmentA
         withdrawals,
         change,
         percent: percent(change, new Big(previous.value).plus(deposits).toString()),
-        method: 'Consecutive reported account values − external net funding',
+        method: 'Latest consecutive reported account values − external net funding',
         estimated: false,
       };
       c.dailyChange = change;
@@ -304,15 +304,18 @@ export function reconcileAccountGains(input: GainInput): NonNullable<InvestmentA
     reason: 'Imported external withdrawals and returned deposits.',
   };
   const daily = portfolios.flatMap((p) => (p.calculation!.daily ? [p.calculation!.daily!] : []));
+  const sameDailyDate = new Set(daily.map((d) => d.currentDate)).size <= 1;
   metrics.dailyChange = {
     value: daily.length
       ? new Big(total(daily.map((d) => d.change))).plus(total(adjustments.map((a) => a.dailyDifference))).toString()
       : null,
     status:
-      daily.length === portfolios.filter((p) => Number(p.marketValue) !== 0).length && daily.every((d) => !d.estimated)
+      sameDailyDate &&
+      daily.length === portfolios.filter((p) => Number(p.marketValue) !== 0).length &&
+      daily.every((d) => !d.estimated)
         ? 'verified'
         : 'partial',
-    estimated: daily.some((d) => d.estimated),
+    estimated: !sameDailyDate || daily.some((d) => d.estimated),
     reason: 'Reported account changes where consecutive valuations exist; holding attribution estimates otherwise.',
   };
   let dailyBase = new Big(total(daily.map((d) => new Big(d.previousValue).plus(d.deposits).toString())));

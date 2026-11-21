@@ -197,4 +197,17 @@ describe('reconciled account gains', () => {
     expect(x.portfolios[0]!.calculation!.daily!.estimated).toBe(false);
     expect(x.portfolios[0]!.calculation!.daily!.currentDate).toBe('2026-11-20');
   });
+  it('retains the latest dated crypto account change separately from a later holding quote', () => {
+    const p = portfolio('Robinhood Crypto');
+    p.calculation!.valueAsOf = '2026-11-21T11:00:00Z';
+    const x = input(p);
+    x.sources.valuations = [
+      { accountId: 'crypto', name: 'Crypto', date: '2026-11-19', value: '87.29', source: 'provider' },
+      { accountId: 'crypto', name: 'Crypto', date: '2026-11-20', value: '81.95', source: 'provider' },
+    ];
+    reconcileAccountGains(x);
+    expect(p.calculation!.daily!.change).toBe('-5.34');
+    expect(p.calculation!.daily!.currentDate).toBe('2026-11-20');
+    expect(p.calculation!.importedDeposits).toBe('0');
+  });
 });
