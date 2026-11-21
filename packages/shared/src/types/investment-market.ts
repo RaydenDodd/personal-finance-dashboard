@@ -78,3 +78,22 @@ export function investmentPriceDate(date: Date | string) {
   const value = new Date(date);
   return value.toISOString().endsWith('T00:00:00.000Z') ? dayKey(value) : easternDate(value);
 }
+
+export function previousUsEquitySession(date: string) {
+  const previous = new Date(date + 'T12:00:00Z');
+  do {
+    previous.setUTCDate(previous.getUTCDate() - 1);
+  } while (!usEquitySession(dayKey(previous)).tradingDay);
+  return dayKey(previous);
+}
+
+/** Scheduled close, rather than the time a later quote request retrieved it. */
+export function usEquityCloseInstant(date: string) {
+  const noon = new Date(date + 'T12:00:00Z');
+  const easternHour = Number(
+    new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: '2-digit', hourCycle: 'h23' }).format(noon),
+  );
+  return (
+    new Date(date + 'T00:00:00Z').getTime() + (usEquitySession(date).closeMinute + (12 - easternHour) * 60) * 60000
+  );
+}

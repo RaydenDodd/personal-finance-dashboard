@@ -37,6 +37,7 @@ import type { TransactionRow } from '@services/stats/get-combined-balance-histor
 import Big from 'big.js';
 import { Op } from 'sequelize';
 
+import { dailyPositionChange } from './daily-performance';
 import { getFundSnapshots, latestFundSnapshots } from './fund-snapshots';
 import { buildHistory } from './history';
 import {
@@ -393,6 +394,7 @@ async function getAnalyticsImpl({
     status: completeHistory ? 'verified' : 'partial',
     reason: 'Recorded trade fees and standalone fee charges; source history may omit other account charges.',
   };
+  const dailyCapital = new Map<string, string>();
   for (const h of holdings) {
     const nativeBasis = sum(
       allHoldingValues
@@ -438,24 +440,22 @@ async function getAnalyticsImpl({
           investmentPriceDate(t.date) === sessionDate &&
           (t.category === 'buy' || t.category === 'sell'),
       );
-      let openingQuantity = new Big(h.quantity),
-        netPurchases = new Big(0);
-      for (const trade of dayTrades) {
-        const direction = trade.category === 'buy' ? 1 : -1;
-        openingQuantity = openingQuantity.minus(trade.quantity.toBig().times(direction));
-        netPurchases = netPurchases.plus(trade.refAmount.toBig().times(direction));
-      }
-      h.dailyChange =
-        h.marketValue !== null && openingQuantity.gte(0)
-          ? new Big(h.marketValue)
-              .minus(openingQuantity.times(previous.priceClose.toBig()))
-              .minus(netPurchases)
-              .toString()
-          : null;
-      h.dailyChangePercent = percent(
-        latest.priceClose.toBig().minus(previous.priceClose.toBig()).toString(),
-        decimal(previous.priceClose),
-      );
+      const daily =
+        h.marketValue === null
+          ? null
+          : dailyPositionChange({
+              quantity: h.quantity,
+              marketValue: h.marketValue,
+              previousClose: decimal(previous.priceClose),
+              trades: dayTrades.map((t) => ({
+                category: t.category,
+                quantity: decimal(t.quantity),
+                amount: decimal(t.refAmount),
+              })),
+            });
+      h.dailyChange = daily?.change ?? null;
+      h.dailyChangePercent = daily?.percent ?? null;
+      if (daily) dailyCapital.set(h.id, daily.capital);
       h.previousCloseDate = dateString(previous.date);
       h.dailyChangeReason = h.accounts.some((a) => !portfolios.find((p) => p.id === a.portfolioId)?.historyComplete)
         ? 'Current shares and recorded same-session trades versus the previous recorded close; imported trade history is partial.'
@@ -487,20 +487,55 @@ async function getAnalyticsImpl({
       });
   }
   const dailyHoldings = holdings.filter((h) => h.dailyChange !== null);
+  // Fully exited native positions still contribute their same-session trading gain.
+  // They remain absent from the current holdings and allocation views.
+  const closedChanges: { change: string; capital: string }[] = [];
+  const activeIds = new Set(holdings.map((h) => h.id));
+  let currentSession = easternDate();
+  while (!usEquitySession(currentSession).tradingDay) {
+    const prior = new Date(currentSession + 'T12:00:00Z');
+    prior.setUTCDate(prior.getUTCDate() - 1);
+    currentSession = prior.toISOString().slice(0, 10);
+  }
+  for (const id of new Set(
+    allHoldingValues
+      .filter((h) => !activeIds.has(h.securityId) && h.currencyCode === currencyCode)
+      .map((h) => h.securityId),
+  )) {
+    const trades = transactions.filter(
+      (t) =>
+        t.securityId === id &&
+        investmentPriceDate(t.date) === currentSession &&
+        (t.category === 'buy' || t.category === 'sell'),
+    );
+    if (!trades.length) continue;
+    const previous = pricesBySecurity.get(id)?.findLast((p) => investmentPriceDate(p.date) < currentSession);
+    if (!previous || Date.now() - new Date(previous.date).getTime() > 5 * 86400000) continue;
+    const daily = dailyPositionChange({
+      quantity: '0',
+      marketValue: '0',
+      previousClose: decimal(previous.priceClose),
+      trades: trades.map((t) => ({
+        category: t.category,
+        quantity: decimal(t.quantity),
+        amount: decimal(t.refAmount),
+      })),
+    });
+    if (daily) closedChanges.push(daily);
+  }
   metrics.dailyChange = {
-    value: dailyHoldings.length ? sum(dailyHoldings.map((h) => h.dailyChange)) : null,
+    value:
+      dailyHoldings.length || closedChanges.length
+        ? sum([...dailyHoldings.map((h) => h.dailyChange), ...closedChanges.map((h) => h.change)])
+        : null,
     status: dailyHoldings.length === holdings.length && completeHistory ? 'verified' : 'partial',
-    reason: `${dailyHoldings.length}/${holdings.length} positions with current-session quotes and a prior close. Recorded buys, sells and fees are accounted for; incomplete trade history and missing quotes limit coverage.`,
+    reason: `${dailyHoldings.length}/${holdings.length} active positions with current-session quotes and a prior close; ${closedChanges.length} recorded same-session exits. Recorded net buys, sells and fees are accounted for; incomplete trade history and missing quotes limit coverage.`,
   };
   metrics.dailyChangePercent = metric(
     metrics.dailyChange.value !== null
       ? percent(
           metrics.dailyChange.value,
-          sum(
-            dailyHoldings.map((h) =>
-              h.marketValue !== null ? new Big(h.marketValue).minus(h.dailyChange!).toString() : null,
-            ),
-          ),
+          sum([...dailyHoldings.map((h) => dailyCapital.get(h.id) ?? null), ...closedChanges.map((h) => h.capital)]),
         )
       : null,
   );

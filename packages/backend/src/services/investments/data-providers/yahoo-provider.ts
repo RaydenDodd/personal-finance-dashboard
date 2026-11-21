@@ -1,3 +1,4 @@
+import { easternDate, previousUsEquitySession, usEquityCloseInstant } from '@bt/shared/types/investment-market';
 import { SECURITY_PROVIDER, SecuritySearchResult } from '@bt/shared/types/investments';
 import { sleep } from '@common/helpers';
 import { logger } from '@js/utils';
@@ -157,12 +158,24 @@ export class YahooDataProvider extends BaseSecurityDataProvider {
       const priceClose = toMajorUnit({ price: quote.regularMarketPrice, currency: quote.currency });
       if (!quote.regularMarketTime) throw new Error(`Missing quote observation time for ${providerSymbol}`);
       const marketTime = new Date(quote.regularMarketTime);
+      const usExchanges = new Set(['NMS', 'NGM', 'NCM', 'NYQ', 'PCX', 'ASE', 'BTS', 'PNK', 'OBB', 'NAS']);
+      const previousClose =
+        quote.currency === 'USD' &&
+        usExchanges.has(quote.exchange ?? '') &&
+        quote.regularMarketPreviousClose != null &&
+        quote.regularMarketPreviousClose > 0
+          ? {
+              date: new Date(usEquityCloseInstant(previousUsEquitySession(easternDate(marketTime)))),
+              price: toMajorUnit({ price: quote.regularMarketPreviousClose, currency: quote.currency }),
+            }
+          : undefined;
 
       const result: PriceData = {
         providerSymbol: toProviderSymbol(quote.symbol ?? providerSymbol),
         date: marketTime,
         priceClose,
         priceAsOf: marketTime,
+        previousClose,
         providerName: SECURITY_PROVIDER.yahoo,
       };
 

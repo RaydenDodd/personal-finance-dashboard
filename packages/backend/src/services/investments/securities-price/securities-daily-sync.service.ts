@@ -247,12 +247,31 @@ const securitiesPricesSyncImpl = async (options: SyncOptions): Promise<Securitie
         priceAsOf: currentQuotes || label === 'crypto-hourly' ? priceData.priceAsOf : null,
         source: priceData.providerName,
       });
+      if (
+        currentQuotes &&
+        priceData.previousClose &&
+        Number.isFinite(priceData.previousClose.price) &&
+        priceData.previousClose.price > 0
+      ) {
+        securityPricesToUpsert.push({
+          securityId,
+          date: priceData.previousClose.date,
+          priceClose: priceData.previousClose.price.toString(),
+          priceAsOf: priceData.previousClose.date,
+          source: priceData.providerName,
+        });
+      }
     }
 
     securitiesIdsToPatch.push(securityId);
   }
 
   const fetchedSecuritiesCount = securitiesIdsToPatch.length;
+  // Identical provider observations may include the same closing instant twice.
+  const uniquePriceRows = [
+    ...new Map(securityPricesToUpsert.map((row) => [row.securityId + ':' + row.date.toISOString(), row])).values(),
+  ];
+  securityPricesToUpsert.splice(0, securityPricesToUpsert.length, ...uniquePriceRows);
 
   const failedPricesUpdates: typeof securityPricesToUpsert = [];
 

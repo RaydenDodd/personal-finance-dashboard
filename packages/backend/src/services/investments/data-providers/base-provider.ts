@@ -42,6 +42,8 @@ export interface PriceData {
    * `(securityId, date)` dedup across runs.
    */
   priceAsOf: Date;
+  /** Official previous regular-session close from the same quote response. */
+  previousClose?: { date: Date; price: number };
   providerName: SECURITY_PROVIDER;
 }
 
