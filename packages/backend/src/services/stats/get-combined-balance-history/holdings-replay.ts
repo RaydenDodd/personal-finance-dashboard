@@ -201,9 +201,31 @@ export const computeHoldingsValueByDate = ({
 
         const holding = holdings.get(securityId)!;
 
-        if (mergePositionAnchors && tx.quantityUnknown) {
+        if (mergePositionAnchors && tx.cashInLieu) {
+          const candidate = Number.isFinite(holding.quantity)
+            ? holding.quantity
+            : holding.quantityBeforeUnresolvedAction;
+          const factor = shareUnitFactor(securityId, dateKey(tx.date));
+          const atEvent = candidate == null ? NaN : candidate / factor;
+          const whole = Math.floor(atEvent + 1e-9),
+            fraction = Math.max(0, atEvent - whole);
+          const record = tx.cashInLieu;
+          const precision = 10 ** -(record.quantity.split('.')[1]?.length ?? 0);
+          const reconciles =
+            Number.isFinite(atEvent) &&
+            atEvent >= 0 &&
+            fraction > 0 &&
+            Number(record.price) > 0 &&
+            Math.abs(fraction - Number(record.quantity)) <= precision + 1e-9 &&
+            Math.abs(fraction * Number(record.price) - Number(record.amount)) <= 0.015;
+          holding.quantity = reconciles ? whole * factor : NaN;
+          holding.quantityBeforeUnresolvedAction = undefined;
+          if (reconciles && candidate != null && candidate > 0) holding.costBasis *= holding.quantity / candidate;
+        } else if (mergePositionAnchors && tx.quantityUnknown) {
+          holding.quantityBeforeUnresolvedAction = Number.isFinite(holding.quantity) ? holding.quantity : undefined;
           holding.quantity = NaN;
         } else if (mergePositionAnchors && tx.category === INVESTMENT_TRANSACTION_CATEGORY.transfer && quantity !== 0) {
+          holding.quantityBeforeUnresolvedAction = undefined;
           holding.quantity =
             tx.transactionType === 'income'
               ? holding.quantity + quantity
@@ -211,6 +233,7 @@ export const computeHoldingsValueByDate = ({
                 ? holding.quantity - quantity
                 : NaN;
         } else if (tx.category === INVESTMENT_TRANSACTION_CATEGORY.buy) {
+          holding.quantityBeforeUnresolvedAction = undefined;
           const newQuantity = holding.quantity + quantity;
           if (newQuantity <= 0) {
             holding.costBasis = 0;
@@ -223,6 +246,7 @@ export const computeHoldingsValueByDate = ({
           }
           holding.quantity = newQuantity;
         } else if (tx.category === INVESTMENT_TRANSACTION_CATEGORY.sell) {
+          holding.quantityBeforeUnresolvedAction = undefined;
           if (holding.quantity > 0) {
             const newQuantity = holding.quantity - quantity;
             if (newQuantity <= 0) {

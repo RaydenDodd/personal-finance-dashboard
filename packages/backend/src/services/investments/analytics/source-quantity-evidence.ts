@@ -21,7 +21,8 @@ export function sourceQuantityEvidence(
       symbol = String(e.symbol ?? ''),
       key = String(e.sourceRowId ?? '');
     const trade = data.broker === 'robinhood' && ['Buy', 'Sell'].includes(action) && e.kind === 'trade';
-    if ((!trade && !['REC', 'SXCH', 'SPR', 'BCXL'].includes(action)) || !/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+    if ((!trade && !['REC', 'SXCH', 'SPR', 'BCXL', 'CIL'].includes(action)) || !/^\d{4}-\d{2}-\d{2}$/.test(date))
+      continue;
     if (!key || seen.has(key) || transactions.some((t) => t.description?.includes(`[broker-row:${key}]`))) continue;
     seen.add(key);
     const cusip = String(e.description ?? '').match(/CUSIP:\s*([A-Z0-9]+)/)?.[1];
@@ -29,6 +30,23 @@ export function sourceQuantityEvidence(
     const matches = exact.length
       ? exact
       : securities.filter((s) => s.symbol === symbol && (!s.cusip || s.cusip === cusip));
+    const cil = action === 'CIL' ? String(e.description ?? '').match(/CIL on\s+([\d.]+)\s*@\s*\$?([\d.,]+)/i) : null;
+    if (cil && matches.length === 1 && Number(e.cashAmount) > 0) {
+      rows.push({
+        portfolioId,
+        securityId: matches[0]!.id,
+        date: new Date(date + 'T12:00:00Z'),
+        category: 'transfer',
+        quantity: '0',
+        refAmount: '0',
+        currencyCode: 'USD',
+        settlementCurrencyCode: 'USD',
+        settlementAmount: '0',
+        cashInLieu: { amount: String(e.cashAmount), quantity: cil[1]!, price: cil[2]!.replaceAll(',', '') },
+        description: `[broker-row:${key}] retained CIL`,
+      } as TransactionRow);
+      continue;
+    }
     const receipt =
       action === 'REC' ||
       (action === 'SXCH' &&

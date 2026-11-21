@@ -35,6 +35,31 @@ const run = (extra: Record<string, unknown>) =>
   } as never);
 
 describe('security evidence rather than account-completeness gates', () => {
+  it('uses a reconciled cash-in-lieu record to retire fractional shares, without guessing from an unrelated cash receipt', () => {
+    const input = {
+      from: '2021-08-02',
+      through: '2021-08-03',
+      transactions: [
+        tx('a', '2021-03-15', 'buy', '5.003824'),
+        { ...tx('a', '2021-08-02', 'buy', '0'), category: 'transfer', quantityUnknown: true },
+        {
+          ...tx('a', '2021-08-03', 'buy', '0'),
+          category: 'transfer',
+          cashInLieu: { quantity: '0.625', price: '103.72', amount: '64.87' },
+        },
+      ],
+      prices: [
+        price('a', '2021-03-15', '106.72', '13.34'),
+        price('a', '2021-08-02', '103.72'),
+        price('a', '2021-08-03', '104'),
+      ],
+    };
+    const p = run(input);
+    expect(p[0]?.knownMarketValue).toBeNull();
+    expect(p[1]?.knownMarketValue).toBe('0');
+    input.transactions[2]!.cashInLieu!.amount = '1';
+    expect(run(input)[1]?.knownMarketValue).toBeNull();
+  });
   it('does not assume continued ownership after an unresolved corporate share movement', () => {
     const points = run({
       from: '2019-12-12',

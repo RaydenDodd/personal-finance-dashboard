@@ -38,6 +38,7 @@ export interface CombinedBalanceHistoryItem {
 export interface TransactionRow {
   /** Read-only evidence flag: a corporate movement is recorded but its resulting shares are unknown. */
   quantityUnknown?: boolean;
+  cashInLieu?: { amount: string; price: string; quantity: string };
   description?: string | null;
   transactionType?: 'income' | 'expense';
   portfolioId: RecordId;
@@ -65,6 +66,7 @@ export type CurrentBalanceRow = Pick<PortfolioBalances, 'portfolioId' | 'currenc
 export type SecurityRow = Pick<Securities, 'id' | 'currencyCode' | 'assetClass'>;
 
 export interface HoldingState {
+  quantityBeforeUnresolvedAction?: number;
   quantity: number;
   costBasis: number;
   currencyCode: string;
