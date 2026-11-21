@@ -11,6 +11,7 @@ import { cryptoPricesSyncCron } from './crons/crypto-prices-sync';
 import { demoCleanupCron } from './crons/demo-cleanup';
 import { demoTemplateRefreshCron } from './crons/demo-template-refresh';
 import { loadCurrencyRatesJob } from './crons/exchange-rates';
+import { fundCompositionRefreshCron } from './crons/fund-composition-refresh';
 import { goalsReachedCheckCron } from './crons/goals-reached-check';
 import { personalFinanceMonthlyJob } from './crons/personal-finance-monthly';
 import { personalFinancePrincipalJob } from './crons/personal-finance-principal';
@@ -33,6 +34,7 @@ const allEnvCrons = [demoCleanupCron, demoTemplateRefreshCron];
 
 const prodOnlyCrons = [
   securitiesDailySyncCron,
+  fundCompositionRefreshCron,
   publicPortfolioSyncCron,
   cryptoPricesSyncCron,
   tagRemindersCron,
@@ -74,6 +76,11 @@ export function initializeBackgroundJobs() {
 
   if (process.env.NODE_ENV === 'production') {
     for (const cron of prodOnlyCrons) cron.startCron();
+    // Resume due, explicitly enabled composition checks after a restart.
+    const timer = setTimeout(() => {
+      void fundCompositionRefreshCron.triggerManualSync().catch(() => undefined);
+    }, 10000);
+    timer.unref();
   }
 }
 

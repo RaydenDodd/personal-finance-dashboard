@@ -66,4 +66,10 @@ describe('dated composition validation and provenance', () => {
     ).rejects.toThrow('immutable');
     expect(InvestmentFundSnapshots.findOrCreate).not.toHaveBeenCalled();
   });
+  it('replays source imports idempotently after JSONB removes undefined optional fields', async () => {
+    const replay = { ...input, holdings: [{ ...input.holdings[0]!, country: undefined, isin: undefined }] };
+    const data = JSON.parse(JSON.stringify({ ...replay, coverage: '40', retrievedAt: '2025-01-02T00:00:00Z' }));
+    jest.mocked(InvestmentFundSnapshots.findOne).mockResolvedValue({ data } as InvestmentFundSnapshots);
+    expect(await saveFundSnapshots({ userId: 1, snapshots: [replay] })).toEqual({ inserted: 0, duplicates: 1 });
+  });
 });

@@ -191,6 +191,11 @@ watch([visible, () => props.settings], () => nextTick(render), { deep: true });
           : 'Select a group to drill down.'
       }}
     </p>
+    <p v-if="settings.holdingsMode === 'underlying'" class="text-muted-foreground mt-1 text-xs">
+      Fund composition coverage {{ Number(analytics.coverage.lookThroughPercent).toFixed(2) }}% · effective dates
+      {{ analytics.coverage.compositionDates?.join(', ') || 'unavailable' }}. Area represents positive exposures; signed
+      derivatives and liabilities are listed in Company Exposure.
+    </p>
     <p v-if="selected" class="bg-muted mt-2 rounded-md p-3 text-xs">
       {{ rows.find((row) => row.id === selected)?.name }} · {{ rows.find((row) => row.id === selected)?.description
       }}<button class="text-primary-text ml-2 underline" @click="selected = null">Close</button>

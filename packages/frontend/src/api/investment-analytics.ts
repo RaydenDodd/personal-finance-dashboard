@@ -1,5 +1,9 @@
 import { api } from '@/api/_api';
-import type { InvestmentAnalytics, InvestmentFundSnapshot } from '@bt/shared/types/investment-analytics';
+import type {
+  FundCompositionStatus,
+  InvestmentAnalytics,
+  InvestmentFundSnapshot,
+} from '@bt/shared/types/investment-analytics';
 
 export async function getInvestmentAnalytics({
   portfolioIds = [],
@@ -18,4 +22,48 @@ export async function importFundHoldings(snapshots: InvestmentFundSnapshot[]): P
 
 export async function refreshInvestmentPrices(): Promise<void> {
   await api.post('/investments/sync/securities-prices');
+}
+export type CompositionCatalogFund = FundCompositionStatus & {
+  id: string;
+  excludedFromAnalytics: boolean;
+  identityConflict: boolean;
+};
+export interface CompositionCatalog {
+  funds: CompositionCatalogFund[];
+  sources: {
+    symbol: string;
+    aliases?: string[];
+    issuerUrl: string;
+    adapter: string;
+    seriesId?: string;
+    secUrl?: string;
+  }[];
+  schedule: string;
+}
+export async function getCompositionCatalog(): Promise<CompositionCatalog> {
+  const response = await api.get('/investments/analytics/composition');
+  return response.data ?? response;
+}
+export async function inspectCompositionFile(input: {
+  fundId: string;
+  symbol: string;
+  adapter: string;
+  fileName: string;
+  base64: string;
+  sourceUrl?: string;
+  asOf?: string;
+  commit: boolean;
+}): Promise<{ snapshot: InvestmentFundSnapshot; result?: { inserted: number; duplicates: number } }> {
+  const response = await api.post('/investments/analytics/composition/file', input);
+  return response.data ?? response;
+}
+export async function refreshFundComposition(
+  fundIds: string[],
+  contact: string,
+): Promise<{ results: { symbol: string; status: string; error?: string }[] }> {
+  const response = await api.post('/investments/analytics/composition/refresh', { fundIds, contact });
+  return response.data ?? response;
+}
+export async function setCompositionSchedule(enabled: boolean, contact?: string): Promise<void> {
+  await api.post('/investments/analytics/composition/schedule', { enabled, ...(contact ? { contact } : {}) });
 }

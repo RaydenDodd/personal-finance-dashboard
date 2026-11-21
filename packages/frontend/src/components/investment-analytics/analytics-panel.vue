@@ -19,6 +19,7 @@ import SeriesChart from './series-chart.vue';
 import HoldingsTable from './holdings-table.vue';
 import Treemap from './treemap.vue';
 import OverlapDetails from './overlap-details.vue';
+import CompositionHealth from './composition-health.vue';
 import { INVESTMENT_PERFORMER_PERIODS, rankInvestmentPerformers } from './performers-model';
 import {
   aggregateInvestmentFlows,
@@ -455,6 +456,16 @@ const selectedCategory = ref<string | null>(null);
 const selectedExposure = ref<string | null>(null);
 const overlap = ref<InvestmentFundOverlap | null>(null);
 const exposureSearch = ref('');
+const isNonCompany = (row: InvestmentAnalytics['exposure'][number]) =>
+  !row.unknown &&
+  /derivative|cash|money market|commodity|gold|fixed income|repurchase|liabilit|unclassified asset|collateral|crypto|other reported assets/i.test(
+    row.assetClass ?? '',
+  );
+const nonCompany = computed(() => props.analytics.exposure.filter(isNonCompany));
+const compositionDates = computed(
+  () =>
+    props.analytics.coverage.compositionDates ?? [...new Set(props.analytics.fundSnapshots.map((s) => s.asOf))].sort(),
+);
 useChartInteraction({
   containerRef,
   clear: () => {
@@ -464,6 +475,7 @@ useChartInteraction({
 });
 const exposed = computed(() =>
   props.analytics.exposure
+    .filter((row) => !isNonCompany(row))
     .filter((row) => `${row.symbol} ${row.name}`.toLowerCase().includes(exposureSearch.value.toLowerCase()))
     .slice(0, Number(props.settings.limit ?? 50)),
 );
@@ -538,6 +550,11 @@ const health = computed(() =>
         </dl>
       </details>
     </template>
+    <p v-if="kind === 'concentration'" class="text-muted-foreground text-xs">
+      Dated fund composition coverage {{ pct(analytics.coverage.lookThroughPercent) }} · effective dates
+      {{ compositionDates.join(', ') || 'unavailable' }}. Cash, commodities and derivatives are excluded from company
+      concentration.
+    </p>
     <template v-if="showChart">
       <DateRange v-model="range" :earliest="earliest" :compact="compact" subject="investment">
         <template #actions
@@ -822,7 +839,9 @@ const health = computed(() =>
         class="text-muted-foreground text-xs"
       >
         Issuer-country methodology; fund listing location and domicile do not establish company geography. Unknown
-        amounts remain in the total. Look-through coverage {{ pct(analytics.coverage.lookThroughPercent) }}.
+        amounts remain in the total. Fund composition coverage {{ pct(analytics.coverage.lookThroughPercent) }}.
+        Effective dates: {{ compositionDates.join(', ') || 'No dated compositions' }}. Positive exposures form the
+        doughnut; signed derivatives and liabilities remain in the accompanying values.
       </p>
     </template>
     <HoldingsTable
@@ -835,8 +854,9 @@ const health = computed(() =>
     <Treemap v-if="kind === 'heatmap'" :analytics="analytics" :settings="settings" :compact="compact" />
     <template v-if="kind === 'exposure'"
       ><p class="text-muted-foreground text-xs">
-        Direct plus indirect economic exposure · reliable fund coverage
-        {{ pct(analytics.coverage.lookThroughPercent) }}. Partial holdings are not normalized to 100%.
+        Direct plus indirect company exposure · fund composition coverage
+        {{ pct(analytics.coverage.lookThroughPercent) }}. Partial holdings are not normalized to 100%. Effective dates:
+        {{ compositionDates.join(', ') || 'No dated compositions' }}.
       </p>
       <input
         v-model="exposureSearch"
@@ -880,8 +900,30 @@ const health = computed(() =>
         <p v-if="!exposed.length" class="text-muted-foreground py-4 text-sm">
           No underlying company data is available for this selection.
         </p></ModuleBody
-      ></template
-    >
+      >
+      <details
+        v-if="nonCompany.length"
+        :open="!compact"
+        class="border-t pt-3 text-xs"
+        data-testid="investment-noncompany-exposure"
+      >
+        <summary class="text-primary-text cursor-pointer">
+          Gold, cash, derivatives and other non-company balances
+        </summary>
+        <ModuleBody
+          ><div v-for="row in nonCompany" :key="row.id" class="flex items-start justify-between gap-3 border-b py-2">
+            <span class="min-w-0"
+              ><strong>{{ row.symbol }}</strong> · {{ row.name
+              }}<span class="text-muted-foreground block">{{ row.assetClass }} · {{ row.sourceDate }}</span
+              ><span v-if="row.notionalWeight" class="text-muted-foreground block"
+                >Reported notional weight {{ pct(row.notionalWeight) }} of its source fund; separate from market
+                value.</span
+              ></span
+            ><span class="shrink-0 text-right">{{ money(row.totalValue) }} · {{ pct(row.weight) }}</span>
+          </div></ModuleBody
+        >
+      </details>
+    </template>
     <template v-if="kind === 'overlap'"
       ><p class="text-muted-foreground text-xs">
         Weighted overlap is the sum of minimum comparable company weights. Select a fund pair to inspect shared
@@ -1089,5 +1131,13 @@ const health = computed(() =>
         </p>
       </details></template
     >
+    <CompositionHealth
+      v-if="
+        analytics.composition?.length &&
+        ['health', 'allocation', 'sector', 'geography', 'exposure', 'overlap'].includes(kind)
+      "
+      :rows="analytics.composition"
+      :compact="compact"
+    />
   </div>
 </template>

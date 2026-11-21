@@ -8,6 +8,7 @@ import type {
   InvestmentHolding,
   InvestmentMetric,
 } from '@bt/shared/types/investment-analytics';
+import { bridgeCompositionIdentities } from '@services/investments/composition/identities';
 import Big from 'big.js';
 
 export const sum = (values: (string | null | undefined)[]): string | null =>
@@ -19,6 +20,11 @@ export const metric = (value: string | null, reason?: string): InvestmentMetric 
   status: value === null ? 'unavailable' : 'verified',
   ...(reason && { reason }),
 });
+export const isCompanyExposure = (row: Pick<InvestmentExposure, 'unknown' | 'assetClass'>) =>
+  !row.unknown &&
+  !/derivative|cash|money market|commodity|gold|fixed income|repurchase|liabilit|unclassified asset|collateral|crypto|other reported assets/i.test(
+    row.assetClass ?? '',
+  );
 
 /** Strong aliases only. A ticker is display text, never an instrument identity. */
 export function resolveFundIdentities(
@@ -30,8 +36,11 @@ export function resolveFundIdentities(
     currencyCode: string;
     exchangeMic?: string | null;
     exchangeAcronym?: string | null;
+    symbol?: string | null;
+    name?: string | null;
   }[],
 ): InvestmentFundSnapshot[] {
+  snapshots = bridgeCompositionIdentities(snapshots, securities);
   const normalized = (id: string) =>
     id
       .replace(/^(isin|cusip|uuid):/i, '')
@@ -89,6 +98,13 @@ export function lookThrough(holdings: InvestmentHolding[], snapshots: Investment
     contribution: InvestmentExposureContribution,
     classification: Partial<InvestmentExposure>,
   ) => {
+    classification = {
+      ...classification,
+      ...(/^(stocks?|equities|equity)$/i.test(classification.assetClass ?? '') && { assetClass: 'Equity' }),
+      ...(classification.country && {
+        country: issuerCountryLookup.get(classification.country.toUpperCase()) ?? classification.country,
+      }),
+    };
     const row = rows.get(id) ?? {
       id,
       symbol,
@@ -156,15 +172,16 @@ export function lookThrough(holdings: InvestmentHolding[], snapshots: Investment
     const next = new Set(path).add(id);
     let covered = new Big(0);
     for (const holding of snapshot.holdings) {
+      if (holding.assetClass === 'Equity' && holding.weightReported === false) continue;
       const weight = new Big(holding.weight);
       covered = covered.plus(weight);
       const classified = {
         ...holding,
         ...(holding.sector && {
-          sector: `${snapshot.classificationStandard ?? 'Unspecified taxonomy'} · ${holding.sector}`,
+          sector: `${holding.classificationStandard ?? snapshot.classificationStandard ?? 'Unspecified taxonomy'} · ${holding.sector}`,
         }),
         ...(holding.industry && {
-          industry: `${snapshot.classificationStandard ?? 'Unspecified taxonomy'} · ${holding.industry}`,
+          industry: `${holding.classificationStandard ?? snapshot.classificationStandard ?? 'Unspecified taxonomy'} · ${holding.industry}`,
         }),
       };
       expand(
@@ -185,11 +202,11 @@ export function lookThrough(holdings: InvestmentHolding[], snapshots: Investment
         !!holding.isFund,
       );
     }
-    if (covered.lt(100))
+    if (!covered.eq(100))
       add(
         `unknown:${id}`,
         'Unknown',
-        `Unreported holdings · ${symbol}`,
+        `${covered.gt(100) ? 'Unallocated net liabilities' : 'Unreported holdings / net assets'} · ${symbol}`,
         value.times(new Big(100).minus(covered)).div(100),
         true,
         true,
@@ -284,6 +301,8 @@ const issuerCountryLookup = (() => {
   for (const [alias, code] of Object.entries(countryAliases)) register(alias, code);
   return result;
 })();
+export const investmentIssuerCountry = (label: string | undefined): string | null =>
+  label ? (issuerCountryLookup.get(label.trim().toUpperCase()) ?? null) : null;
 
 /** Compare only disclosed, mutually comparable classifications. Unknown is never a shared category. */
 function categoryOverlap(
@@ -423,7 +442,7 @@ export function fundOverlap(
             ],
             snapshots,
             '100',
-          ).filter((row) => !row.unknown)
+          ).filter(isCompanyExposure)
         : [],
     ]),
   );

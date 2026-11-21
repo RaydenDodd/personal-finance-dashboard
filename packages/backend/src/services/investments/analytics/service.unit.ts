@@ -23,6 +23,20 @@ jest.mock('@models/users-currencies.model', () => ({
 jest.mock('@services/investments/holdings/get-holding-values.service', () => ({ getHoldingValues: jest.fn() }));
 jest.mock('@services/investments/portfolios/get-portfolio-summary.service', () => ({ getPortfolioSummary: jest.fn() }));
 jest.mock('@services/common/with-deduplication', () => ({ withDeduplication: (fn: unknown) => fn }));
+jest.mock('@models/user-settings.model', () => ({
+  __esModule: true,
+  default: { findOne: jest.fn().mockResolvedValue({ settings: { ui: { hiddenPortfolioIds: [] } } }) },
+}));
+jest.mock('@models/investments/fund-holdings-snapshot.model', () => ({
+  __esModule: true,
+  default: { findOne: jest.fn().mockResolvedValue(null) },
+}));
+jest.mock('@services/investments/composition/service', () => ({
+  isFundSecurity: () => false,
+  compositionStatuses: () => [],
+  getCompositionAttempts: jest.fn().mockResolvedValue([]),
+  getCompositionSchedule: jest.fn().mockResolvedValue(null),
+}));
 jest.mock('./fund-snapshots', () => ({
   getFundSnapshots: jest.fn().mockResolvedValue([]),
   latestFundSnapshots: () => [],
@@ -40,7 +54,7 @@ import { getHoldingValues } from '@services/investments/holdings/get-holding-val
 import { getPortfolioSummary } from '@services/investments/portfolios/get-portfolio-summary.service';
 
 import { buildHistory } from './history';
-import { assertOwnedSelection, getInvestmentAnalytics } from './service';
+import { assertOwnedSelection, getInvestmentAnalytics, visiblePortfolioSelection } from './service';
 
 const portfolios = [
   { id: 'a', name: 'Taxable', portfolioType: 'investment', isEnabled: false },
@@ -88,6 +102,11 @@ const summary = (id: string) => ({
   realizedGainValue: id === 'a' ? '9' : '2',
 });
 describe('owner-scoped native portfolio analytics adapter', () => {
+  it('excludes hidden portfolios even when explicitly selected without treating net-worth exclusion as visibility', () => {
+    expect(visiblePortfolioSelection(undefined, ['a', 'b'], ['b'])).toEqual(['a']);
+    expect(visiblePortfolioSelection(['b'], ['a', 'b'], ['b'])).toEqual([]);
+    expect(() => visiblePortfolioSelection(['foreign'], ['a', 'b'], ['foreign'])).toThrow();
+  });
   beforeEach(() => {
     jest.clearAllMocks();
     jest.mocked(buildHistory).mockReturnValue([]);

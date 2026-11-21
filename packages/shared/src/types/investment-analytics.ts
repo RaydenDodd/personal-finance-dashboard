@@ -132,6 +132,7 @@ export interface InvestmentExposure extends InvestmentClassification {
   fundCount: number;
   unknown: boolean;
   sourceDate: string | null;
+  notionalWeight?: string;
   contributions: InvestmentExposureContribution[];
 }
 export interface InvestmentAllocation {
@@ -154,6 +155,39 @@ export interface FundHoldingInput extends InvestmentClassification {
   exchange?: string;
   /** Original source identifier retained when an exact ISIN/CUSIP alias is resolved to a held UUID. */
   sourceId?: string;
+  /** Source market-value weight and derivative notional weight are never interchangeable. */
+  notionalWeight?: string;
+  marketValue?: string;
+  rawWeight?: string;
+  weightReported?: boolean;
+  issuerLei?: string;
+  countryBasis?: string;
+  classificationStandard?: string;
+  classificationSource?: string;
+}
+export interface FundCompositionProvenance {
+  sourceId: string;
+  sourceUrl: string;
+  fileName: string;
+  sha256: string;
+  parserVersion: string;
+  method: 'issuer-file' | 'sec-nport' | 'sec-xbrl' | 'manual';
+  rawSourceGzipBase64?: string;
+  reportedRowCount: number;
+  parsedRowCount: number;
+  unweightedRowCount: number;
+  completeness: 'full-file' | 'partial';
+  warnings: string[];
+  netWeight: string;
+  grossWeight: string;
+  /** Signed rounding / unlisted assets and liabilities, never reassigned to companies. */
+  residualWeight: string;
+  seriesId?: string;
+  classId?: string;
+  accession?: string;
+  fundNetAssets?: string;
+  autoRefreshPermitted: boolean;
+  refreshRunAt?: string;
 }
 export interface InvestmentFundSnapshot {
   /** Matches the held fund's InvestmentHolding.id; nested fund ids must match child snapshots. */
@@ -165,6 +199,36 @@ export interface InvestmentFundSnapshot {
   holdings: FundHoldingInput[];
   coverage: string;
   classificationStandard?: string;
+  provenance?: FundCompositionProvenance;
+}
+export interface FundCompositionStatus {
+  fundId: string;
+  symbol: string;
+  name: string;
+  sourceId: string;
+  sourceUrl: string;
+  adapter: string;
+  seriesId?: string;
+  classId?: string;
+  family?: string;
+  status: 'ready' | 'partial' | 'missing' | 'review';
+  asOf: string | null;
+  retrievedAt: string | null;
+  rows: number;
+  coverage: string;
+  residual: string;
+  autoRefreshPermitted: boolean;
+  autoRefreshOperational: boolean;
+  lastRefreshRun: string | null;
+  blocker: string | null;
+  warnings: string[];
+  identityEvidence?: string;
+  scheduledRefreshEnabled?: boolean;
+  lastScheduledRun?: string | null;
+  nextRefreshDue?: string | null;
+  refreshAsOf?: string | null;
+  netWeight?: string;
+  grossWeight?: string;
 }
 export interface InvestmentCategoryOverlap {
   /** All category weights and coverage values are percentages of each fund's unnormalized composition. */
@@ -231,6 +295,7 @@ export interface InvestmentAnalytics {
   exposure: InvestmentExposure[];
   allocations: Record<string, InvestmentAllocation[]>;
   fundSnapshots: InvestmentFundSnapshot[];
+  composition?: FundCompositionStatus[];
   overlap: InvestmentFundOverlap[];
   benchmarks: InvestmentBenchmark[];
   health: InvestmentDataHealth[];
@@ -239,6 +304,9 @@ export interface InvestmentAnalytics {
     historyEnd: string | null;
     costBasisPercent: string;
     lookThroughPercent: string;
+    fundCompositionPercent?: string;
+    fundValue?: InvestmentDecimal;
+    compositionDates?: string[];
     pricePercent: string;
     methodology: string[];
   };

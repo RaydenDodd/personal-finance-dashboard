@@ -4,7 +4,14 @@ import {
   executeImportController as importExecuteController,
   extractController as importExtractController,
 } from '@controllers/investment-transactions-parser';
-import { getAnalytics, importFundHoldings } from '@controllers/investments/analytics';
+import {
+  compositionCatalog,
+  compositionFile,
+  compositionRefresh,
+  compositionSchedule,
+  getAnalytics,
+  importFundHoldings,
+} from '@controllers/investments/analytics';
 import { getBrokerRecords, importBrokerRecords } from '@controllers/investments/broker-records';
 import {
   createHoldingController,
@@ -59,6 +66,10 @@ const router = Router({});
 // endpoints enforce their own access checks.
 router.use(authenticateSession);
 router.get('/analytics', getAnalytics);
+router.get('/analytics/composition', compositionCatalog);
+router.post('/analytics/composition/file', blockDemoUsers, compositionFile);
+router.post('/analytics/composition/refresh', blockDemoUsers, compositionRefresh);
+router.post('/analytics/composition/schedule', blockDemoUsers, compositionSchedule);
 router.post('/analytics/fund-holdings', blockDemoUsers, importFundHoldings);
 router.get('/providers/public', getPublicStatus);
 router.put('/providers/public', blockDemoUsers, connectPublic);

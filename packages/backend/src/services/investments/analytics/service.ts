@@ -8,15 +8,23 @@ import type {
 import { Money } from '@common/types/money';
 import { ValidationError } from '@js/errors';
 import BrokerPortfolioData from '@models/investments/broker-portfolio-data.model';
+import InvestmentFundSnapshots from '@models/investments/fund-holdings-snapshot.model';
 import InvestmentTransaction from '@models/investments/investment-transaction.model';
 import PortfolioBalances from '@models/investments/portfolio-balances.model';
 import PortfolioTransfers from '@models/investments/portfolio-transfers.model';
 import Portfolios from '@models/investments/portfolios.model';
 import Securities from '@models/investments/securities.model';
 import SecurityPricing from '@models/investments/security-pricing.model';
+import UserSettings from '@models/user-settings.model';
 import * as UsersCurrencies from '@models/users-currencies.model';
 import { withDeduplication } from '@services/common/with-deduplication';
 import { latestSnapshot } from '@services/investments/broker-records/schema';
+import { isCompositionIdentityConflict, isFundSecurity } from '@services/investments/composition/registry';
+import {
+  compositionStatuses,
+  getCompositionAttempts,
+  getCompositionSchedule,
+} from '@services/investments/composition/service';
 import { getHoldingValues } from '@services/investments/holdings/get-holding-values.service';
 import { getPortfolioSummary } from '@services/investments/portfolios/get-portfolio-summary.service';
 import type { TransactionRow } from '@services/stats/get-combined-balance-history/types';
@@ -34,13 +42,13 @@ import {
   percent,
   resolveFundIdentities,
   sum,
+  isCompanyExposure,
+  investmentIssuerCountry,
 } from './math';
 import { consolidatedReturns, normalizeComparableSeries, recordedPriceReturns } from './performance';
 
 const decimal = (m: Money | string | number): string => (Money.isMoney(m) ? m.toDecimalString(18) : String(m));
 const dateString = (d: Date | string | null | undefined) => (d ? new Date(d).toISOString() : null);
-const isFundName = (name: string) =>
-  /\b(etf|mutual fund|index fund|total market index|stock market index|ishares|vanguard|invesco|spdr)\b/i.test(name);
 
 export const assertOwnedSelection = (requested: string[] | undefined, owned: string[]): string[] => {
   if (!requested?.length) return owned;
@@ -49,20 +57,26 @@ export const assertOwnedSelection = (requested: string[] | undefined, owned: str
     throw new ValidationError({ message: 'One or more selected portfolios are unavailable.' });
   return [...new Set(requested)];
 };
+export const visiblePortfolioSelection = (requested: string[] | undefined, owned: string[], hidden: string[]) =>
+  assertOwnedSelection(requested, owned).filter((id) => !hidden.includes(id));
 
 async function getAnalyticsImpl({
   userId,
   portfolioIds,
   benchmarkSymbols = ['SPY', 'QQQ', 'VTI', 'VT'],
+  hiddenPortfolioIds = [],
 }: {
   userId: number;
   portfolioIds?: string[];
   benchmarkSymbols?: string[];
+  hiddenPortfolioIds?: string[];
+  compositionRevision?: string;
 }): Promise<InvestmentAnalytics> {
   const allPortfolios = await Portfolios.findAll({ where: { userId }, order: [['name', 'ASC']] });
-  const ids = assertOwnedSelection(
+  const ids = visiblePortfolioSelection(
     portfolioIds,
     allPortfolios.map((p) => p.id),
+    hiddenPortfolioIds,
   );
   const selected = new Set(ids);
   const scope = allPortfolios.filter((p) => selected.has(p.id));
@@ -173,7 +187,9 @@ async function getAnalyticsImpl({
       dailyChangePercent: null,
       weight: null,
       portfolioCount: 0,
-      isFund: fundSnapshots.some((f) => f.fundId === id) || isFundName(security.name ?? ''),
+      isFund:
+        !isCompositionIdentityConflict(security) &&
+        (fundSnapshots.some((f) => f.fundId === id) || isFundSecurity(security)),
       accounts: [],
       quality: 'verified',
     };
@@ -189,6 +205,11 @@ async function getAnalyticsImpl({
     holdingsByIdentity.set(id, row);
   }
   const holdings = [...holdingsByIdentity.values()];
+  const reachable = new Set(holdings.filter((h) => h.isFund).map((h) => h.id));
+  for (let depth = 0; depth < 12; depth++)
+    for (const s of fundSnapshots.filter((s) => reachable.has(s.fundId)))
+      for (const h of s.holdings.filter((h) => h.isFund)) reachable.add(h.id);
+  fundSnapshots = fundSnapshots.filter((s) => reachable.has(s.fundId));
   const portfolios: InvestmentPortfolio[] = scope.map((p) => {
     const broker = brokerById.get(p.id);
     const snapshot = latestSnapshot(broker?.data);
@@ -468,10 +489,22 @@ async function getAnalyticsImpl({
         exactPoints[0]!.marketValue!,
       );
   const exposure = lookThrough(holdings, fundSnapshots, marketValue);
-  const knownExposure = sum(exposure.filter((e) => !e.unknown).map((e) => e.totalValue))!;
-  const lookThroughCoverage = percent(knownExposure, securitiesValue) ?? '0';
+  const fundValue = sum(holdings.filter((h) => h.isFund).map((h) => h.marketValue));
+  const coveredFundValue = sum(
+    holdings
+      .filter((h) => h.isFund)
+      .map((h) => {
+        if (h.marketValue === null) return null;
+        const snapshot = fundSnapshots.find((s) => s.fundId === h.id);
+        return new Big(h.marketValue)
+          .times(snapshot?.coverage ?? '0')
+          .div(100)
+          .toString();
+      }),
+  );
+  const lookThroughCoverage = percent(coveredFundValue, fundValue) ?? '0';
   metrics.lookThroughCoverage = metric(lookThroughCoverage);
-  const rankedExposure = exposure.filter((e) => !e.unknown).sort((a, b) => new Big(b.totalValue).cmp(a.totalValue));
+  const rankedExposure = exposure.filter(isCompanyExposure).sort((a, b) => new Big(b.totalValue).cmp(a.totalValue));
   metrics.topFiveConcentration = metric(percent(sum(rankedExposure.slice(0, 5).map((e) => e.totalValue)), marketValue));
   metrics.topTenConcentration = metric(percent(sum(rankedExposure.slice(0, 10).map((e) => e.totalValue)), marketValue));
   if (exposure.some((e) => e.unknown))
@@ -502,14 +535,26 @@ async function getAnalyticsImpl({
   for (const mode of ['sector', 'industry', 'country', 'region', 'marketCap', 'style', 'assetClass'] as const)
     allocations[mode] = allocation(
       exposure.map((e) => {
-        const label = e[mode] ?? 'Unknown';
+        const label =
+          mode !== 'assetClass' && !e.unknown && !isCompanyExposure(e)
+            ? `Not applicable (${e.assetClass ?? 'non-company'})`
+            : mode === 'country'
+              ? (investmentIssuerCountry(e.country) ?? 'Unknown')
+              : (e[mode] ?? 'Unknown');
         return { key: label, label, value: e.totalValue, id: e.id };
       }),
       marketValue,
     );
   allocations.usInternational = allocation(
     exposure.map((e) => {
-      const label = !e.country ? 'Unknown' : /^(US|USA|United States)$/i.test(e.country) ? 'US' : 'International';
+      const label =
+        !e.unknown && !isCompanyExposure(e)
+          ? 'Not applicable (non-company)'
+          : !investmentIssuerCountry(e.country)
+            ? 'Unknown'
+            : investmentIssuerCountry(e.country) === 'US'
+              ? 'US'
+              : 'International';
       return { key: label, label, value: e.totalValue, id: e.id };
     }),
     marketValue,
@@ -663,6 +708,12 @@ async function getAnalyticsImpl({
     exposure,
     allocations,
     fundSnapshots,
+    composition: compositionStatuses(
+      holdings.filter((h) => h.isFund),
+      fundSnapshots,
+      await getCompositionAttempts(userId),
+      (await getCompositionSchedule(userId))?.enabled,
+    ),
     overlap: fundOverlap(fundSnapshots, holdings),
     benchmarks,
     health,
@@ -674,13 +725,16 @@ async function getAnalyticsImpl({
         ? String((holdings.filter((h) => h.marketValue !== null).length / holdings.length) * 100)
         : '0',
       lookThroughPercent: lookThroughCoverage,
+      fundCompositionPercent: lookThroughCoverage,
+      fundValue,
+      compositionDates: [...new Set(fundSnapshots.map((s) => s.asOf))].sort(),
       methodology: [
         'Current positions, basis and gains reuse the native portfolio calculation service.',
         'Historical values reuse native holdings/cash replay; its whole-dollar holding rounding remains unchanged. Missing price/FX fallbacks are withheld.',
         'Incomplete broker histories use actual complete dated observations only; unsupported periods remain gaps.',
         'Fund geography uses imported issuer country; exchange location and fund domicile are not substituted.',
         'Unknown fund weights remain unreported exposure; fund wrappers are excluded from underlying totals.',
-        'Analytics includes detailed hidden portfolios, and never adds SimpleFIN account balances.',
+        'Hidden portfolios are excluded from shared analytics, including explicit selections. Net-worth exclusion remains a separate setting.',
         'Reinvestment and interest attribution require explicit source evidence; unknown reinvestment is not labeled cash.',
       ],
     },
@@ -688,16 +742,33 @@ async function getAnalyticsImpl({
       supported: true,
       lastSuccess: syncDates.at(-1) ?? null,
       provider: [...new Set(securities.map((s) => s.providerName))].join(', ') || 'Existing market providers',
-      schedule: `Stocks/ETFs: daily 06:00 America/New_York; cryptocurrency: every ${process.env.CRYPTO_PRICES_SYNC_INTERVAL_MINUTES ?? '15'} minutes (UTC). Fund compositions: manual dated imports.`,
+      schedule: `Stocks/ETFs: daily 06:00 America/New_York; cryptocurrency: every ${process.env.CRYPTO_PRICES_SYNC_INTERVAL_MINUTES ?? '15'} minutes (UTC). Fund compositions: manual issuer imports and separately enabled weekly SEC checks.`,
       reason:
         'Manual refresh reuses the existing administrator price-sync endpoint; it does not synchronize broker transactions.',
     },
   };
 }
 
-export const getInvestmentAnalytics = withDeduplication(getAnalyticsImpl, {
-  keyGenerator: ({ userId, portfolioIds, benchmarkSymbols }) =>
-    `investment-analytics:${userId}:${portfolioIds?.toSorted().join(',') ?? 'all'}:${benchmarkSymbols?.join(',') ?? 'default'}`,
+const deduplicatedAnalytics = withDeduplication(getAnalyticsImpl, {
+  keyGenerator: ({ userId, portfolioIds, benchmarkSymbols, hiddenPortfolioIds, compositionRevision }) =>
+    `investment-analytics:${userId}:${portfolioIds?.toSorted().join(',') ?? 'all'}:${benchmarkSymbols?.join(',') ?? 'default'}:${hiddenPortfolioIds?.toSorted().join(',')}:${compositionRevision}`,
   ttl: 1000,
   maxCacheSize: 8,
 });
+export async function getInvestmentAnalytics(
+  args: Omit<Parameters<typeof getAnalyticsImpl>[0], 'hiddenPortfolioIds' | 'compositionRevision'>,
+) {
+  const [settings, revision] = await Promise.all([
+    UserSettings.findOne({ where: { userId: args.userId } }),
+    InvestmentFundSnapshots.findOne({
+      where: { userId: args.userId },
+      attributes: ['id', 'updatedAt'],
+      order: [['updatedAt', 'DESC']],
+    }),
+  ]);
+  return deduplicatedAnalytics({
+    ...args,
+    hiddenPortfolioIds: settings?.settings.ui?.hiddenPortfolioIds ?? [],
+    compositionRevision: revision ? `${revision.id}:${new Date(revision.getDataValue('updatedAt')).toISOString()}` : '',
+  });
+}
