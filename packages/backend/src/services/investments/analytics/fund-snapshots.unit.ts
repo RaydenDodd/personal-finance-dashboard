@@ -43,6 +43,18 @@ describe('dated composition validation and provenance', () => {
     expect(latestFundSnapshots(snapshots, '2025-06-01')[0]?.asOf).toBe('2025-01-01');
     expect(latestFundSnapshots(snapshots, '2024-01-01')).toHaveLength(0);
   });
+  it('prefers an explicitly versioned reparse of the same file in either retrieval order', () => {
+    const provenance = { sourceId: 'ishares-csv', sha256: '1'.repeat(64), parserVersion: '1.0.0' } as NonNullable<
+      Parameters<typeof latestFundSnapshots>[0][number]['provenance']
+    >;
+    const old = { ...input, coverage: '40', retrievedAt: '2025-01-02T00:00:00Z', provenance };
+    const revised = { ...old, coverage: '39', provenance: { ...provenance, parserVersion: '1.0.1' } };
+    for (const snapshots of [
+      [old, revised],
+      [revised, old],
+    ])
+      expect(latestFundSnapshots(snapshots, '2025-06-01')[0]).toBe(revised);
+  });
   it('keeps identical repeat imports idempotent despite JSONB property ordering and retrieval timestamps', async () => {
     const data = {
       coverage: '40',

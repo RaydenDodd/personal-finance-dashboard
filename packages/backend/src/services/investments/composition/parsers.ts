@@ -9,7 +9,7 @@ import { gzipSync } from 'node:zlib';
 
 import { type CompositionAdapter, definitionFor } from './registry';
 
-export const COMPOSITION_PARSER_VERSION = '1.0.0';
+export const COMPOSITION_PARSER_VERSION = '1.0.1';
 export const MAX_COMPOSITION_BYTES = 12 * 1024 * 1024;
 const hash = (v: string | Buffer) => createHash('sha256').update(v).digest('hex');
 const clean = (v: unknown) => String(v ?? '').trim();
@@ -312,7 +312,13 @@ function csvRows(raw: string): string[][] {
   return parse(raw, { bom: true, relax_column_count: true, skip_empty_lines: true, max_record_size: 2 * 1024 * 1024 });
 }
 const normalizedHeader = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, '');
-const column = (header: string[], names: string[]) => header.findIndex((h) => names.includes(normalizedHeader(h)));
+const column = (header: string[], names: string[]) => {
+  for (const name of names) {
+    const index = header.findIndex((h) => normalizedHeader(h) === name);
+    if (index >= 0) return index;
+  }
+  return -1;
+};
 function parseIssuerRows(rows: string[][], symbol: string, adapter: CompositionAdapter, manualDate?: string): Parsed {
   const definition = definitionFor(symbol);
   const headerAt = rows.findIndex(
@@ -554,7 +560,7 @@ export async function parseCompositionFile(input: CompositionFileInput): Promise
     fundId: input.fundId,
     symbol: input.symbol,
     asOf: parsed.asOf,
-    provider: `${input.adapter} · ${hash(bytes).slice(0, 12)}`,
+    provider: `${input.adapter} v${COMPOSITION_PARSER_VERSION} · ${hash(bytes).slice(0, 12)}`,
     retrievedAt: new Date().toISOString(),
     holdings,
     coverage: (available.lt(0) ? new Big(0) : available).toString(),

@@ -162,13 +162,22 @@ export const getFundSnapshots = async (userId: number): Promise<InvestmentFundSn
 
 export const latestFundSnapshots = (snapshots: InvestmentFundSnapshot[], asOf: string) => {
   const latest = new Map<string, InvestmentFundSnapshot>();
-  for (const s of snapshots)
+  for (const s of snapshots) {
+    const previous = latest.get(s.fundId);
+    const p = s.provenance,
+      q = previous?.provenance;
+    const parserOrder =
+      p && q && p.sourceId === q.sourceId && p.sha256 === q.sha256
+        ? p.parserVersion.localeCompare(q.parserVersion, 'en', { numeric: true })
+        : 0;
     if (
       s.asOf <= asOf &&
-      (!latest.has(s.fundId) ||
-        latest.get(s.fundId)!.asOf < s.asOf ||
-        (latest.get(s.fundId)!.asOf === s.asOf && new Big(s.coverage).gt(latest.get(s.fundId)!.coverage)))
+      (!previous ||
+        previous.asOf < s.asOf ||
+        (previous.asOf === s.asOf &&
+          (parserOrder > 0 || (parserOrder === 0 && new Big(s.coverage).gt(previous.coverage)))))
     )
       latest.set(s.fundId, s);
+  }
   return [...latest.values()];
 };

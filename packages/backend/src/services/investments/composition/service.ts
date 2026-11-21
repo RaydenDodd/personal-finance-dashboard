@@ -20,6 +20,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
 import { literal, Op } from 'sequelize';
 
+import { compositionRetryDelay } from './cadence';
 import { type CompositionFileInput, MAX_COMPOSITION_BYTES, parseCompositionFile } from './parsers';
 import {
   COMPOSITION_REGISTRY,
@@ -131,7 +132,9 @@ export function compositionStatuses(
       scheduledRefreshEnabled: scheduleEnabled && !conflict,
       lastScheduledRun: scheduled?.attemptedAt ?? null,
       nextRefreshDue:
-        scheduleEnabled && scheduled ? new Date(Date.parse(scheduled.attemptedAt) + 7 * 86400000).toISOString() : null,
+        scheduleEnabled && scheduled
+          ? new Date(Date.parse(scheduled.attemptedAt) + compositionRetryDelay(scheduled)).toISOString()
+          : null,
       refreshAsOf: attempt?.asOf ?? null,
       identityEvidence: fund.identityEvidence,
       netWeight: provenance?.netWeight,

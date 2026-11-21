@@ -1,5 +1,6 @@
 import InvestmentFundSnapshots from '@models/investments/fund-holdings-snapshot.model';
 
+import { compositionRefreshDue } from './cadence';
 import { definitionFor } from './registry';
 import {
   getCompositionAttempts,
@@ -35,7 +36,7 @@ export async function runDueCompositionRefreshes() {
         )
         .filter((f) => {
           const previous = attempts.find((a) => a.fundId === f.id && a.refreshOrigin === 'scheduled');
-          return !previous || Date.now() - Date.parse(previous.attemptedAt) >= 7 * 86400000;
+          return compositionRefreshDue(previous, config.updatedAt, Date.now());
         })
         .map((f) => f.id);
       if (!fundIds.length) continue;
