@@ -19,7 +19,8 @@ services:
       SYSTEM_DEMO_DISABLED: 'true'
       FINANCE_LOCAL_CATEGORIZATION: 'true'
       SYSTEM_MAX_SIGNUPS_ALLOWED: ${SYSTEM_MAX_SIGNUPS_ALLOWED:-1}
-      MCP_READ_ONLY: 'true'
+      # OAuth scopes and native per-user permissions gate every MCP mutation.
+      MCP_READ_ONLY: 'false'
       ATTACHMENTS_DIR: /app/packages/backend/data/attachments
       NODE_OPTIONS: --max-old-space-size=768
       DB_QUERY_LOGGING: 'false'

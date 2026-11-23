@@ -192,8 +192,12 @@ at `/.well-known/oauth-protected-resource` and
 return 401. Existing read tools cover accounts, transactions, portfolio holdings,
 balance history, cash flow and transfer-aware spending. The custom
 `get_personal_net_worth` tool adds the personal category/contribution view.
-MCP writes default to blocked by `MCP_READ_ONLY=true`, in addition to existing
-scope checks. The ordinary app can still edit your records.
+The Pi deployment enables MCP writes with `MCP_READ_ONLY=false`. Every mutation
+still requires its OAuth `finance:write` (or `finance:delete`) scope, an editing
+entitlement, and native user/account permissions. Read-only grants cannot write.
+Merchant rules additionally require the `toolset:automations` grant; reconnect
+the client and select Automations if those tools are absent. Clients may cache
+the tool list and need a tool refresh or reconnection after deployment changes.
 
 Use `mcp.codex.example.toml` as a snippet in your private Codex configuration,
 or `mcp.vscode.example.json` in VS Code's MCP configuration. Both examples
