@@ -12,6 +12,8 @@ export interface InvestmentAccountHistoryResponse {
   netFunding?: (string | null)[];
   /** Backend-calculated value minus recorded external net funding; partial evidence stays partial. */
   gains?: (string | null)[];
+  /** Estimated daily-flow-weighted return over the date selection (Modified Dietz). */
+  periodReturnPercent?: (string | null)[];
   periodGains?: (string | null)[];
   gainFrom?: string;
   accounts: {
@@ -28,6 +30,8 @@ export interface InvestmentAccountHistoryResponse {
     values: (string | null)[];
     full: boolean[];
     gains?: (string | null)[];
+    /** Estimated daily-flow-weighted return over the date selection (Modified Dietz). */
+    periodReturnPercent?: (string | null)[];
     periodGains?: (string | null)[];
     coverage: [number, number, number, boolean][];
     audit?: Record<string, unknown>;

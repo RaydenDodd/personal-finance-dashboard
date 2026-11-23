@@ -380,13 +380,17 @@ const dividendGrowth = computed(() => {
   };
 });
 const gainView = computed(
-  () => props.kind === 'performance' && ['gains', 'period-gains'].includes(String(props.settings.unit)),
+  () => props.kind === 'performance' && props.settings.unit !== 'dollars' && props.settings.unit !== undefined,
 );
-const gainLabel = computed(() =>
-  props.settings.unit === 'period-gains'
-    ? 'Gain / loss this period ? recorded subtotal'
-    : 'Cumulative gain / loss ? recorded subtotal',
-);
+const gainLabel = computed(() => (percent.value ? 'Portfolio return' : 'Portfolio gain / loss'));
+const performanceSummary = computed(() => {
+  const h = props.analytics.accountHistory;
+  if (!h?.dates) return null;
+  const i = h.dates.findLastIndex(
+    (date, i) => date >= range.value.from && date <= range.value.through && h.periodGains?.[i] != null,
+  );
+  return i < 0 ? null : { gain: h.periodGains?.[i], percent: h.periodReturnPercent?.[i] };
+});
 const chartSeries = computed<InvestmentChartSeries[]>(() => {
   if (gainView.value)
     return recordedAccountFallback.value
@@ -479,7 +483,7 @@ const chartSeries = computed<InvestmentChartSeries[]>(() => {
 const chartPoints = computed<InvestmentChartPoint[]>(() => {
   if (gainView.value) {
     const history = props.analytics.accountHistory;
-    const period = props.settings.unit === 'period-gains';
+    const period = true;
     if (history)
       return history.dates.flatMap((date, i) =>
         date < range.value.from || date > range.value.through
@@ -489,12 +493,17 @@ const chartPoints = computed<InvestmentChartPoint[]>(() => {
                 date,
                 values: recordedAccountFallback.value
                   ? Object.fromEntries(
-                      history.accounts.map((p) => [p.id, chartNumber((period ? p.periodGains : p.gains)?.[i])]),
+                      history.accounts.map((p) => [
+                        p.id,
+                        chartNumber((percent.value ? p.periodReturnPercent : p.periodGains)?.[i]),
+                      ]),
                     )
                   : {
-                      gain: chartNumber((period ? history.periodGains : history.gains)?.[i]),
+                      gain: chartNumber((percent.value ? history.periodReturnPercent : history.periodGains)?.[i]),
                     },
-                note: 'Recorded value minus recorded external net funding. Partial history; missing funding is not treated as zero.',
+                note: percent.value
+                  ? 'Estimated return weighted by dated external cash flows (Modified Dietz).'
+                  : undefined,
               },
             ],
       );
@@ -880,7 +889,7 @@ const health = computed(() =>
             ><PopoverContent align="end" class="w-64"
               ><label class="mb-2 block text-xs"
                 >Display<select
-                  :value="settings.unit ?? 'dollars'"
+                  :value="settings.unit === 'period-gains' ? 'gains' : (settings.unit ?? 'dollars')"
                   class="bg-background mt-1 w-full rounded border p-2"
                   @change="
                     emit('settings-change', {
@@ -890,9 +899,8 @@ const health = computed(() =>
                   "
                 >
                   <option value="dollars">Account value ($)</option>
-                  <option value="gains">Cumulative gains / losses ($)</option>
-                  <option value="period-gains">Selected-period gains / losses ($)</option>
-                  <option value="percent">Cash-flow-adjusted return %</option>
+                  <option value="gains">Gain / loss ($)</option>
+                  <option value="percent">Return (%)</option>
                 </select></label
               ><label class="mb-2 block text-xs"
                 >Lines<select
@@ -941,39 +949,17 @@ const health = computed(() =>
           ></template
         >
       </DateRange>
-      <div v-if="gainView" class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <span class="text-muted-foreground text-xs">{{
-          settings.unit === 'period-gains' ? 'Gain / loss in selected period' : 'Cumulative gain / loss'
-        }}</span>
+      <div
+        v-if="kind === 'performance' && performanceSummary"
+        data-testid="investment-performance-summary"
+        class="flex flex-wrap items-baseline gap-x-3 gap-y-1"
+      >
+        <span class="text-muted-foreground text-xs">Gain / loss</span>
+        <strong class="text-xl" :class="signed(performanceSummary.gain)">{{ money(performanceSummary.gain) }}</strong>
         <strong
-          v-if="analytics.accountHistory"
-          class="text-xl"
-          :class="
-            signed(
-              (settings.unit === 'period-gains' ? analytics.accountHistory.periodGains : analytics.accountHistory.gains)
-                ?.filter(
-                  (v, i) =>
-                    analytics.accountHistory!.dates[i]! <= range.through &&
-                    analytics.accountHistory!.dates[i]! >= range.from,
-                )
-                .at(-1),
-            )
-          "
-          >{{
-            money(
-              (settings.unit === 'period-gains' ? analytics.accountHistory.periodGains : analytics.accountHistory.gains)
-                ?.filter(
-                  (v, i) =>
-                    analytics.accountHistory!.dates[i]! <= range.through &&
-                    analytics.accountHistory!.dates[i]! >= range.from,
-                )
-                .at(-1),
-            )
-          }}</strong
-        >
-        <span class="text-muted-foreground text-[10px]"
-          >Recorded subtotal ? partial funding / valuation history. Deposits and withdrawals are excluded from
-          gains.</span
+          :class="signed(performanceSummary.percent)"
+          title="Estimated return weighted by dated deposits and withdrawals (Modified Dietz). Supported account history only."
+          >{{ pct(performanceSummary.percent) }}</strong
         >
       </div>
       <template v-if="kind === 'dividends'"

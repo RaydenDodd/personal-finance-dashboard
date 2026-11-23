@@ -1,21 +1,17 @@
 <script setup lang="ts">
-import { Button } from "@/components/lib/ui/button";
-import { ScrollArea } from "@/components/lib/ui/scroll-area";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/lib/ui/popover";
-import { SettingsIcon } from "@lucide/vue";
-import { computed, ref, watch } from "vue";
-import { cloneDeep } from "lodash-es";
-import { INVESTMENT_PERFORMER_PERIODS } from "@/components/investment-analytics/performers-model";
+import { Button } from '@/components/lib/ui/button';
+import { ScrollArea } from '@/components/lib/ui/scroll-area';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/lib/ui/popover';
+import { SettingsIcon } from '@lucide/vue';
+import { computed, ref, watch } from 'vue';
+import { cloneDeep } from 'lodash-es';
+import { INVESTMENT_PERFORMER_PERIODS } from '@/components/investment-analytics/performers-model';
 import {
   INVESTMENT_ALLOCATION_MODES,
   INVESTMENT_DATE_RANGES,
   investmentWidgetSettings,
   type InvestmentWidgetKind,
-} from "./investment-widgets";
+} from './investment-widgets';
 
 const props = withDefaults(
   defineProps<{
@@ -27,51 +23,37 @@ const props = withDefaults(
     saveError?: string;
     title?: string;
   }>(),
-  { title: "Investment widget settings" },
+  { title: 'Investment widget settings' },
 );
 const emit = defineEmits<{
-  "update:open": [open: boolean];
+  'update:open': [open: boolean];
   save: [settings: Record<string, unknown>];
 }>();
 const draft = ref<Record<string, unknown>>({});
-const customBenchmarks = ref("");
-const selectedPortfolios = computed(
-  () => (draft.value.portfolioIds as string[]) ?? [],
-);
-const allocation = computed(() =>
-  ["allocation", "sector", "geography"].includes(props.kind),
-);
-const hasUnit = computed(() => props.kind === "performance");
-const isDividend = computed(() =>
-  ["dividends", "dividend-calendar"].includes(props.kind),
-);
-const hasLimit = computed(() =>
-  ["exposure", "performers", "concentration", "dividend-calendar"].includes(
-    props.kind,
-  ),
-);
+const customBenchmarks = ref('');
+const selectedPortfolios = computed(() => (draft.value.portfolioIds as string[]) ?? []);
+const allocation = computed(() => ['allocation', 'sector', 'geography'].includes(props.kind));
+const hasUnit = computed(() => props.kind === 'performance');
+const isDividend = computed(() => ['dividends', 'dividend-calendar'].includes(props.kind));
+const hasLimit = computed(() => ['exposure', 'performers', 'concentration', 'dividend-calendar'].includes(props.kind));
 const dateError = computed(() =>
-  draft.value.dateRange === "custom" &&
-  (!draft.value.from ||
-    !draft.value.through ||
-    String(draft.value.from) > String(draft.value.through))
-    ? "Choose a start date on or before the end date."
-    : "",
+  draft.value.dateRange === 'custom' &&
+  (!draft.value.from || !draft.value.through || String(draft.value.from) > String(draft.value.through))
+    ? 'Choose a start date on or before the end date.'
+    : '',
 );
-const today = new Date().toLocaleDateString("en-CA", {
-  timeZone: "America/New_York",
+const today = new Date().toLocaleDateString('en-CA', {
+  timeZone: 'America/New_York',
 });
 
 watch(
   () => props.open,
   (open) => {
     if (!open) return;
-    draft.value = cloneDeep(
-      investmentWidgetSettings(props.kind, props.settings),
-    );
+    draft.value = cloneDeep(investmentWidgetSettings(props.kind, props.settings));
     customBenchmarks.value = (draft.value.benchmarks as string[])
-      .filter((s) => !["SPY", "QQQ", "VTI", "VT"].includes(s))
-      .join(", ");
+      .filter((s) => !['SPY', 'QQQ', 'VTI', 'VT'].includes(s))
+      .join(', ');
   },
   { immediate: true },
 );
@@ -83,46 +65,33 @@ const togglePortfolio = (id: string, checked: boolean) => {
 };
 const toggleBenchmark = (symbol: string, checked: boolean) => {
   const symbols = (draft.value.benchmarks as string[]) ?? [];
-  draft.value.benchmarks = checked
-    ? [...new Set([...symbols, symbol])]
-    : symbols.filter((s) => s !== symbol);
+  draft.value.benchmarks = checked ? [...new Set([...symbols, symbol])] : symbols.filter((s) => s !== symbol);
 };
 const save = () => {
   if (dateError.value || props.saving) return;
-  if (
-    draft.value.dateRange !== props.settings.dateRange &&
-    draft.value.dateRange !== "custom"
-  ) {
+  if (draft.value.dateRange !== props.settings.dateRange && draft.value.dateRange !== 'custom') {
     // A newly chosen preset supplies its own dates; shifted/custom dates belong
     // only to the preceding selection.
     draft.value.from = undefined;
     draft.value.through = undefined;
   }
-  const symbols = ((draft.value.benchmarks as string[]) ?? []).filter((s) =>
-    ["SPY", "QQQ", "VTI", "VT"].includes(s),
-  );
+  const symbols = ((draft.value.benchmarks as string[]) ?? []).filter((s) => ['SPY', 'QQQ', 'VTI', 'VT'].includes(s));
   const custom = customBenchmarks.value
-    .split(",")
+    .split(',')
     .map((s) => s.trim().toUpperCase())
     .filter((s) => /^[A-Z0-9.^=:/-]{1,30}$/.test(s));
-  emit("save", {
+  emit('save', {
     ...draft.value,
     benchmarks: [...new Set([...symbols, ...custom])].slice(0, 10),
   });
 };
-const fieldClass =
-  "bg-background border-input min-h-9 w-full rounded-md border px-2 text-sm";
+const fieldClass = 'bg-background border-input min-h-9 w-full rounded-md border px-2 text-sm';
 </script>
 
 <template>
   <Popover :open="open" @update:open="emit('update:open', $event)">
     <PopoverTrigger as-child>
-      <Button
-        variant="ghost"
-        size="icon-sm"
-        :aria-label="title"
-        data-testid="investment-widget-settings"
-      >
+      <Button variant="ghost" size="icon-sm" :aria-label="title" data-testid="investment-widget-settings">
         <SettingsIcon class="text-muted-foreground size-4" />
       </Button>
     </PopoverTrigger>
@@ -135,43 +104,25 @@ const fieldClass =
         <header class="shrink-0 border-b px-4 py-3 text-sm font-medium">
           {{ title }}
         </header>
-        <ScrollArea
-          class="min-h-0 flex-1"
-          viewport-class="max-h-[min(55dvh,28rem)]"
+        <ScrollArea class="min-h-0 flex-1" viewport-class="max-h-[min(55dvh,28rem)]"
           ><div class="space-y-4 p-4">
             <fieldset class="space-y-2">
               <legend class="mb-1 text-sm font-medium">Portfolios</legend>
               <label class="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  :checked="selectedPortfolios.length === 0"
-                  @change="draft.portfolioIds = []"
-                />
+                <input type="checkbox" :checked="selectedPortfolios.length === 0" @change="draft.portfolioIds = []" />
                 All eligible portfolios
               </label>
               <div class="max-h-36 space-y-2 overflow-y-auto pl-1">
-                <label
-                  v-for="portfolio in portfolios"
-                  :key="portfolio.id"
-                  class="flex items-center gap-2 text-sm"
-                >
+                <label v-for="portfolio in portfolios" :key="portfolio.id" class="flex items-center gap-2 text-sm">
                   <input
                     type="checkbox"
                     :checked="selectedPortfolios.includes(portfolio.id)"
-                    @change="
-                      togglePortfolio(
-                        portfolio.id,
-                        ($event.target as HTMLInputElement).checked,
-                      )
-                    "
+                    @change="togglePortfolio(portfolio.id, ($event.target as HTMLInputElement).checked)"
                   />
                   <span class="min-w-0 truncate">{{ portfolio.name }}</span>
                 </label>
               </div>
-              <p
-                v-if="!portfolios.length"
-                class="text-muted-foreground text-xs"
-              >
+              <p v-if="!portfolios.length" class="text-muted-foreground text-xs">
                 No eligible portfolios are available.
               </p>
             </fieldset>
@@ -195,24 +146,13 @@ const fieldClass =
               class="block space-y-1 text-sm"
             >
               <span class="font-medium">Date range</span>
-              <select
-                v-model="draft.dateRange"
-                :class="fieldClass"
-                aria-label="Widget date range"
-              >
-                <option
-                  v-for="range in INVESTMENT_DATE_RANGES"
-                  :key="range"
-                  :value="range"
-                >
-                  {{ range === "custom" ? "Custom dates" : range }}
+              <select v-model="draft.dateRange" :class="fieldClass" aria-label="Widget date range">
+                <option v-for="range in INVESTMENT_DATE_RANGES" :key="range" :value="range">
+                  {{ range === 'custom' ? 'Custom dates' : range }}
                 </option>
               </select>
             </label>
-            <div
-              v-if="draft.dateRange === 'custom'"
-              class="grid grid-cols-2 gap-2"
-            >
+            <div v-if="draft.dateRange === 'custom'" class="grid grid-cols-2 gap-2">
               <label class="space-y-1 text-xs"
                 >From<input
                   v-model="draft.from"
@@ -230,27 +170,15 @@ const fieldClass =
                   :class="fieldClass"
                   aria-label="Widget end date"
               /></label>
-              <p
-                v-if="dateError"
-                class="text-destructive col-span-2 text-xs"
-                role="alert"
-              >
+              <p v-if="dateError" class="text-destructive col-span-2 text-xs" role="alert">
                 {{ dateError }}
               </p>
             </div>
 
             <label v-if="allocation" class="block space-y-1 text-sm">
               <span class="font-medium">Allocation mode</span>
-              <select
-                v-model="draft.allocationMode"
-                :class="fieldClass"
-                aria-label="Allocation mode"
-              >
-                <option
-                  v-for="[value, label] in INVESTMENT_ALLOCATION_MODES"
-                  :key="value"
-                  :value="value"
-                >
+              <select v-model="draft.allocationMode" :class="fieldClass" aria-label="Allocation mode">
+                <option v-for="[value, label] in INVESTMENT_ALLOCATION_MODES" :key="value" :value="value">
                   {{ label }}
                 </option>
               </select>
@@ -258,24 +186,14 @@ const fieldClass =
             <template v-if="kind === 'heatmap'">
               <label class="block space-y-1 text-sm"
                 ><span>Holdings mode</span
-                ><select
-                  v-model="draft.holdingsMode"
-                  :class="fieldClass"
-                  aria-label="Heatmap holdings mode"
-                >
+                ><select v-model="draft.holdingsMode" :class="fieldClass" aria-label="Heatmap holdings mode">
                   <option value="direct">Direct holdings</option>
-                  <option value="underlying">
-                    Underlying company exposure
-                  </option>
+                  <option value="underlying">Underlying company exposure</option>
                 </select></label
               >
               <label class="block space-y-1 text-sm"
                 ><span>Group by</span
-                ><select
-                  v-model="draft.grouping"
-                  :class="fieldClass"
-                  aria-label="Heatmap grouping"
-                >
+                ><select v-model="draft.grouping" :class="fieldClass" aria-label="Heatmap grouping">
                   <option
                     v-for="[value, label] in [
                       ['security', 'Security'],
@@ -296,30 +214,16 @@ const fieldClass =
               >
               <label class="block space-y-1 text-sm"
                 ><span>Rectangle size</span
-                ><select
-                  v-model="draft.sizeBy"
-                  :class="fieldClass"
-                  aria-label="Heatmap rectangle size"
-                >
+                ><select v-model="draft.sizeBy" :class="fieldClass" aria-label="Heatmap rectangle size">
                   <option value="marketValue">Market value</option>
                   <option value="costBasis">Remaining cost basis</option>
-                  <option value="absoluteGain">
-                    Absolute unrealized gain / loss
-                  </option>
+                  <option value="absoluteGain">Absolute unrealized gain / loss</option>
                 </select></label
               >
               <label class="block space-y-1 text-sm"
                 ><span>Rectangle color</span
-                ><select
-                  v-model="draft.colorBy"
-                  :class="fieldClass"
-                  aria-label="Heatmap color"
-                >
-                  <option
-                    v-for="[value, label] in INVESTMENT_PERFORMER_PERIODS"
-                    :key="value"
-                    :value="value"
-                  >
+                ><select v-model="draft.colorBy" :class="fieldClass" aria-label="Heatmap color">
+                  <option v-for="[value, label] in INVESTMENT_PERFORMER_PERIODS" :key="value" :value="value">
                     {{ label }}
                   </option>
                 </select></label
@@ -339,15 +243,8 @@ const fieldClass =
               >
                 <input
                   type="checkbox"
-                  :checked="
-                    ((draft.benchmarks as string[]) ?? []).includes(symbol!)
-                  "
-                  @change="
-                    toggleBenchmark(
-                      symbol!,
-                      ($event.target as HTMLInputElement).checked,
-                    )
-                  "
+                  :checked="((draft.benchmarks as string[]) ?? []).includes(symbol!)"
+                  @change="toggleBenchmark(symbol!, ($event.target as HTMLInputElement).checked)"
                 />{{ name }}
               </label>
               <label class="block space-y-1 text-sm"
@@ -363,27 +260,19 @@ const fieldClass =
                 ></label
               >
             </fieldset>
-            <label
-              v-if="isDividend || kind === 'contributions'"
-              class="block space-y-1 text-sm"
+            <label v-if="isDividend || kind === 'contributions'" class="block space-y-1 text-sm"
               ><span>Aggregation</span
               ><select
                 v-model="draft.aggregation"
                 :class="fieldClass"
-                :aria-label="
-                  kind === 'contributions'
-                    ? 'Contribution aggregation'
-                    : 'Dividend aggregation'
-                "
+                :aria-label="kind === 'contributions' ? 'Contribution aggregation' : 'Dividend aggregation'"
               >
                 <option value="monthly">Monthly</option>
                 <option value="quarterly">Quarterly</option>
                 <option value="yearly">Yearly</option>
               </select></label
             >
-            <label
-              v-if="isDividend || kind === 'holdings' || kind === 'performers'"
-              class="block space-y-1 text-sm"
+            <label v-if="isDividend || kind === 'holdings' || kind === 'performers'" class="block space-y-1 text-sm"
               ><span>Security filter</span
               ><input
                 v-model="draft.securityId"
@@ -393,50 +282,26 @@ const fieldClass =
             /></label>
             <label v-if="hasUnit" class="block space-y-1 text-sm"
               ><span>Display</span
-              ><select
-                v-model="draft.unit"
-                :class="fieldClass"
-                aria-label="Investment display unit"
-              >
+              ><select v-model="draft.unit" :class="fieldClass" aria-label="Investment display unit">
                 <option value="dollars">Account value ($)</option>
-                <option value="gains">Cumulative gains / losses ($)</option>
-                <option value="period-gains">
-                  Selected-period gains / losses ($)
-                </option>
+                <option value="gains">Gain / loss ($)</option>
                 <option value="percent">Percentage return</option>
               </select></label
             >
             <label v-if="kind === 'performers'" class="block space-y-1 text-sm"
               ><span>Rank performers by</span
-              ><select
-                v-model="draft.performerPeriod"
-                :class="fieldClass"
-                aria-label="Widget performer return period"
-              >
-                <option
-                  v-for="[id, label] in INVESTMENT_PERFORMER_PERIODS"
-                  :key="id"
-                  :value="id"
-                >
+              ><select v-model="draft.performerPeriod" :class="fieldClass" aria-label="Widget performer return period">
+                <option v-for="[id, label] in INVESTMENT_PERFORMER_PERIODS" :key="id" :value="id">
                   {{ label }}
                 </option></select
               ><span class="text-muted-foreground text-xs"
-                >Historical periods rank price-only changes. Missing data
-                remains unavailable.</span
+                >Historical periods rank price-only changes. Missing data remains unavailable.</span
               ></label
             >
             <label v-if="hasLimit" class="block space-y-1 text-sm"
               ><span>Visible rows</span
-              ><select
-                v-model.number="draft.limit"
-                :class="fieldClass"
-                aria-label="Visible investment rows"
-              >
-                <option
-                  v-for="count in [5, 10, 20, 50, 100]"
-                  :key="count"
-                  :value="count"
-                >
+              ><select v-model.number="draft.limit" :class="fieldClass" aria-label="Visible investment rows">
+                <option v-for="count in [5, 10, 20, 50, 100]" :key="count" :value="count">
                   {{ count }}
                 </option>
               </select></label
@@ -446,19 +311,12 @@ const fieldClass =
             </p>
           </div></ScrollArea
         >
-        <footer
-          class="bg-muted/30 flex shrink-0 justify-end gap-2 border-t p-3"
-        >
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            :disabled="saving"
-            @click="emit('update:open', false)"
+        <footer class="bg-muted/30 flex shrink-0 justify-end gap-2 border-t p-3">
+          <Button type="button" size="sm" variant="ghost" :disabled="saving" @click="emit('update:open', false)"
             >Cancel</Button
           >
           <Button type="submit" size="sm" :disabled="saving || !!dateError">{{
-            saving ? "Saving…" : "Save settings"
+            saving ? 'Saving…' : 'Save settings'
           }}</Button>
         </footer>
       </form>

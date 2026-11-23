@@ -1,20 +1,16 @@
-import type { InvestmentAccountHistoryResponse } from "@bt/shared/types/investment-history";
-import {
-  easternDate,
-  investmentPriceDate,
-} from "@bt/shared/types/investment-market";
-import { investmentHistoryCron } from "@crons/investment-history";
-import { ValidationError } from "@js/errors";
-import Portfolios from "@models/investments/portfolios.model";
-import UserSettings from "@models/user-settings.model";
-import * as UsersCurrencies from "@models/users-currencies.model";
-import Big from "big.js";
-import { accountGainSeries, sumGainSeries } from "./account-history-gains";
+import type { InvestmentAccountHistoryResponse } from '@bt/shared/types/investment-history';
+import { easternDate, investmentPriceDate } from '@bt/shared/types/investment-market';
+import { investmentHistoryCron } from '@crons/investment-history';
+import { ValidationError } from '@js/errors';
+import Portfolios from '@models/investments/portfolios.model';
+import UserSettings from '@models/user-settings.model';
+import * as UsersCurrencies from '@models/users-currencies.model';
+import Big from 'big.js';
 
-import { sqlRows, ACCOUNT_HISTORY_VERSION } from "./daily-account-cache";
+import { accountGainSeries, accountPeriodSeries, sumGainSeries } from './account-history-gains';
+import { sqlRows, ACCOUNT_HISTORY_VERSION } from './daily-account-cache';
 
-const decimal = (v: string | null) =>
-  v === null ? null : new Big(v).toString();
+const decimal = (v: string | null) => (v === null ? null : new Big(v).toString());
 export async function getAccountHistory({
   userId,
   portfolioIds,
@@ -37,26 +33,22 @@ export async function getAccountHistory({
   coverageOnly?: boolean;
 }): Promise<InvestmentAccountHistoryResponse> {
   const [owned, settings, currency] = await Promise.all([
-    Portfolios.findAll({ where: { userId }, order: [["name", "ASC"]] }),
+    Portfolios.findAll({ where: { userId }, order: [['name', 'ASC']] }),
     UserSettings.findOne({ where: { userId } }),
     UsersCurrencies.getCurrency({ userId, isDefaultCurrency: true }),
   ]);
   if (portfolioIds?.some((id) => !owned.some((p) => p.id === id)))
     throw new ValidationError({
-      message: "Selected portfolio is unavailable.",
+      message: 'Selected portfolio is unavailable.',
     });
   if (from && through && from > through)
     throw new ValidationError({
-      message: "Choose a start date on or before the end date.",
+      message: 'Choose a start date on or before the end date.',
     });
   const hidden = settings?.settings.ui?.hiddenPortfolioIds ?? [];
-  const scope = owned.filter(
-    (p) =>
-      !hidden.includes(p.id) &&
-      (!portfolioIds?.length || portfolioIds.includes(p.id)),
-  );
+  const scope = owned.filter((p) => !hidden.includes(p.id) && (!portfolioIds?.length || portfolioIds.includes(p.id)));
   const ids = scope.map((p) => String(p.id)),
-    currencyCode = currency?.currency.code ?? "USD",
+    currencyCode = currency?.currency.code ?? 'USD',
     today = easternDate();
   const result: InvestmentAccountHistoryResponse = {
     generatedAt: new Date().toISOString(),
@@ -85,14 +77,14 @@ export async function getAccountHistory({
     pending: boolean;
   }>(
     `
-    SELECT p.id,b.data->>'broker' AS broker,s."firstDate",s."lastDate",s."builtAt",${audit ? "s.audit" : `jsonb_build_object('firstPurchase',s.audit->'firstPurchase','needs',s.audit->'needs')`} AS audit,q."portfolioId" IS NOT NULL AS pending
+    SELECT p.id,b.data->>'broker' AS broker,s."firstDate",s."lastDate",s."builtAt",${audit ? 's.audit' : `jsonb_build_object('firstPurchase',s.audit->'firstPurchase','needs',s.audit->'needs')`} AS audit,q."portfolioId" IS NOT NULL AS pending
     FROM "Portfolios" p LEFT JOIN "BrokerPortfolioData" b ON b."portfolioId"=p.id LEFT JOIN "InvestmentHistoryState" s ON s."portfolioId"=p.id LEFT JOIN "InvestmentHistoryDirty" q ON q."portfolioId"=p.id WHERE p.id IN (:ids)`,
     { ids },
   );
   const params = {
     ids,
     currency: currencyCode,
-    from: from ?? "0001-01-01",
+    from: from ?? '0001-01-01',
     through: through && through < today ? through : today,
   };
   const rows = coverageOnly
@@ -127,7 +119,7 @@ export async function getAccountHistory({
         unknown: string;
       }>(
         `
-    SELECT date,SUM("knownValue") AS total,COUNT("knownValue") AS known,COUNT(value) AS full,SUM(COALESCE((coverage->>'priced')::int,0)) AS priced,SUM(COALESCE((coverage->>'missing')::int,0)) AS missing,SUM(COALESCE((coverage->>'unknown')::int,0)) AS unknown${includeCapital ? ',SUM("netFunding") AS funding' : ""} FROM "InvestmentDailyAccountValues"
+    SELECT date,SUM("knownValue") AS total,COUNT("knownValue") AS known,COUNT(value) AS full,SUM(COALESCE((coverage->>'priced')::int,0)) AS priced,SUM(COALESCE((coverage->>'missing')::int,0)) AS missing,SUM(COALESCE((coverage->>'unknown')::int,0)) AS unknown${includeCapital ? ',SUM("netFunding") AS funding' : ''} FROM "InvestmentDailyAccountValues"
     WHERE "portfolioId" IN (:ids) AND "currencyCode"=:currency AND date BETWEEN CAST(:from AS date) AND CAST(:through AS date) GROUP BY date ORDER BY date`,
         params,
       );
@@ -138,14 +130,14 @@ export async function getAccountHistory({
   result.positionsPriced = totals.map((r) => Number(r.priced));
   result.positionsMissing = totals.map((r) => Number(r.missing));
   result.quantitiesUnknown = totals.map((r) => Number(r.unknown));
-  if (includeCapital)
-    result.netFunding = totals.map((r) => decimal(r.funding ?? null));
+  if (includeCapital) result.netFunding = totals.map((r) => decimal(r.funding ?? null));
   const byAccount = new Map<string, Map<string, (typeof rows)[number]>>();
   for (const r of rows) {
     const map = byAccount.get(r.portfolioId) ?? new Map();
     map.set(r.date, r);
     byAccount.set(r.portfolioId, map);
   }
+  const periodCapitals: (string | null)[][] = [];
   result.accounts = scope.map((p) => {
     const m = meta.find((r) => r.id === p.id),
       map = byAccount.get(p.id);
@@ -159,18 +151,30 @@ export async function getAccountHistory({
           gainFrom,
         )
       : undefined;
+    const period = includeCapital
+      ? accountPeriodSeries(
+          result.dates.map((date) => ({
+            date,
+            value: map?.get(date)?.knownValue ?? null,
+            funding: map?.get(date)?.netFunding ?? null,
+          })),
+          gainFrom,
+        )
+      : undefined;
+    if (period) periodCapitals.push(period.periodCapital);
     return {
       ...(gainSeries && {
         gains: gainSeries.gains,
-        periodGains: gainSeries.periodGains,
+        periodGains: period!.periodGains,
+        periodReturnPercent: period!.periodReturnPercent,
       }),
       id: p.id,
       name: p.name,
-      broker: m?.broker ?? "Other",
+      broker: m?.broker ?? 'Other',
       accountType: /\broth\b/i.test(p.name)
-        ? "Roth"
+        ? 'Roth'
         : /\b(traditional|rollover)\b/i.test(p.name)
-          ? "Traditional retirement"
+          ? 'Traditional retirement'
           : p.portfolioType,
       isEnabled: p.isEnabled,
       firstPurchase: (m?.audit?.firstPurchase as string | null) ?? null,
@@ -182,15 +186,10 @@ export async function getAccountHistory({
       full: result.dates.map((d) => map?.get(d)?.value != null),
       coverage: result.dates.map((d) => {
         const c = map?.get(d)?.coverage;
-        return [
-          c?.priced ?? 0,
-          c?.missing ?? 0,
-          c?.unknown ?? 0,
-          c?.cash ?? false,
-        ];
+        return [c?.priced ?? 0, c?.missing ?? 0, c?.unknown ?? 0, c?.cash ?? false];
       }),
       ...(audit && {
-        audit: m?.audit ?? { needs: ["History reconstruction is queued."] },
+        audit: m?.audit ?? { needs: ['History reconstruction is queued.'] },
       }),
     };
   });
@@ -203,13 +202,22 @@ export async function getAccountHistory({
       result.accounts.map((a) => a.periodGains ?? []),
       result.dates.length,
     );
+    const capitals = sumGainSeries(periodCapitals, result.dates.length);
+    const comparableGains = sumGainSeries(
+      result.accounts.map((account, a) =>
+        (account.periodGains ?? []).map((gain, i) => (periodCapitals[a]?.[i] != null ? gain : null)),
+      ),
+      result.dates.length,
+    );
+    result.periodReturnPercent = comparableGains.map((gain, i) =>
+      gain != null && capitals[i] != null && new Big(capitals[i]!).gt(0)
+        ? new Big(gain).div(capitals[i]!).times(100).toString()
+        : null,
+    );
     result.gainFrom = gainFrom;
   }
   result.pending = result.accounts.some((p) => p.pending);
-  if (result.pending)
-    void investmentHistoryCron
-      .triggerManualSync({ userId })
-      .catch(() => undefined);
+  if (result.pending) void investmentHistoryCron.triggerManualSync({ userId }).catch(() => undefined);
   if (includeEvents) {
     const events = await sqlRows<{
       id: string;
@@ -226,7 +234,7 @@ export async function getAccountHistory({
       id: e.id,
       date: investmentPriceDate(e.date),
       type: e.category,
-      label: [e.symbol, e.category].filter(Boolean).join(" "),
+      label: [e.symbol, e.category].filter(Boolean).join(' '),
       amount: decimal(e.refAmount)!,
       portfolioId: e.portfolioId,
     }));
