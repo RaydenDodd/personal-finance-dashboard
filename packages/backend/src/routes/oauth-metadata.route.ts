@@ -1,3 +1,4 @@
+import { AUTH_ORIGIN_HEADER } from '@config/public-auth-origin';
 import { MCP_SCOPES_SUPPORTED } from '@services/mcp/oauth-scopes';
 import { Express, Request, Response } from 'express';
 
@@ -20,17 +21,19 @@ import { API_PREFIX, BETTER_AUTH_BASE_URL, MCP_BASE_URL } from '../config';
 export function setupOAuthMetadataRoutes({ app }: { app: Express }) {
   // better-auth stamps `${BETTER_AUTH_URL}${API_PREFIX}/auth` as the RFC 9207 `iss` on
   // authorization responses; clients abort on a mismatch, so discovery must advertise
-  // that exact string (MCP_BASE_URL can be a different host in split-domain deployments).
-  const issuer = `${BETTER_AUTH_BASE_URL}${API_PREFIX}/auth`;
+  // that exact string. Public requests use the origin validated by proxy middleware,
+  // while private OAuth keeps its original issuer. Never trust a caller-supplied Host/Origin here.
+  const issuerFor = (req: Request) => `${req.get(AUTH_ORIGIN_HEADER) || BETTER_AUTH_BASE_URL}${API_PREFIX}/auth`;
+  const scopes = MCP_SCOPES_SUPPORTED.filter(scope => process.env.MCP_READ_ONLY === 'false' || !['finance:write', 'finance:delete'].includes(scope));
 
   // OAuth Protected Resource Metadata (RFC 9728)
   // MCP clients discover the authorization server via this endpoint.
   // Claude.ai fetches the path-aware form first, then falls back to root.
-  const protectedResourceHandler = (_req: Request, res: Response) => {
+  const protectedResourceHandler = (req: Request, res: Response) => {
     res.json({
       resource: `${MCP_BASE_URL}/mcp`,
-      authorization_servers: [issuer],
-      scopes_supported: MCP_SCOPES_SUPPORTED,
+      authorization_servers: [issuerFor(req)],
+      scopes_supported: scopes,
       bearer_methods_supported: ['header'],
     });
   };
@@ -41,7 +44,8 @@ export function setupOAuthMetadataRoutes({ app }: { app: Express }) {
   app.get('/.well-known/oauth-protected-resource', protectedResourceHandler);
 
   // OAuth Authorization Server Metadata (RFC 8414)
-  const asMetadataHandler = (_req: Request, res: Response) => {
+  const asMetadataHandler = (req: Request, res: Response) => {
+    const issuer = issuerFor(req);
     res.json({
       issuer,
       authorization_endpoint: `${issuer}/oauth2/authorize`,
@@ -54,7 +58,7 @@ export function setupOAuthMetadataRoutes({ app }: { app: Express }) {
       grant_types_supported: ['authorization_code', 'refresh_token'],
       token_endpoint_auth_methods_supported: ['client_secret_basic', 'client_secret_post', 'none'],
       code_challenge_methods_supported: ['S256'],
-      scopes_supported: MCP_SCOPES_SUPPORTED,
+      scopes_supported: scopes,
     });
   };
 

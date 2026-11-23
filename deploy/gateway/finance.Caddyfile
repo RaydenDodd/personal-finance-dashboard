@@ -41,6 +41,41 @@ raydenfinance.duckdns.org {
     -Server
   }
 
+  # OAuth machine endpoints authenticate using OAuth tokens/client credentials, not browser MFA cookies.
+  # Only these exact paths bypass the browser gateway; all other finance routes retain MFA.
+  @finance_mcp_machine path /mcp /mcp/ /.well-known/oauth-protected-resource /.well-known/oauth-protected-resource/mcp /.well-known/oauth-authorization-server /.well-known/oauth-authorization-server/mcp /.well-known/oauth-authorization-server/api/v1/auth /token /register /api/v1/auth/oauth2/token /api/v1/auth/oauth2/register /api/v1/auth/oauth2/revoke /api/v1/auth/oauth2/introspect /api/v1/auth/.well-known/jwks.json
+  handle @finance_mcp_machine {
+    header Cache-Control no-store
+    reverse_proxy 192.168.0.32:8095 {
+      header_up Host raydenfinance.duckdns.org
+      header_up X-Forwarded-Proto https
+      header_up -Remote-User
+      header_up -Remote-Groups
+      header_up -Remote-Email
+      header_up -X-Finance-Gateway-Authorized
+      header_up -Cookie
+      flush_interval -1
+    }
+  }
+
+  # Browser authorization/consent still requires owner gateway MFA and MoneyMatter login.
+  @finance_mcp_authorize path /authorize /api/v1/auth/oauth2/authorize /api/v1/auth/oauth2/consent /api/v1/auth/oauth2/client-info
+  handle @finance_mcp_authorize {
+    route {
+      import finance_authorize
+      header Cache-Control no-store
+      reverse_proxy 192.168.0.32:8095 {
+        header_up Host raydenfinance.duckdns.org
+        header_up X-Forwarded-Proto https
+        header_up -Remote-User
+        header_up -Remote-Groups
+        header_up -Remote-Email
+        header_up -X-Finance-Gateway-Authorized
+        header_up Cookie "(^|;[[:space:]]*)__Secure-my_finances_gateway=[^;]*(;[[:space:]]*|$)" "$1"
+      }
+    }
+  }
+
   # These endpoints stay private even after successful gateway authentication.
   @private_only path_regexp private_only (?i)(^|/)mcp(/|\.|$)|^/(\.well-known|\.git|private|backups?|config|credentials?)(/|\.|$)|(^|/)\.env(/|\.|$)|^/(authorize|token|register|health|metrics|debug)(/|$)|^/api/v1/auth/(oauth2|\.well-known)(/|$)|\.(dump|sql|sqlite3?|bak|pem|key)$
   handle @private_only {
