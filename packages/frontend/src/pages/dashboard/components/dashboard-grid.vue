@@ -1,6 +1,7 @@
 <script lang="ts" setup>
 import { LayoutGridIcon } from '@lucide/vue';
-import { provide, computed, nextTick } from 'vue';
+import { provide, computed, nextTick, inject, type Ref } from 'vue';
+import { investmentWidgetSettings } from '@/components/widgets/investment-widgets';
 import type { DashboardWidgetConfig, DashboardPage } from '@/api/user-settings';
 import type { WidgetLayoutDefinition } from '@/components/widgets/widget-registry';
 import { VueDraggable } from 'vue-draggable-plus';
@@ -43,6 +44,20 @@ const {
 });
 
 provide('dashboard-save-widget-config', saveWidgetConfigDirect);
+const investmentPageSettings = inject<Ref<Record<string, unknown>> | null>('investment-page-settings', null);
+// Every Investments tile in a grid shares one report for each actual portfolio/date selection.
+provide(
+  'investment-shared-benchmarks',
+  computed(() => [
+    ...new Set(
+      displayWidgets.value
+        .filter((w) => w.widgetId === 'investment-benchmark')
+        .flatMap(
+          (w) => investmentWidgetSettings('benchmark', { ...investmentPageSettings?.value, ...w.config }).benchmarks,
+        ),
+    ),
+  ]),
+);
 
 defineExpose({
   isEditMode,

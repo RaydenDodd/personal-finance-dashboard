@@ -62,9 +62,14 @@ const settings = computed(() =>
   }),
 );
 const portfolioIds = computed(() => settings.value.portfolioIds);
-const benchmarks = computed(() => (kind.value === 'benchmark' ? settings.value.benchmarks : []));
+const sharedBenchmarks = inject<Ref<string[]> | null>('investment-shared-benchmarks', null);
+const benchmarks = computed(
+  () => sharedBenchmarks?.value ?? (kind.value === 'benchmark' ? settings.value.benchmarks : []),
+);
 const performanceFrom = computed(() =>
-  ['heatmap', 'performers'].includes(kind.value) && settings.value.from ? String(settings.value.from) : undefined,
+  (dashboardRange.value || ['heatmap', 'performers'].includes(kind.value)) && settings.value.from
+    ? String(settings.value.from)
+    : undefined,
 );
 const performanceThrough = computed(() =>
   performanceFrom.value && settings.value.through

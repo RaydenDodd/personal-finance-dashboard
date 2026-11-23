@@ -261,3 +261,27 @@ it('does not send a future Dashboard month-end to the holding-performance endpoi
   expect(Date.parse(through!)).toBeLessThanOrEqual(Date.now());
   wrapper.unmount();
 });
+
+it('shares the report selection across Dashboard tile kinds instead of fetching parallel reports', () => {
+  const period = ref({ from: new Date(2026, 9, 1), to: new Date(2026, 9, 31) }),
+    shared = ref(['SPY']);
+  const mountKind = (kind: string) =>
+    mount(InvestmentWidget, {
+      global: {
+        provide: {
+          'dashboard-widget-config': ref({ widgetId: 'investment-' + kind, colSpan: 2 }),
+          'dashboard-period': period,
+          'investment-shared-benchmarks': shared,
+        },
+        stubs: { 'router-link': { template: '<a><slot/></a>' } },
+      },
+    });
+  const first = mountKind('allocation'),
+    second = mountKind('heatmap');
+  const a = queryCalls.at(-2)!,
+    b = queryCalls.at(-1)!;
+  expect(a.benchmarks.value).toEqual(b.benchmarks.value);
+  expect(a.performanceThrough?.value).toBe(b.performanceThrough?.value);
+  first.unmount();
+  second.unmount();
+});
