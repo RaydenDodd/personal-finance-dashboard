@@ -40,7 +40,7 @@ provide(
   'investment-chart-height',
   computed(() => {
     if (bounded.value && availableHeight.value > 100 && kind.value !== 'heatmap')
-      return Math.max(140, availableHeight.value - (kind.value === 'performance' ? 78 : 46));
+      return Math.max(140, availableHeight.value - (kind.value === 'performance' ? 24 : 46));
     const base = kind.value === 'heatmap' ? (fullPage ? 380 : 340) : fullPage ? 288 : 208;
     return base + Math.max(0, (fullPage || bounded.value ? (widget.value.rowSpan ?? 1) : 1) - 1) * 180;
   }),
