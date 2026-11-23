@@ -20,6 +20,7 @@ import { appName, fromEmail, isEmailEnabled } from '@services/email';
 import { sendEmail } from '@services/email/send-email';
 import { createAppUserWithUniqueUsername, seedUserDefaults } from '@services/user/create-user-with-defaults.service';
 import { sendPasswordResetEmail } from '@services/user/send-password-reset-email';
+import { signupEmailAllowed } from '@services/user/signup-email-policy';
 import { areSignupsOpen } from '@services/user/signups-open.service';
 import bcrypt from 'bcryptjs';
 import { APIError, betterAuth } from 'better-auth';
@@ -447,6 +448,12 @@ const createAuthProfile = (publicOrigin: string | null) => {
           // Guard user-create, not the email endpoint: OAuth signups must hit the
           // cap too. Not race-safe under concurrent signups; fine at self-host scale.
           before: async (user) => {
+            if (!signupEmailAllowed(user.email)) {
+              throw new APIError('FORBIDDEN', {
+                message: 'Registration is restricted to invited email addresses.',
+                code: 'SIGNUP_EMAIL_NOT_INVITED',
+              });
+            }
             if (!(await areSignupsOpen())) {
               throw new APIError('FORBIDDEN', {
                 message: t({ key: 'auth.errors.signupsDisabled' }),

@@ -41,6 +41,9 @@ access_control:
     - domain: raydenfinance.duckdns.org
       subject: user:rayden
       policy: two_factor
+    - domain: raydenfinance.duckdns.org
+      subject: user:makaela
+      policy: two_factor
 session:
   name: __Secure-my_finances_gateway
   same_site: lax
