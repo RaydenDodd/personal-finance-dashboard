@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import type { DashboardWidgetConfig, UserSettingsSchema } from '@/api/user-settings';
 import { DEFAULT_DASHBOARD_LAYOUT } from '@/components/widgets/widget-registry';
 import { beforeEach, describe, expect, it, vi } from 'vitest';

@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { Button } from '@/components/lib/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/lib/ui/popover';
-import { ChevronLeftIcon, ChevronRightIcon } from '@lucide/vue';
+import { ScrollArea } from '@/components/lib/ui/scroll-area';
+import { useDashboardPeriod } from '@/components/widgets/composables/use-dashboard-period';
+import { ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon } from '@lucide/vue';
 import { computed, ref } from 'vue';
 import { latestUsEquitySessionDate } from '@bt/shared/types/investment-market';
 import {
@@ -16,16 +18,13 @@ const props = withDefaults(defineProps<{ earliest?: string; compact?: boolean; s
   earliest: '1900-01-01',
   subject: 'payroll',
 });
+const { dashboardRange } = useDashboardPeriod();
 const open = ref(false),
   customFrom = ref(''),
   customThrough = ref('');
 const presets = computed<{ id: PayrollRangePreset; name: string }[]>(() => [
-  ...(props.subject === 'investment'
-    ? [
-        { id: '1d' as const, name: '1D' },
-        { id: '1w' as const, name: '1W' },
-      ]
-    : []),
+  ...(props.subject === 'investment' ? [{ id: '1d' as const, name: '1D' }] : []),
+  { id: '1w', name: '1W' },
   { id: '1m', name: '1M' },
   { id: '3m', name: '3M' },
   { id: '6m', name: '6M' },
@@ -42,6 +41,7 @@ function choose(preset: PayrollRangePreset) {
     props.subject === 'investment' && preset === '1d' ? latestUsEquitySessionDate() : payrollToday(),
     props.earliest,
   );
+  open.value = false;
 }
 function apply() {
   if (
@@ -57,78 +57,91 @@ function apply() {
 </script>
 <template>
   <div
-    class="@container flex w-full min-w-0 flex-wrap items-center gap-x-2 gap-y-1.5"
+    v-if="!dashboardRange"
+    class="flex min-w-0 flex-wrap items-center gap-1.5"
     :data-testid="subject + '-date-range'"
     data-chart-controls
   >
-    <div
-      class="bg-muted/60 grid w-full max-w-full items-center gap-0.5 rounded-lg p-0.5 @2xl:w-auto"
-      :class="subject === 'investment' ? 'grid-cols-5 @2xl:grid-cols-10' : 'grid-cols-8'"
-    >
-      <Button
-        v-for="preset in presets"
-        :key="preset.id"
-        size="sm"
-        :variant="model.preset === preset.id ? 'secondary' : 'ghost'"
-        class="min-w-0 px-0.5 text-[11px] @2xl:min-w-8 @2xl:px-2"
-        :class="compact ? 'h-6' : 'h-7'"
-        :aria-pressed="model.preset === preset.id"
-        @click="choose(preset.id)"
-        >{{ preset.name }}</Button
-      >
-    </div>
-    <Popover v-model:open="open"
-      ><div class="flex shrink-0 items-center gap-0.5">
+    <Popover v-model:open="open">
+      <PopoverTrigger as-child>
         <Button
-          size="icon"
-          variant="ghost"
-          class="size-7"
-          :disabled="model.preset === 'all'"
-          :aria-label="'Previous ' + subject + ' period'"
-          @click="model = shiftPayrollRange(model, -1)"
-          ><ChevronLeftIcon class="size-4"
-        /></Button>
-        <PopoverTrigger as-child
-          ><button
-            type="button"
-            :aria-label="'Choose ' + subject + ' date range'"
-            class="text-muted-foreground flex items-center justify-center gap-x-1 text-[10px] whitespace-nowrap tabular-nums sm:text-[11px]"
+          variant="outline"
+          size="sm"
+          class="h-8 max-w-full gap-2 px-2 text-xs"
+          :aria-label="'Choose ' + subject + ' date range'"
+        >
+          <span class="shrink-0">{{ presets.find((p) => p.id === model.preset)?.name ?? 'Custom' }}</span>
+          <span class="text-muted-foreground truncate text-[10px]"
+            ><time :datetime="model.from">{{ model.from }}</time> ?
+            <time :datetime="model.through">{{ model.through }}</time></span
           >
-            <time class="whitespace-nowrap" :datetime="model.from">{{ model.from }}</time
-            ><span>&ndash;</span><time class="whitespace-nowrap" :datetime="model.through">{{ model.through }}</time>
-          </button></PopoverTrigger
+          <ChevronDownIcon class="size-3.5 shrink-0" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent class="w-[min(20rem,calc(100vw-1.5rem))] p-0" align="start" :collision-padding="8">
+        <ScrollArea
+          class="max-h-[min(80dvh,var(--reka-popover-content-available-height))]"
+          viewport-class="max-h-[min(75dvh,32rem)]"
         >
-        <Button
-          size="icon"
-          variant="ghost"
-          class="size-7"
-          :disabled="forwardDisabled || model.preset === 'all'"
-          :aria-label="'Next ' + subject + ' period'"
-          @click="model = shiftPayrollRange(model, 1)"
-          ><ChevronRightIcon class="size-4"
-        /></Button>
-        <PopoverContent class="w-72" align="end"
-          ><form class="space-y-3" @submit.prevent="apply">
-            <p class="text-sm font-medium">Custom date range</p>
-            <label class="block text-xs"
-              >From<input
-                v-model="customFrom"
-                type="date"
-                required
-                :max="payrollToday()"
-                class="border-input bg-background mt-1 h-9 w-full rounded-md border px-2" /></label
-            ><label class="block text-xs"
-              >Through<input
-                v-model="customThrough"
-                type="date"
-                required
-                :min="customFrom"
-                :max="payrollToday()"
-                class="border-input bg-background mt-1 h-9 w-full rounded-md border px-2" /></label
-            ><Button size="sm" type="submit">Apply</Button>
-          </form></PopoverContent
-        >
-        <slot name="actions" /></div
-    ></Popover>
+          <div class="space-y-3 p-3">
+            <div class="grid grid-cols-3 gap-1" role="group" aria-label="Date presets">
+              <Button
+                v-for="preset in presets"
+                :key="preset.id"
+                size="sm"
+                :variant="model.preset === preset.id ? 'secondary' : 'ghost'"
+                :aria-pressed="model.preset === preset.id"
+                @click="choose(preset.id)"
+                >{{ preset.name }}</Button
+              >
+            </div>
+            <div class="flex items-center justify-between border-y py-1">
+              <Button
+                size="icon"
+                variant="ghost"
+                class="size-8"
+                :disabled="model.preset === 'all'"
+                :aria-label="'Previous ' + subject + ' period'"
+                @click="model = shiftPayrollRange(model, -1)"
+                ><ChevronLeftIcon class="size-4"
+              /></Button>
+              <span class="text-muted-foreground text-[10px]">{{ model.from }} ? {{ model.through }}</span>
+              <Button
+                size="icon"
+                variant="ghost"
+                class="size-8"
+                :disabled="forwardDisabled || model.preset === 'all'"
+                :aria-label="'Next ' + subject + ' period'"
+                @click="model = shiftPayrollRange(model, 1)"
+                ><ChevronRightIcon class="size-4"
+              /></Button>
+            </div>
+            <form class="space-y-3" @submit.prevent="apply">
+              <div class="grid grid-cols-2 gap-2">
+                <label class="min-w-0 text-xs"
+                  >From<input
+                    v-model="customFrom"
+                    type="date"
+                    required
+                    :max="payrollToday()"
+                    class="border-input bg-background mt-1 h-9 w-full min-w-0 rounded-md border px-1 text-xs"
+                /></label>
+                <label class="min-w-0 text-xs"
+                  >Through<input
+                    v-model="customThrough"
+                    type="date"
+                    required
+                    :min="customFrom"
+                    :max="payrollToday()"
+                    class="border-input bg-background mt-1 h-9 w-full min-w-0 rounded-md border px-1 text-xs"
+                /></label>
+              </div>
+              <Button size="sm" type="submit">Apply</Button>
+            </form>
+          </div>
+        </ScrollArea>
+      </PopoverContent>
+    </Popover>
+    <slot name="actions" />
   </div>
 </template>

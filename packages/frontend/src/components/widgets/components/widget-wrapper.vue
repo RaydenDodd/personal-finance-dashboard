@@ -2,7 +2,7 @@
   <Card
     :class="[
       cn('flex flex-col', $attrs.class as string),
-      isDashboard ? 'h-full' : { 'max-h-87.5': !higher, 'max-h-181': higher },
+      isDashboard ? (bounded ? 'h-full' : 'h-auto') : { 'max-h-87.5': !higher, 'max-h-181': higher },
     ]"
   >
     <CardHeader :class="isDashboard ? 'sm:py-3' : ''">
@@ -33,6 +33,8 @@ import { Card, CardContent, CardHeader } from '@/components/lib/ui/card';
 import { cn } from '@/lib/utils';
 import { Loader2Icon } from '@lucide/vue';
 import { inject } from 'vue';
+import { useModuleLayout } from '../composables/use-module-layout';
+const { bounded } = useModuleLayout();
 
 withDefaults(
   defineProps<{

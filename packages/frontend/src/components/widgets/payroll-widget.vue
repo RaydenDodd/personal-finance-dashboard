@@ -1,4 +1,13 @@
 <script setup lang="ts">
+import { useDashboardPeriod } from './composables/use-dashboard-period';
+import {
+  differenceInCalendarDays,
+  differenceInCalendarMonths,
+  endOfMonth,
+  isSameDay,
+  parseISO,
+  startOfMonth,
+} from 'date-fns';
 import { getPayroll } from '@/api/payroll';
 import { getIncomeDashboard } from '@/api/income-management';
 import type { DashboardWidgetConfig } from '@/api/user-settings';
@@ -18,6 +27,7 @@ import { incomeAllocation } from '@/pages/income-management/income-allocation';
 import LoadingState from './components/loading-state.vue';
 import ErrorState from './components/error-state.vue';
 
+const { dashboardRange } = useDashboardPeriod();
 const config = inject<Ref<DashboardWidgetConfig>>('dashboard-widget-config')!;
 const router = useRouter();
 const id = computed(() => config.value.widgetId);
@@ -28,12 +38,12 @@ const year = computed(() => {
   const current = Number(today().slice(0, 4));
   return config.value.config?.year === 'previous' ? current - 1 : current;
 });
-const from = computed(() => year.value + '-01-01');
-const through = computed(() =>
-  Math.min(year.value, Number(today().slice(0, 4))) < Number(today().slice(0, 4)) ? year.value + '-12-31' : today(),
+const from = computed(() => dashboardRange.value?.from ?? year.value + '-01-01');
+const through = computed(
+  () => dashboardRange.value?.through ?? (year.value < Number(today().slice(0, 4)) ? year.value + '-12-31' : today()),
 );
 const { data, isPending, isError, refetch } = useQuery({
-  queryKey: computed(() => ['actual-payroll', 'widget', from.value, through.value]),
+  queryKey: computed(() => ['actual-payroll', { from: from.value, through: through.value }]),
   queryFn: () => getPayroll({ from: from.value, through: through.value }),
   enabled: computed(() => !projected.value),
 });
@@ -52,17 +62,32 @@ const plan = computed(() =>
     .filter(
       (p) =>
         p.evidence !== 'projected' &&
-        (!p.effectiveFrom || p.effectiveFrom <= today()) &&
-        (!p.effectiveTo || p.effectiveTo >= today()),
+        (!p.effectiveFrom || p.effectiveFrom <= through.value) &&
+        (!p.effectiveTo || p.effectiveTo >= from.value),
     )
     .sort((a, b) => (a.effectiveFrom ?? '').localeCompare(b.effectiveFrom ?? ''))
     .at(-1),
 );
 const result = computed(() => (plan.value ? calculateIncomePlan(plan.value.input) : null));
 const period = computed(() => String(config.value.config?.period ?? 'yearly'));
-const divisor = computed(() => (period.value === 'monthly' ? 12 : period.value === 'biweekly' ? 26 : 1));
+const divisor = computed(() => {
+  if (dashboardRange.value) {
+    const start = parseISO(from.value),
+      end = parseISO(through.value);
+    if (isSameDay(start, startOfMonth(start)) && isSameDay(end, endOfMonth(end)))
+      return 12 / (differenceInCalendarMonths(end, start) + 1);
+    return 365 / (differenceInCalendarDays(end, start) + 1);
+  }
+  return period.value === 'monthly' ? 12 : period.value === 'biweekly' ? 26 : 1;
+});
 const periodLabel = computed(() =>
-  period.value === 'monthly' ? 'Monthly' : period.value === 'biweekly' ? 'Biweekly' : 'Yearly',
+  dashboardRange.value
+    ? ''
+    : period.value === 'monthly'
+      ? 'Monthly'
+      : period.value === 'biweekly'
+        ? 'Biweekly'
+        : 'Yearly',
 );
 const allocation = computed(() => (result.value ? incomeAllocation(result.value, divisor.value) : null));
 const detail = computed(
@@ -77,7 +102,7 @@ const detail = computed(
 </script>
 
 <template>
-  <div class="flex h-full min-h-0 min-w-0 flex-col" :data-payroll-widget="id">
+  <div class="flex min-h-0 min-w-0 flex-col md:h-full" :data-payroll-widget="id">
     <div class="flex h-7 shrink-0 justify-end">
       <Button
         as-child
@@ -122,8 +147,8 @@ const detail = computed(
         <ErrorState v-else-if="isError" message="Actual payroll could not be loaded." @retry="refetch()" />
         <template v-else-if="data">
           <ActualSummary v-if="id === 'payroll-summary'" :data="data" :from="from" :through="through" />
-          <SalaryHistory v-else-if="id === 'payroll-salary-history'" :settings-key="key" />
-          <ReceivedIncome v-else-if="id === 'payroll-received-income'" :settings-key="key" />
+          <SalaryHistory v-else-if="id === 'payroll-salary-history'" :settings-key="key" :data="data" />
+          <ReceivedIncome v-else-if="id === 'payroll-received-income'" :settings-key="key" :data="data" />
           <DetailSummary v-else :data="data" :kind="detail" :from="from" :through="through" />
         </template>
       </template>

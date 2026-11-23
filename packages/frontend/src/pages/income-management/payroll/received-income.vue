@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useDashboardPeriod } from '@/components/widgets/composables/use-dashboard-period';
 import type { PayrollCategory, PayrollDashboard, PayrollPeriod } from '@bt/shared/types/payroll';
 import { currentTheme } from '@/common/utils/color-theme';
 import { Button } from '@/components/lib/ui/button';
@@ -22,16 +23,23 @@ import { payrollPeriodFieldUnavailable } from './completeness';
 import CategoryLegend from './category-legend.vue';
 import { useModuleLayout } from '@/components/widgets/composables/use-module-layout';
 const { bounded } = useModuleLayout();
+const { dashboardRange } = useDashboardPeriod();
 const plotHeight = ref(260);
 const props = withDefaults(defineProps<{ data?: PayrollDashboard; settingsKey?: string }>(), {
   settingsKey: 'payroll:received-income',
 });
 const savedRange = useLocalStorage<PayrollRange>(props.settingsKey + ':range', payrollRange('ytd'));
-const range = ref(savedRange.value.preset === 'custom' ? savedRange.value : payrollRange(savedRange.value.preset));
+const localRange = ref(savedRange.value.preset === 'custom' ? savedRange.value : payrollRange(savedRange.value.preset));
+const range = computed({
+  get: () => dashboardRange.value ?? localRange.value,
+  set: (value: PayrollRange) => {
+    if (!dashboardRange.value) localRange.value = value;
+  },
+});
 watch(
   range,
   (value) => {
-    savedRange.value = value;
+    if (!dashboardRange.value) savedRange.value = value;
   },
   { deep: true },
 );

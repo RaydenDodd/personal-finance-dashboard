@@ -1,34 +1,63 @@
 <script lang="ts" setup>
 import type { WidgetLayoutDefinition } from '@/components/widgets/widget-registry';
+import { computed, ref } from 'vue';
+import { ScrollArea } from '@/components/lib/ui/scroll-area';
 import { PlusIcon } from '@lucide/vue';
 
-defineProps<{
+const props = defineProps<{
   availableWidgets: WidgetLayoutDefinition[];
 }>();
 
+const open = ref(false),
+  search = ref('');
+const filtered = computed(() =>
+  props.availableWidgets.filter((w) =>
+    (w.name + ' ' + w.description).toLowerCase().includes(search.value.toLowerCase()),
+  ),
+);
 const emit = defineEmits<{
   add: [widgetId: string];
 }>();
 </script>
 
 <template>
-  <div v-if="availableWidgets.length" class="border-border rounded-lg border border-dashed p-4">
-    <p class="text-muted-foreground mb-3 text-sm font-medium">{{ $t('dashboard.editMode.addWidgets') }}</p>
-    <div class="grid grid-cols-1 gap-2">
-      <button
-        v-for="widget in availableWidgets"
-        :key="widget.id"
-        class="bg-background hover:bg-muted flex items-center gap-3 rounded-md border p-3 text-left transition-colors"
-        @click="emit('add', widget.id)"
-      >
-        <PlusIcon class="text-muted-foreground size-4 shrink-0" />
-        <div class="min-w-0">
-          <p class="text-sm font-medium">{{ widget.literalLabels ? widget.name : $t(widget.name) }}</p>
-          <p class="text-muted-foreground line-clamp-2 text-xs">
-            {{ widget.literalLabels ? widget.description : $t(widget.description) }}
-          </p>
+  <div v-if="availableWidgets.length" class="border-border rounded-lg border" data-testid="dashboard-add-widgets">
+    <button
+      type="button"
+      class="flex min-h-11 w-full items-center gap-2 px-4 py-3 text-left text-sm font-medium"
+      :aria-expanded="open"
+      @click="open = !open"
+    >
+      <PlusIcon class="size-4" />{{ $t('dashboard.editMode.addWidgets') }}
+    </button>
+    <template v-if="open">
+      <div class="px-3 pb-2">
+        <input
+          v-model="search"
+          type="search"
+          placeholder="Find a widget"
+          aria-label="Find a widget"
+          class="border-input bg-background h-10 w-full rounded-md border px-3 text-sm"
+        />
+      </div>
+      <ScrollArea class="h-72" viewport-class="px-3 pb-3">
+        <div class="grid gap-2">
+          <button
+            v-for="widget in filtered"
+            :key="widget.id"
+            type="button"
+            class="bg-background hover:bg-muted flex min-h-11 items-center gap-3 rounded-md border p-3 text-left text-sm"
+            @click="
+              emit('add', widget.id);
+              open = false;
+            "
+          >
+            <PlusIcon class="text-muted-foreground size-4 shrink-0" /><span class="min-w-0">{{
+              widget.literalLabels ? widget.name : $t(widget.name)
+            }}</span>
+          </button>
         </div>
-      </button>
-    </div>
+      </ScrollArea>
+    </template>
   </div>
 </template>

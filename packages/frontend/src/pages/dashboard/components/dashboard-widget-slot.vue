@@ -2,6 +2,7 @@
 import type { DashboardWidgetConfig } from '@/api/user-settings';
 import { Button } from '@/components/lib/ui/button';
 import { DesktopOnlyTooltip } from '@/components/lib/ui/tooltip';
+import WidgetLoadError from '@/components/widgets/components/widget-load-error.vue';
 import WidgetSkeleton from '@/components/widgets/components/widget-skeleton.vue';
 import type { WidgetConfigOption, WidgetSize, WidgetLayoutDefinition } from '@/components/widgets/widget-registry';
 import { WIDGET_REGISTRY } from '@/components/widgets/widget-registry';
@@ -33,6 +34,10 @@ const emit = defineEmits<{
 }>();
 
 provide('dashboard-widget-stretch', true);
+provide(
+  'dashboard-period',
+  computed(() => props.currentPeriod),
+);
 const fixedRows = useMediaQuery('(min-width: 768px)');
 provide(
   'dashboard-widget-bounded',
@@ -51,7 +56,16 @@ const asyncComponent = computed(() => {
   if (!builtin) return null;
   const id = props.widgetConfig.widgetId;
   if (!componentCache.has(id)) {
-    componentCache.set(id, defineAsyncComponent({ loader: builtin.component, loadingComponent: WidgetSkeleton }));
+    componentCache.set(
+      id,
+      defineAsyncComponent({
+        loader: builtin.component,
+        loadingComponent: WidgetSkeleton,
+        errorComponent: WidgetLoadError,
+        timeout: 30000,
+        onError: (_error, retry, fail, attempts) => (attempts < 2 ? retry() : fail()),
+      }),
+    );
   }
   return componentCache.get(id)!;
 });
@@ -64,7 +78,7 @@ const COL_SPAN_CLASSES: Record<number, string> = {
 
 const ROW_SPAN_CLASSES: Record<number, string> = {
   1: '',
-  2: 'row-span-2',
+  2: 'md:row-span-2',
 };
 
 const colSpanClass = computed(() =>
@@ -92,16 +106,18 @@ const isConfigChoiceActive = ({ option, value }: { option: WidgetConfigOption; v
   <div
     v-if="def"
     :data-widget-id="widgetConfig.widgetId"
-    :class="['relative min-h-0 min-w-0', !naturalHeight && 'h-full', colSpanClass, rowSpanClass]"
+    :data-widget-instance="instanceKey"
+    :class="['relative min-h-0 min-w-0', !naturalHeight && 'md:h-full', colSpanClass, rowSpanClass]"
   >
     <!-- Edit-mode only: always-on isolation would trap widgets' fixed z-50 panels
          (spike-transactions-panel, balance-trend tooltip) under the header. -->
     <div
       :class="
         cn(
-          naturalHeight ? 'min-w-0' : 'h-full',
+          naturalHeight ? 'min-w-0' : 'min-w-0 md:h-full',
           isEditMode && 'relative isolate',
-          naturalHeight && isEditMode && 'pb-24',
+          isEditMode && 'max-md:pb-24',
+          naturalHeight && isEditMode && 'md:pb-24',
         )
       "
       :inert="isEditMode"

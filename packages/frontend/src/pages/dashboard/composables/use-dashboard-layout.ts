@@ -1,4 +1,5 @@
 import type { DashboardWidgetConfig, DashboardPage } from '@/api/user-settings';
+import { randomUuid } from '@/common/utils/random-id';
 import {
   DEFAULT_DASHBOARD_LAYOUT,
   WIDGET_REGISTRY,
@@ -116,7 +117,7 @@ export function useDashboardLayout(options: LayoutOptions = {}) {
     if (!def || (!def.allowMultiple && draftWidgets.value.some((w) => w.widgetId === widgetId))) return;
     draftWidgets.value.push({
       widgetId,
-      ...(def.allowMultiple ? { instanceId: crypto.randomUUID() } : {}),
+      ...(def.allowMultiple ? { instanceId: randomUuid() } : {}),
       colSpan: def.defaultColSpan,
       rowSpan: def.defaultRowSpan,
     });

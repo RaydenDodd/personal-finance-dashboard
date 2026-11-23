@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useDashboardPeriod } from './composables/use-dashboard-period';
+import { useModuleLayout } from './composables/use-module-layout';
 import type { DashboardWidgetConfig } from '@/api/user-settings';
 import { Button } from '@/components/lib/ui/button';
 import { investmentRange } from '@/components/investment-analytics/date-range';
@@ -15,6 +17,8 @@ import WidgetWrapper from './components/widget-wrapper.vue';
 import InvestmentWidgetSettings from './investment-widget-settings.vue';
 import { INVESTMENT_WIDGET_DEFINITIONS, investmentWidgetKind, investmentWidgetSettings } from './investment-widgets';
 
+const { dashboardRange } = useDashboardPeriod();
+const { bounded } = useModuleLayout();
 const widget = inject<Ref<DashboardWidgetConfig>>('dashboard-widget-config')!;
 const persist =
   inject<(args: { widgetId: string; config: Record<string, unknown> }) => Promise<unknown>>(
@@ -29,7 +33,7 @@ provide(
   'investment-chart-height',
   computed(() => {
     const base = kind.value === 'heatmap' ? (fullPage ? 380 : 340) : fullPage ? 288 : 208;
-    return base + Math.max(0, (widget.value.rowSpan ?? 1) - 1) * 180;
+    return base + Math.max(0, (fullPage || bounded.value ? (widget.value.rowSpan ?? 1) : 1) - 1) * 180;
   }),
 );
 const settings = computed(() =>
@@ -37,6 +41,23 @@ const settings = computed(() =>
     ...pageSettings?.value,
     ...widget.value.config,
     ...optimisticSettings.value,
+    ...(dashboardRange.value
+      ? {
+          dateRange: 'custom',
+          from: dashboardRange.value.from,
+          through: dashboardRange.value.through,
+          aggregation: 'monthly',
+          colorBy: 'custom',
+          performerPeriod: 'custom',
+        }
+      : {}),
+    ...(kind.value === 'performance'
+      ? {
+          portfolioIds: [],
+          breakdown: 'combined',
+          ...(dashboardRange.value ? { unit: 'dollars', series: undefined } : {}),
+        }
+      : {}),
   }),
 );
 const portfolioIds = computed(() => settings.value.portfolioIds);
@@ -93,6 +114,14 @@ let queuedSettings: Record<string, unknown> | null = null;
 let closeAfterSave = false;
 const saveSettings = async (patch: Record<string, unknown>, close = false) => {
   if (!persist) return;
+  if (dashboardRange.value) {
+    patch = Object.fromEntries(
+      Object.entries(patch).filter(
+        ([key]) => !['dateRange', 'from', 'through', 'colorBy', 'performerPeriod'].includes(key),
+      ),
+    );
+    if (!Object.keys(patch).length) return;
+  }
   // Keep rapid period/legend changes visible while the preceding save is in flight.
   // The next request contains the latest value of every queued setting.
   optimisticSettings.value = { ...optimisticSettings.value, ...patch };
@@ -131,13 +160,36 @@ const saveSettings = async (patch: Record<string, unknown>, close = false) => {
 
 <template>
   <WidgetWrapper :is-fetching="isFetching" :data-investment-widget="kind">
-    <template #title>{{ definition?.name ?? 'Investment analytics' }}</template>
+    <template #title
+      >{{ definition?.name ?? 'Investment analytics'
+      }}<span
+        v-if="
+          dashboardRange &&
+          [
+            'allocation',
+            'sector',
+            'geography',
+            'holdings',
+            'exposure',
+            'concentration',
+            'gains',
+            'overlap',
+            'overview',
+            'health',
+          ].includes(kind)
+        "
+        class="text-muted-foreground text-xs font-normal"
+      >
+        ? current</span
+      ></template
+    >
     <template #action>
       <Button as-child variant="ghost" size="icon-sm" aria-label="Open Investments page"
         ><router-link :to="`/finances/investments/${page}`"
           ><ArrowUpRightIcon class="text-muted-foreground size-4" /></router-link
       ></Button>
       <InvestmentWidgetSettings
+        v-if="!(dashboardRange && kind === 'performance')"
         v-model:open="settingsOpen"
         :kind="kind"
         :settings="settings"
@@ -147,8 +199,9 @@ const saveSettings = async (patch: Record<string, unknown>, close = false) => {
         @save="saveSettings($event, true)"
       />
     </template>
-    <ScrollArea
-      class="min-h-0 min-w-0 flex-1"
+    <component
+      :is="bounded ? ScrollArea : 'div'"
+      :class="bounded ? 'min-h-0 min-w-0 flex-1' : 'min-w-0'"
       viewport-class="[&>div]:!block"
       :data-investment-instance="widget.instanceId ?? widget.widgetId"
     >
@@ -168,6 +221,6 @@ const saveSettings = async (patch: Record<string, unknown>, close = false) => {
       <p v-if="saveError && !settingsOpen" class="text-destructive mt-2 text-xs" role="alert">
         {{ saveError }}
       </p>
-    </ScrollArea>
+    </component>
   </WidgetWrapper>
 </template>

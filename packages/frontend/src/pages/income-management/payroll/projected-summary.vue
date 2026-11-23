@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useDashboardPeriod } from '@/components/widgets/composables/use-dashboard-period';
 import type { IncomePlanResult } from '@bt/shared/finance-income';
 import { Card } from '@/components/lib/ui/card';
 import { Button } from '@/components/lib/ui/button';
@@ -8,6 +9,7 @@ import { SquarePenIcon } from '@lucide/vue';
 import ModuleBody from '@/components/widgets/components/module-body.vue';
 import { useModuleLayout } from '@/components/widgets/composables/use-module-layout';
 const { bounded } = useModuleLayout();
+const { dashboardRange } = useDashboardPeriod();
 defineProps<{
   result: IncomePlanResult | null;
   allocation: ReturnType<typeof incomeAllocation> | null;
@@ -30,7 +32,7 @@ defineEmits<{ edit: [] }>();
         >
           {{ money(result ? result.annual.totalComp / divisor : null) }}
         </p>
-        <p v-if="result" class="text-muted-foreground mt-2 text-xs">
+        <p v-if="result && !dashboardRange" class="text-muted-foreground mt-2 text-xs">
           Gross income {{ money(result.annual.gross / divisor)
           }}<template v-if="result.annual.employerMatch">
             + Employer 401(k) match {{ money(result.annual.employerMatch / divisor) }}</template
@@ -40,13 +42,15 @@ defineEmits<{ edit: [] }>();
         </p>
       </div>
       <Button
-        :size="bounded ? 'icon-sm' : 'default'"
-        :variant="bounded ? 'ghost' : 'default'"
+        :size="bounded || dashboardRange ? 'icon-sm' : 'default'"
+        :variant="bounded || dashboardRange ? 'ghost' : 'default'"
         class="shrink-0"
         aria-label="Edit projections"
         title="Edit projections"
         @click="$emit('edit')"
-        ><SquarePenIcon v-if="bounded" class="size-4" /><template v-else>Edit projections</template></Button
+        ><SquarePenIcon v-if="bounded || dashboardRange" class="size-4" /><template v-else
+          >Edit projections</template
+        ></Button
       >
     </div>
     <ModuleBody class="divide-border/60 border-border/60 mt-3 grid grid-cols-2 divide-y border-t @4xl:grid-cols-4">

@@ -16,6 +16,15 @@ vi.mock('@/composable/data-queries/investment-analytics', () => ({
     return { data: analytics, isPending: pending, isFetching: computed(() => pending.value), error, refetch };
   },
 }));
+vi.mock('@/composable/data-queries/investment-history', () => ({
+  useInvestmentHistory: () => ({
+    data: analytics,
+    isPending: pending,
+    isFetching: computed(() => pending.value),
+    error,
+    refetch,
+  }),
+}));
 vi.mock('@/composable/data-queries/portfolios', () => ({
   usePortfolios: () => ({ data: ref([{ id: 'a', name: 'Broker A' }]) }),
 }));
@@ -58,7 +67,7 @@ describe('investment widget adapters use shared live analytics', () => {
     error.value = null;
     refetch.mockReset();
   });
-  const create = (kind: string, config: Record<string, unknown> = {}) => {
+  const create = (kind: string, config: Record<string, unknown> = {}, period?: ReturnType<typeof ref>) => {
     const widget = ref<DashboardWidgetConfig>({
       widgetId: `investment-${kind}`,
       instanceId: 'instance-b',
@@ -68,7 +77,11 @@ describe('investment widget adapters use shared live analytics', () => {
     const persist = vi.fn().mockResolvedValue(undefined);
     const wrapper = mount(InvestmentWidget, {
       global: {
-        provide: { 'dashboard-widget-config': widget, 'dashboard-save-widget-config': persist },
+        provide: {
+          'dashboard-widget-config': widget,
+          'dashboard-save-widget-config': persist,
+          ...(period ? { 'dashboard-period': period } : {}),
+        },
         stubs: { 'router-link': { template: '<a><slot /></a>' } },
       },
     });
@@ -78,17 +91,23 @@ describe('investment widget adapters use shared live analytics', () => {
   it.each(INVESTMENT_WIDGETS)('%s connects its shared panel to selected portfolio data', async (kind) => {
     const { wrapper, widget } = create(kind, { portfolioIds: ['a'], benchmarks: ['QQQ'], dateRange: 'YTD' });
     expect(queryCalls).toHaveLength(1);
-    expect(queryCalls[0]!.portfolioIds.value).toEqual(['a']);
+    expect(queryCalls[0]!.portfolioIds.value).toEqual(kind === 'performance' ? [] : ['a']);
     expect(queryCalls[0]!.benchmarks.value).toEqual(kind === 'benchmark' ? ['QQQ'] : []);
     const panel = wrapper.findComponent({ name: 'AnalyticsPanel' });
     expect(panel.props('analytics')).toBe(analytics.value);
     expect(panel.props('kind')).toBe(kind);
-    expect(panel.props('settings')).toMatchObject({ portfolioIds: ['a'], dateRange: 'YTD' });
+    expect(panel.props('settings')).toMatchObject({
+      portfolioIds: kind === 'performance' ? [] : ['a'],
+      dateRange: 'YTD',
+    });
     expect(panel.props('compact')).toBe(true);
     widget.value.config = { portfolioIds: ['b', 'c'], dateRange: '3M' };
     await nextTick();
-    expect(queryCalls[0]!.portfolioIds.value).toEqual(['b', 'c']);
-    expect(panel.props('settings')).toMatchObject({ portfolioIds: ['b', 'c'], dateRange: '3M' });
+    expect(queryCalls[0]!.portfolioIds.value).toEqual(kind === 'performance' ? [] : ['b', 'c']);
+    expect(panel.props('settings')).toMatchObject({
+      portfolioIds: kind === 'performance' ? [] : ['b', 'c'],
+      dateRange: '3M',
+    });
     wrapper.unmount();
   });
 
@@ -182,4 +201,42 @@ describe('investment widget adapters use shared live analytics', () => {
     expect(panel.props('settings').dateRange).toBe('6M');
     wrapper.unmount();
   });
+});
+
+it('follows the Dashboard month without persisting it into each widget configuration', async () => {
+  const period = ref({ from: new Date(2026, 9, 1), to: new Date(2026, 9, 31) });
+  const widget = ref<DashboardWidgetConfig>({
+    widgetId: 'investment-performance',
+    instanceId: 'test-period',
+    colSpan: 2,
+    config: { dateRange: '1Y', portfolioIds: ['a'], unit: 'percent', breakdown: 'accounts' },
+  });
+  const persist = vi.fn();
+  const wrapper = mount(InvestmentWidget, {
+    global: {
+      provide: {
+        'dashboard-widget-config': widget,
+        'dashboard-save-widget-config': persist,
+        'dashboard-period': period,
+      },
+      stubs: { 'router-link': { template: '<a><slot/></a>' } },
+    },
+  });
+  const panel = wrapper.findComponent({ name: 'AnalyticsPanel' });
+  expect(panel.props('settings')).toMatchObject({
+    dateRange: 'custom',
+    from: '2026-10-01',
+    through: '2026-10-31',
+    unit: 'dollars',
+    breakdown: 'combined',
+    portfolioIds: [],
+  });
+  period.value = { from: new Date(2026, 8, 1), to: new Date(2026, 8, 30) };
+  await nextTick();
+  expect(panel.props('settings').from).toBe('2026-09-01');
+  panel.vm.$emit('settings-change', { dateRange: 'custom', from: '2026-09-01', through: '2026-09-30' });
+  await nextTick();
+  expect(persist).not.toHaveBeenCalled();
+  expect(widget.value.config?.dateRange).toBe('1Y');
+  wrapper.unmount();
 });

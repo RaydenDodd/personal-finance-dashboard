@@ -1,6 +1,6 @@
 <template>
   <div class="flex items-center justify-center gap-0.5">
-    <Button size="icon-sm" variant="ghost" @click="selectPrevPeriod">
+    <Button size="icon-sm" variant="ghost" aria-label="Previous dashboard period" @click="selectPrevPeriod">
       <ChevronLeft :size="16" />
     </Button>
 
@@ -18,7 +18,13 @@
       </template>
     </DateSelector>
 
-    <Button size="icon-sm" variant="ghost" :disabled="isNextDisabled" @click="selectNextPeriod">
+    <Button
+      size="icon-sm"
+      variant="ghost"
+      :disabled="isNextDisabled"
+      aria-label="Next dashboard period"
+      @click="selectNextPeriod"
+    >
       <ChevronRight :size="16" />
     </Button>
   </div>
@@ -29,7 +35,16 @@ import Button from '@/components/lib/ui/button/Button.vue';
 import { DateSelector, type DateSelectorPreset } from '@/components/lib/ui/date-selector';
 import { useEarliestTransactionDate } from '@/composable/data-queries/earliest-transaction-date';
 import { getPayPeriod, usePeriodNavigation } from '@/composable/use-period-navigation';
-import { format as dateFnsFormat, endOfYear, isBefore, isSameDay, startOfYear, subMonths, subYears } from 'date-fns';
+import {
+  format as dateFnsFormat,
+  endOfYear,
+  isBefore,
+  isSameDay,
+  startOfYear,
+  subDays,
+  subMonths,
+  subYears,
+} from 'date-fns';
 import { CalendarIcon, ChevronLeft, ChevronRight } from '@lucide/vue';
 import { computed, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
@@ -100,6 +115,7 @@ watch(
 );
 
 const quickPresets = computed<DateSelectorPreset[]>(() => [
+  { label: '1 week', getValue: () => ({ from: subDays(new Date(), 6), to: new Date() }) },
   {
     label: t('dashboard.periodSelector.presets.currentMonth'),
     getValue: getCurrentPayPeriod,

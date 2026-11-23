@@ -1,4 +1,8 @@
 <script setup lang="ts">
+import { useDashboardPeriod } from '@/components/widgets/composables/use-dashboard-period';
+import WidgetWrapper from '@/components/widgets/components/widget-wrapper.vue';
+import DrilldownDonut from '@/components/common/charts/drilldown-donut.vue';
+import { payrollAllocation } from './payroll-allocation';
 import type { PayrollDashboard } from '@bt/shared/types/payroll';
 import { Card } from '@/components/lib/ui/card';
 import { computed } from 'vue';
@@ -9,9 +13,11 @@ import { payrollFieldUnavailable } from './completeness';
 import ModuleBody from '@/components/widgets/components/module-body.vue';
 import { useModuleLayout } from '@/components/widgets/composables/use-module-layout';
 const { bounded } = useModuleLayout();
+const { dashboardRange } = useDashboardPeriod();
 const props = defineProps<{ data?: PayrollDashboard; from?: string; through?: string; employmentId?: string }>();
 const query = usePayroll(() => ({ from: props.from, through: props.through, employmentId: props.employmentId }));
 const payroll = computed(() => props.data ?? query.data.value);
+const allocation = computed(() => (payroll.value ? payrollAllocation(payroll.value) : []));
 const summary = computed(() => payroll.value?.summary);
 const withholdingIncomplete = computed(() => payrollFieldUnavailable(payroll.value, 'withholding', props.employmentId));
 const taxes = computed(() =>
@@ -41,7 +47,17 @@ const categories = computed(() =>
 );
 </script>
 <template>
+  <WidgetWrapper v-if="dashboardRange" data-testid="actual-income-donut"
+    ><template #title>Actual income</template
+    ><DrilldownDonut
+      :data="allocation"
+      :total="allocation.reduce((sum, n) => sum + n.amount, 0)"
+      label="Actual income"
+      :height-class="bounded ? 'h-44' : 'h-60'"
+      compact
+  /></WidgetWrapper>
   <Card
+    v-else
     class="@container flex min-h-0 min-w-0 flex-col overflow-hidden"
     :class="bounded ? 'h-full p-4' : 'p-5 sm:p-7'"
     data-testid="actual-payroll-summary"

@@ -6,7 +6,7 @@ import WidgetWrapper from '@/components/widgets/components/widget-wrapper.vue';
 import ModuleBody from '@/components/widgets/components/module-body.vue';
 import { useModuleLayout } from '@/components/widgets/composables/use-module-layout';
 import { ChartPieIcon, WorkflowIcon } from '@lucide/vue';
-import ExpenseDonut from '@/components/widgets/expenses-structure/donut-chart.vue';
+import DrilldownDonut from '@/components/common/charts/drilldown-donut.vue';
 import MoneyFlowChart from '@/pages/analytics/subpages/cash-flow/components/money-flow-chart.vue';
 import { incomeAllocation, incomeBreakdown } from './income-allocation';
 import IncomeDetailRows from './income-detail-rows.vue';
@@ -21,28 +21,13 @@ const props = withDefaults(
   }>(),
   { part: 'all' },
 );
-const emit = defineEmits<{ select: [categoryId: string] }>();
 const view = defineModel<'donut' | 'flow'>('view', { default: 'donut' });
 const expanded = ref<string[]>([]);
 const { bounded } = useModuleLayout();
 const allocation = computed(() => incomeAllocation(props.result, props.divisor));
 const details = computed(() => incomeBreakdown(props.result, props.input, props.divisor));
-const chartData = computed(
-  () =>
-    allocation.value?.groups
-      .filter((g) => g.amount > 0)
-      .map((g) => ({
-        categoryId: g.id,
-        name: g.name,
-        color: g.color,
-        amount: g.amount,
-      })) ?? [],
-);
+const chartData = computed(() => allocation.value?.groups ?? []);
 const money = (n: number) => new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' }).format(n);
-function select({ categoryId }: { categoryId: string }) {
-  if (props.part !== 'chart') void openGroup(categoryId);
-  emit('select', categoryId);
-}
 async function openGroup(id: string) {
   const ids = (
     {
@@ -92,19 +77,13 @@ function toggle(id: string) {
       </div>
     </template>
     <template v-if="allocation">
-      <div
-        v-if="part !== 'breakdown' && view === 'donut'"
-        :class="bounded ? 'relative min-h-0 flex-1' : 'h-64 @lg:h-80'"
-      >
-        <ExpenseDonut
+      <div v-if="part !== 'breakdown' && view === 'donut'" :class="bounded ? 'relative min-h-0 flex-1' : 'min-w-0'">
+        <DrilldownDonut
           :data="chartData"
-          :total-amount="allocation.flow.income"
-          :total-label="periodLabel + ' income'"
-          chart-label="Income allocation doughnut"
-          height-class="h-full min-h-0"
-          show-percentages
-          selection-mode="highlight"
-          @category-click="select"
+          :total="allocation.flow.income"
+          label="Income allocation"
+          :height-class="bounded ? 'h-44' : 'h-60'"
+          :compact="part === 'chart'"
         />
       </div>
       <div

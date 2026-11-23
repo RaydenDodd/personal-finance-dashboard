@@ -1,6 +1,6 @@
 <script lang="ts" setup>
 import { LayoutGridIcon } from '@lucide/vue';
-import { provide, computed } from 'vue';
+import { provide, computed, nextTick } from 'vue';
 import type { DashboardWidgetConfig, DashboardPage } from '@/api/user-settings';
 import type { WidgetLayoutDefinition } from '@/components/widgets/widget-registry';
 import { VueDraggable } from 'vue-draggable-plus';
@@ -53,6 +53,17 @@ defineExpose({
   revealWidget,
 });
 
+async function addAndReveal(widgetId: string) {
+  addWidget({ widgetId });
+  const added = draftWidgets.value.at(-1);
+  if (!added) return;
+  await nextTick();
+  document.querySelector(`[data-widget-instance="${CSS.escape(added.instanceId ?? added.widgetId)}"]`)?.scrollIntoView({
+    block: 'center',
+    behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+  });
+}
+
 const gridClasses = computed(() => [
   'grid grid-cols-1 gap-4 md:grid-cols-2',
   props.columns === 4 ? 'xl:grid-cols-4' : 'xl:grid-cols-3',
@@ -62,6 +73,9 @@ const gridClasses = computed(() => [
 
 <template>
   <div>
+    <div v-if="isEditMode" class="mb-4">
+      <DashboardAddWidgetPanel :available-widgets="availableWidgets" @add="addAndReveal" />
+    </div>
     <template v-if="displayWidgets.length === 0">
       <div class="text-muted-foreground flex flex-col items-center justify-center gap-3 py-20">
         <LayoutGridIcon class="size-12 opacity-50" />
@@ -116,10 +130,6 @@ const gridClasses = computed(() => [
         ><template v-if="$slots[widget.widgetId] || $slots.default" #default
           ><slot :name="widget.widgetId" :widget="widget"><slot :widget="widget" /></slot></template
       ></DashboardWidgetSlot>
-    </div>
-
-    <div v-if="isEditMode" class="mt-6">
-      <DashboardAddWidgetPanel :available-widgets="availableWidgets" @add="(id) => addWidget({ widgetId: id })" />
     </div>
   </div>
 </template>

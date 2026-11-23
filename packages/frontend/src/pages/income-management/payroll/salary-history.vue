@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useDashboardPeriod } from '@/components/widgets/composables/use-dashboard-period';
 import type { PayrollDashboard, PayrollSalaryEvent } from '@bt/shared/types/payroll';
 import { currentTheme } from '@/common/utils/color-theme';
 import { Card } from '@/components/lib/ui/card';
@@ -24,16 +25,23 @@ import { usePayroll } from './use-payroll';
 import { money } from './format';
 import { useModuleLayout } from '@/components/widgets/composables/use-module-layout';
 const { bounded } = useModuleLayout();
+const { dashboardRange } = useDashboardPeriod();
 const plotHeight = ref(250);
 const props = withDefaults(defineProps<{ data?: PayrollDashboard; settingsKey?: string }>(), {
   settingsKey: 'payroll:salary-history',
 });
 const savedRange = useLocalStorage<PayrollRange>(props.settingsKey + ':range', payrollRange('all'));
-const range = ref(savedRange.value.preset === 'custom' ? savedRange.value : payrollRange(savedRange.value.preset));
+const localRange = ref(savedRange.value.preset === 'custom' ? savedRange.value : payrollRange(savedRange.value.preset));
+const range = computed({
+  get: () => dashboardRange.value ?? localRange.value,
+  set: (value: PayrollRange) => {
+    if (!dashboardRange.value) localRange.value = value;
+  },
+});
 watch(
   range,
   (value) => {
-    savedRange.value = value;
+    if (!dashboardRange.value) savedRange.value = value;
   },
   { deep: true },
 );

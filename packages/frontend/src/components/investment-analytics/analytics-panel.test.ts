@@ -81,7 +81,7 @@ describe('shared investment panels', () => {
       unit: 'period-gains',
       breakdown: 'accounts',
     }).findComponent({ name: 'SeriesChart' });
-    expect(accounts.props('points')[0].values).toEqual({ p: -30 });
+    expect(accounts.props('points')[0].values).toEqual({ gain: -30 });
   });
 
   it('defaults saved partial account history to a single combined dollar line, with account lines optional', () => {
@@ -117,8 +117,8 @@ describe('shared investment panels', () => {
     const accounts = panel('performance', analytics, {
       breakdown: 'accounts',
     }).findComponent({ name: 'SeriesChart' });
-    expect(accounts.props('series').map((s: { key: string }) => s.key)).toEqual(['p', 'q']);
-    expect(accounts.props('points')[0].values).toMatchObject({ p: 10, q: 20 });
+    expect(accounts.props('series').map((s: { key: string }) => s.key)).toEqual(['marketValue']);
+    expect(accounts.props('points')[0].values).toMatchObject({ marketValue: 30 });
   });
   it('opens the actual metric breakdown and keeps explanations out of the overview', async () => {
     const wrapper = panel('overview');

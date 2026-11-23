@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useDashboardPeriod } from './composables/use-dashboard-period';
 import { Button } from '@/components/lib/ui/button';
 import { ScrollArea } from '@/components/lib/ui/scroll-area';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/lib/ui/popover';
@@ -13,6 +14,7 @@ import {
   type InvestmentWidgetKind,
 } from './investment-widgets';
 
+const { dashboardRange } = useDashboardPeriod();
 const props = withDefaults(
   defineProps<{
     open: boolean;
@@ -106,7 +108,7 @@ const fieldClass = 'bg-background border-input min-h-9 w-full rounded-md border 
         </header>
         <ScrollArea class="min-h-0 flex-1" viewport-class="max-h-[min(55dvh,28rem)]"
           ><div class="space-y-4 p-4">
-            <fieldset class="space-y-2">
+            <fieldset v-if="kind !== 'performance'" class="space-y-2">
               <legend class="mb-1 text-sm font-medium">Portfolios</legend>
               <label class="flex items-center gap-2 text-sm">
                 <input type="checkbox" :checked="selectedPortfolios.length === 0" @change="draft.portfolioIds = []" />
@@ -129,6 +131,7 @@ const fieldClass = 'bg-background border-input min-h-9 w-full rounded-md border 
 
             <label
               v-if="
+                !dashboardRange &&
                 ![
                   'allocation',
                   'sector',
@@ -152,7 +155,7 @@ const fieldClass = 'bg-background border-input min-h-9 w-full rounded-md border 
                 </option>
               </select>
             </label>
-            <div v-if="draft.dateRange === 'custom'" class="grid grid-cols-2 gap-2">
+            <div v-if="!dashboardRange && draft.dateRange === 'custom'" class="grid grid-cols-2 gap-2">
               <label class="space-y-1 text-xs"
                 >From<input
                   v-model="draft.from"
@@ -220,7 +223,7 @@ const fieldClass = 'bg-background border-input min-h-9 w-full rounded-md border 
                   <option value="absoluteGain">Absolute unrealized gain / loss</option>
                 </select></label
               >
-              <label class="block space-y-1 text-sm"
+              <label v-if="!dashboardRange" class="block space-y-1 text-sm"
                 ><span>Rectangle color</span
                 ><select v-model="draft.colorBy" :class="fieldClass" aria-label="Heatmap color">
                   <option v-for="[value, label] in INVESTMENT_PERFORMER_PERIODS" :key="value" :value="value">
@@ -280,7 +283,7 @@ const fieldClass = 'bg-background border-input min-h-9 w-full rounded-md border 
                 placeholder="All securities"
                 aria-label="Widget security filter"
             /></label>
-            <label v-if="hasUnit" class="block space-y-1 text-sm"
+            <label v-if="hasUnit && !dashboardRange" class="block space-y-1 text-sm"
               ><span>Display</span
               ><select v-model="draft.unit" :class="fieldClass" aria-label="Investment display unit">
                 <option value="dollars">Account value ($)</option>
@@ -288,7 +291,7 @@ const fieldClass = 'bg-background border-input min-h-9 w-full rounded-md border 
                 <option value="percent">Percentage return</option>
               </select></label
             >
-            <label v-if="kind === 'performers'" class="block space-y-1 text-sm"
+            <label v-if="kind === 'performers' && !dashboardRange" class="block space-y-1 text-sm"
               ><span>Rank performers by</span
               ><select v-model="draft.performerPeriod" :class="fieldClass" aria-label="Widget performer return period">
                 <option v-for="[id, label] in INVESTMENT_PERFORMER_PERIODS" :key="id" :value="id">

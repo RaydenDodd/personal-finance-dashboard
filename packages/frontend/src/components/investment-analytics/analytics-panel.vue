@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useDashboardPeriod } from '@/components/widgets/composables/use-dashboard-period';
 import { computed, inject, ref, watch } from 'vue';
 import { Button } from '@/components/lib/ui/button';
 import { ScrollArea } from '@/components/lib/ui/scroll-area';
@@ -9,7 +10,8 @@ import type {
   InvestmentFundOverlap,
   InvestmentHistoryPoint,
 } from '@bt/shared/types/investment-analytics';
-import ExpenseDonut from '@/components/widgets/expenses-structure/donut-chart.vue';
+import DrilldownDonut from '@/components/common/charts/drilldown-donut.vue';
+import { allocationDrilldown } from './allocation-drilldown';
 import ModuleBody from '@/components/widgets/components/module-body.vue';
 import { CATEGORICAL_SERIES_PALETTE as colors } from '@/composable/charts/categorical-series-palette';
 import DateRange from '@/pages/income-management/payroll/date-range.vue';
@@ -46,6 +48,7 @@ const emit = defineEmits<{
   'settings-change': [patch: Record<string, unknown>];
 }>();
 const containerRef = ref<HTMLElement | null>(null);
+const { dashboardRange } = useDashboardPeriod();
 const inlineInformation = !inject('investment-full-page', false);
 const showInformation = ref(false);
 const activeMetric = ref<string | null>(null);
@@ -230,7 +233,10 @@ const historyLabels: Record<string, string> = {
 };
 const allHistory = computed(() => withinRange(props.analytics.history, range.value.from, range.value.through));
 const recordedAccountFallback = computed(
-  () => ['performance', 'value-capital'].includes(props.kind) && props.settings.breakdown === 'accounts',
+  () =>
+    ['performance', 'value-capital'].includes(props.kind) &&
+    props.kind !== 'performance' &&
+    props.settings.breakdown === 'accounts',
 );
 const recordedPortfolios = computed(() =>
   props.analytics.portfolios.filter((p) =>
@@ -655,6 +661,7 @@ const allocationMode = computed(() =>
       (props.kind === 'sector' ? 'sector' : props.kind === 'geography' ? 'country' : 'holdings'),
   ),
 );
+const allocationTree = computed(() => allocationDrilldown(props.analytics, allocationMode.value));
 const allocation = computed(() => props.analytics.allocations[allocationMode.value] ?? []);
 const fullAllocationKnown = computed(() => props.analytics.metrics.marketValue?.value != null);
 const allocationTotalLabel = computed(() =>
@@ -707,15 +714,13 @@ const exposed = computed(() =>
     .filter((row) => `${row.symbol} ${row.name}`.toLowerCase().includes(exposureSearch.value.toLowerCase()))
     .slice(0, Number(props.settings.limit ?? 50)),
 );
-const selectedAllocation = computed(() => allocation.value.find((row) => row.key === selectedCategory.value));
-const contributorRows = computed(() =>
-  props.analytics.holdings.filter((row) => selectedAllocation.value?.securityIds.includes(row.securityId)),
-);
 const funds = computed(() => props.analytics.holdings.filter((row) => row.isFund));
 const performerPeriod = computed(() =>
-  INVESTMENT_PERFORMER_PERIODS.some(([period]) => period === props.settings.performerPeriod)
-    ? String(props.settings.performerPeriod)
-    : 'daily',
+  dashboardRange.value
+    ? 'custom'
+    : INVESTMENT_PERFORMER_PERIODS.some(([period]) => period === props.settings.performerPeriod)
+      ? String(props.settings.performerPeriod)
+      : 'daily',
 );
 const periodToPreset: Record<string, string> = {
   daily: '1D',
@@ -879,7 +884,7 @@ const health = computed(() =>
       concentration.
     </p>
     <template v-if="showChart">
-      <HistoryCoverage v-if="analytics.accountHistory" :history="analytics.accountHistory" />
+      <HistoryCoverage v-if="analytics.accountHistory && !compact" :history="analytics.accountHistory" />
       <DateRange v-model="range" :earliest="earliest" :compact="compact" subject="investment">
         <template #actions
           ><Popover v-if="kind === 'performance'"
@@ -901,20 +906,6 @@ const health = computed(() =>
                   <option value="dollars">Account value ($)</option>
                   <option value="gains">Gain / loss ($)</option>
                   <option value="percent">Return (%)</option>
-                </select></label
-              ><label class="mb-2 block text-xs"
-                >Lines<select
-                  aria-label="Performance lines"
-                  :value="settings.breakdown ?? 'combined'"
-                  class="bg-background mt-1 w-full rounded border p-2"
-                  @change="
-                    emit('settings-change', {
-                      breakdown: ($event.target as HTMLSelectElement).value,
-                    })
-                  "
-                >
-                  <option value="combined">Combined portfolios</option>
-                  <option value="accounts">By portfolio</option>
                 </select></label
               >
               <label v-if="analytics.accountHistory" class="flex items-center gap-2 py-1 text-xs"
@@ -954,7 +945,7 @@ const health = computed(() =>
         data-testid="investment-performance-summary"
         class="flex flex-wrap items-baseline gap-x-3 gap-y-1"
       >
-        <span class="text-muted-foreground text-xs">Gain / loss</span>
+        <span v-if="!compact" class="text-muted-foreground text-xs">Gain / loss</span>
         <strong class="text-xl" :class="signed(performanceSummary.gain)">{{ money(performanceSummary.gain) }}</strong>
         <strong
           :class="signed(performanceSummary.percent)"
@@ -962,7 +953,14 @@ const health = computed(() =>
           >{{ pct(performanceSummary.percent) }}</strong
         >
       </div>
-      <template v-if="kind === 'dividends'"
+      <strong v-if="kind === 'dividends' && compact" class="text-2xl font-semibold tabular-nums">{{
+        money(
+          payments
+            .filter((p) => p.type === 'dividend' && p.status === 'recorded')
+            .reduce((sum, p) => sum + Number(p.amount), 0),
+        )
+      }}</strong>
+      <template v-if="kind === 'dividends' && !compact"
         ><div class="grid grid-cols-2 gap-3 @3xl:grid-cols-4">
           <div
             v-for="total in distributionTotals"
@@ -1014,7 +1012,9 @@ const health = computed(() =>
           >
         </div></template
       >
-      <label v-if="kind === 'contributions'" class="text-muted-foreground flex flex-wrap items-center gap-2 text-xs"
+      <label
+        v-if="kind === 'contributions' && !compact"
+        class="text-muted-foreground flex flex-wrap items-center gap-2 text-xs"
         >Aggregation<select
           :value="settings.aggregation ?? 'monthly'"
           aria-label="Contribution aggregation"
@@ -1112,7 +1112,7 @@ const health = computed(() =>
             : 'Recorded external flows; transfers within the selected portfolio group are excluded.'
         }}
       </p>
-      <details v-if="kind === 'dividends'" class="border-t pt-3" data-testid="investment-income-breakdown">
+      <details v-if="kind === 'dividends' && !compact" class="border-t pt-3" data-testid="investment-income-breakdown">
         <summary class="text-primary-text cursor-pointer text-xs">Recorded income by security or portfolio</summary>
         <div class="mt-3 flex flex-wrap gap-1" role="group" aria-label="Investment income breakdown grouping">
           <Button
@@ -1177,7 +1177,7 @@ const health = computed(() =>
       </p>
     </template>
     <template v-if="['allocation', 'sector', 'geography'].includes(kind)">
-      <label class="text-muted-foreground flex flex-wrap items-center gap-2 text-xs"
+      <label v-if="!compact" class="text-muted-foreground flex flex-wrap items-center gap-2 text-xs"
         >Allocation by<select
           :value="allocationMode"
           aria-label="Investment allocation mode"
@@ -1194,63 +1194,13 @@ const health = computed(() =>
           </option>
         </select></label
       >
-      <ExpenseDonut
-        :data="
-          allocation
-            .filter((row) => Number(row.value) > 0)
-            .map((row, index) => ({
-              categoryId: row.key,
-              name: row.label,
-              amount: Number(row.value),
-              color: colors[index % colors.length]!,
-            }))
-        "
-        :total-amount="allocation.reduce((sum, row) => sum + Number(row.value), 0)"
-        :total-label="allocationTotalLabel"
-        chart-label="Investment allocation doughnut"
-        :height-class="compact ? 'h-48' : 'h-64'"
-        :show-percentages="true"
-        :percentage-total="
-          Number(analytics.metrics.knownMarketValue?.value ?? analytics.metrics.marketValue?.value ?? 0)
-        "
-        selection-mode="highlight"
-        :highlight-category-id="selectedCategory"
-        @category-click="({ categoryId }) => (selectedCategory = categoryId)"
+      <DrilldownDonut
+        :data="allocationTree"
+        :total="allocation.reduce((sum, row) => sum + Number(row.value), 0)"
+        :label="allocationTotalLabel"
+        :height-class="compact ? 'h-56' : 'h-64'"
+        :compact="compact"
       />
-      <ModuleBody
-        ><div class="grid gap-1 @2xl:grid-cols-2">
-          <button
-            v-for="(row, index) in allocation"
-            :key="row.key"
-            type="button"
-            class="hover:bg-accent flex items-center justify-between gap-3 rounded-md px-2 py-1.5 text-left text-xs"
-            :class="selectedCategory === row.key ? 'bg-accent' : ''"
-            :aria-pressed="selectedCategory === row.key"
-            @click="selectedCategory = selectedCategory === row.key ? null : row.key"
-          >
-            <span class="flex min-w-0 items-center gap-2"
-              ><span class="size-2 shrink-0 rounded-full" :style="{ background: colors[index % colors.length] }" /><span
-                class="truncate"
-                >{{ row.label }}</span
-              ></span
-            ><span class="shrink-0 tabular-nums">{{ money(row.value) }} · {{ pct(row.percent) }}</span>
-          </button>
-        </div></ModuleBody
-      >
-      <div v-if="selectedAllocation" class="bg-muted/40 rounded-md p-3 text-xs">
-        <p class="mb-2 font-medium">{{ selectedAllocation.label }} contributors</p>
-        <p v-for="row in contributorRows" :key="row.id" class="flex justify-between gap-2 py-1">
-          <span>{{ row.symbol }} · {{ row.name }}</span
-          ><span>{{ money(row.marketValue) }}</span>
-        </p>
-        <p v-if="!contributorRows.length">
-          {{
-            selectedAllocation.securityIds.length
-              ? 'Underlying holdings are economic exposures; see the company exposure table for fund contributions.'
-              : 'No classified constituent detail is available.'
-          }}
-        </p>
-      </div>
       <p
         v-show="inlineInformation && showInformation"
         v-if="!fullAllocationKnown"
@@ -1263,7 +1213,7 @@ const health = computed(() =>
       <p v-if="!allocation.length" class="text-muted-foreground text-sm">
         Classification data is unavailable for this mode.
       </p>
-      <details class="text-xs">
+      <details v-if="!compact" class="text-xs">
         <summary class="text-primary-text cursor-pointer">Historical allocation availability</summary>
         <p v-show="inlineInformation && showInformation" class="text-muted-foreground mt-2">
           Historical allocation changes require dated position valuations and fund compositions for each observation.
@@ -1584,7 +1534,7 @@ const health = computed(() =>
       :compact="compact"
     />
     <button
-      v-if="inlineInformation"
+      v-if="inlineInformation && !compact"
       type="button"
       class="text-muted-foreground self-start text-xs"
       :aria-expanded="showInformation"
