@@ -965,19 +965,19 @@ const health = computed(() =>
           ></template
         >
       </DateRange>
-      <div
-        v-if="kind === 'performance' && performanceSummary"
-        data-testid="investment-performance-summary"
-        class="flex flex-wrap items-baseline gap-x-3 gap-y-1"
-      >
-        <span v-if="!compact" class="text-muted-foreground text-xs">Gain / loss</span>
-        <strong class="text-xl" :class="signed(performanceSummary.gain)">{{ money(performanceSummary.gain) }}</strong>
-        <strong
-          :class="signed(performanceSummary.percent)"
-          title="Estimated return weighted by dated deposits and withdrawals (Modified Dietz). Supported account history only."
-          >{{ pct(performanceSummary.percent) }}</strong
+      <WidgetHeaderControls v-if="kind === 'performance' && performanceSummary"
+        ><div
+          data-testid="investment-performance-summary"
+          class="flex items-baseline gap-2 text-sm whitespace-nowrap sm:gap-3 sm:text-base"
         >
-      </div>
+          <strong :class="signed(performanceSummary.gain)">{{ money(performanceSummary.gain) }}</strong>
+          <strong
+            :class="signed(performanceSummary.percent)"
+            title="Estimated return weighted by dated deposits and withdrawals (Modified Dietz). Supported account history only."
+            >{{ pct(performanceSummary.percent) }}</strong
+          >
+        </div></WidgetHeaderControls
+      >
       <strong v-if="kind === 'dividends' && compact" class="text-2xl font-semibold tabular-nums">{{
         money(
           payments
