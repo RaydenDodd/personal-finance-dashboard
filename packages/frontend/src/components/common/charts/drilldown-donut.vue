@@ -26,14 +26,24 @@ const props = withDefaults(
 );
 const { bounded } = useModuleLayout();
 const path = ref<string[]>([]);
+// Tiny 2px-bordered arcs disappear on a phone. Keep them accessible in a nested pie.
+function levelRows(nodes: DonutNode[]): DonutNode[] {
+  if (nodes.length <= 12) return nodes;
+  const sorted = [...nodes].sort((a, b) => b.amount - a.amount),
+    rest = sorted.slice(11);
+  return [
+    ...sorted.slice(0, 11),
+    { id: '__other__', name: 'Other holdings', amount: rest.reduce((sum, n) => sum + n.amount, 0), children: rest },
+  ];
+}
 const trail = computed(() => {
   const found: DonutNode[] = [];
-  let level = props.data;
+  let level = levelRows(props.data);
   for (const id of path.value) {
     const node = level.find((n) => n.id === id);
     if (!node?.children?.length) break;
     found.push(node);
-    level = node.children;
+    level = levelRows(node.children);
   }
   return found;
 });
@@ -41,7 +51,7 @@ watch(trail, (value) => {
   if (value.length < path.value.length) path.value = path.value.slice(0, value.length);
 });
 const current = computed(() => trail.value.at(-1));
-const rows = computed(() => current.value?.children ?? props.data);
+const rows = computed(() => levelRows(current.value?.children ?? props.data));
 const displayTotal = computed(() => current.value?.amount ?? props.total);
 const chartData = computed(() =>
   rows.value

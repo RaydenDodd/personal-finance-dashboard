@@ -3,6 +3,7 @@ import { useDashboardPeriod } from './composables/use-dashboard-period';
 import { useModuleLayout } from './composables/use-module-layout';
 import type { DashboardWidgetConfig } from '@/api/user-settings';
 import { Button } from '@/components/lib/ui/button';
+import { payrollToday } from '@/pages/income-management/payroll/date-range';
 import { investmentRange } from '@/components/investment-analytics/date-range';
 import AnalyticsPanel from '@/components/investment-analytics/analytics-panel.vue';
 import { useInvestmentAnalytics } from '@/composable/data-queries/investment-analytics';
@@ -66,7 +67,9 @@ const performanceFrom = computed(() =>
   ['heatmap', 'performers'].includes(kind.value) && settings.value.from ? String(settings.value.from) : undefined,
 );
 const performanceThrough = computed(() =>
-  performanceFrom.value && settings.value.through ? String(settings.value.through) : undefined,
+  performanceFrom.value && settings.value.through
+    ? [String(settings.value.through), payrollToday()].sort()[0]
+    : undefined,
 );
 const focusedHistory = computed(() => ['performance', 'value-capital', 'portfolio-comparison'].includes(kind.value));
 const broad = useInvestmentAnalytics({
