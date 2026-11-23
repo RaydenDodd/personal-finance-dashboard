@@ -8,7 +8,11 @@ import { INVESTMENT_WIDGETS } from './investment-widgets';
 const analytics = ref<unknown>({ selectedPortfolioIds: ['a'], holdings: [], metrics: {} });
 const pending = ref(false);
 const error = ref<unknown>(null);
-const queryCalls: { portfolioIds: { value: string[] }; benchmarks: { value: string[] } }[] = [];
+const queryCalls: {
+  portfolioIds: { value: string[] };
+  benchmarks: { value: string[] };
+  performanceThrough?: { value: string | undefined };
+}[] = [];
 const refetch = vi.fn();
 vi.mock('@/composable/data-queries/investment-analytics', () => ({
   useInvestmentAnalytics: (args: (typeof queryCalls)[number]) => {
@@ -238,5 +242,22 @@ it('follows the Dashboard month without persisting it into each widget configura
   await nextTick();
   expect(persist).not.toHaveBeenCalled();
   expect(widget.value.config?.dateRange).toBe('1Y');
+  wrapper.unmount();
+});
+
+it('does not send a future Dashboard month-end to the holding-performance endpoint', () => {
+  const date = new Date(),
+    year = date.getFullYear();
+  const period = ref({ from: new Date(year, 0, 1), to: new Date(year, 11, 31) });
+  const widget = ref<DashboardWidgetConfig>({ widgetId: 'investment-heatmap', instanceId: 'range-test', colSpan: 2 });
+  const wrapper = mount(InvestmentWidget, {
+    global: {
+      provide: { 'dashboard-widget-config': widget, 'dashboard-period': period },
+      stubs: { 'router-link': { template: '<a><slot/></a>' } },
+    },
+  });
+  const through = queryCalls.at(-1)?.performanceThrough?.value;
+  expect(through).toBeDefined();
+  expect(Date.parse(through!)).toBeLessThanOrEqual(Date.now());
   wrapper.unmount();
 });

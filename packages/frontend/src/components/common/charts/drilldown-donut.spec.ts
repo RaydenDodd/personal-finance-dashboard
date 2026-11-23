@@ -35,3 +35,21 @@ it('drills into nested pies, survives refreshed data, and returns one level at a
   await w.get('button').trigger('click');
   expect(chart().props('data')[0].name).toBe('Taxes');
 });
+
+it('keeps tiny constituents in an expandable group instead of erasing them with arc borders', async () => {
+  const data = Array.from({ length: 50 }, (_, i) => ({ id: String(i), name: 'Holding ' + i, amount: 50 - i }));
+  const w = mount(DrilldownDonut, {
+    props: { data, total: data.reduce((sum, n) => sum + n.amount, 0), label: 'ETF', showLegend: false },
+  });
+  const chart = () => w.findComponent({ name: 'ExpenseDonut' });
+  expect(chart().props('data')).toHaveLength(12);
+  expect(
+    chart()
+      .props('data')
+      .reduce((sum: number, n: { amount: number }) => sum + n.amount, 0),
+  ).toBe(1275);
+  chart().vm.$emit('category-click', { categoryId: '__other__' });
+  await w.vm.$nextTick();
+  expect(w.get('button').attributes('aria-label')).toBe('Back from Other holdings');
+  expect(chart().props('data')[0].name).toBe('Holding 11');
+});
