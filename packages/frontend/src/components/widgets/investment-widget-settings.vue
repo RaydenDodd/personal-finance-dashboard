@@ -221,9 +221,7 @@ const fieldClass = 'bg-background border-input min-h-9 w-full rounded-md border 
           <Button type="button" size="sm" variant="ghost" :disabled="saving" @click="emit('update:open', false)"
             >Cancel</Button
           >
-          <Button type="submit" size="sm" :disabled="saving || !!dateError">{{
-            saving ? 'Saving…' : 'Save settings'
-          }}</Button>
+          <Button type="submit" size="sm" :disabled="saving">{{ saving ? 'Saving…' : 'Save settings' }}</Button>
         </footer>
       </form>
     </PopoverContent>
