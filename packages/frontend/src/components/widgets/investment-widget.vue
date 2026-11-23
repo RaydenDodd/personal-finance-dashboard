@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { format, parseISO } from 'date-fns';
+import { computeTrendPeriods } from './cash-flow-widget/helpers';
 import { useResizeObserver } from '@vueuse/core';
 import { useDashboardPeriod } from './composables/use-dashboard-period';
 import { useModuleLayout } from './composables/use-module-layout';
@@ -53,7 +55,15 @@ const settings = computed(() =>
     ...(dashboardRange.value
       ? {
           dateRange: 'custom',
-          from: dashboardRange.value.from,
+          from: ['contributions', 'dividends'].includes(kind.value)
+            ? format(
+                computeTrendPeriods({
+                  from: parseISO(dashboardRange.value.from),
+                  to: parseISO(dashboardRange.value.through),
+                })[0].from,
+                'yyyy-MM-dd',
+              )
+            : dashboardRange.value.from,
           through: dashboardRange.value.through,
           aggregation: 'monthly',
           colorBy: 'custom',

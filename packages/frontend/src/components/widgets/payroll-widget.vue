@@ -42,7 +42,12 @@ const year = computed(() => {
   const current = Number(today().slice(0, 4));
   return config.value.config?.year === 'previous' ? current - 1 : current;
 });
-const from = computed(() => dashboardRange.value?.from ?? year.value + '-01-01');
+const from = computed(() => {
+  const selected = dashboardRange.value?.from;
+  return ['payroll-salary-history', 'payroll-growth'].includes(id.value)
+    ? (selected?.slice(0, 4) ?? String(year.value)) + '-01-01'
+    : (selected ?? year.value + '-01-01');
+});
 const through = computed(
   () => dashboardRange.value?.through ?? (year.value < Number(today().slice(0, 4)) ? year.value + '-12-31' : today()),
 );

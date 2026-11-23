@@ -970,15 +970,11 @@ function handleBarClick(_event: MouseEvent, d: PeriodWithChange, categoryId?: st
   // Skip if user is interacting with tooltip
   if (isTooltipInteracting.value) return;
 
-  if (!isTouchDevice.value) {
-    // Desktop: navigate directly
-    navigateToTransactions({
-      periodStart: d.periodStart,
-      periodEnd: d.periodEnd,
-      categoryId,
-    });
-  }
-  // Touch device: tooltip is already shown by mouseenter/touchstart
+  navigateToTransactions({
+    periodStart: d.periodStart,
+    periodEnd: d.periodEnd,
+    categoryId,
+  });
 }
 
 // Handle "View transactions" click from tooltip (touch devices)

@@ -23,7 +23,13 @@
       </slot>
     </CardHeader>
 
-    <CardContent :class="isDashboard ? 'flex min-h-0 flex-1 flex-col overflow-hidden' : 'h-full overflow-y-auto'">
+    <CardContent
+      :class="
+        isDashboard
+          ? 'flex min-h-0 flex-1 touch-pan-y flex-col overflow-y-auto overscroll-y-contain'
+          : 'h-full overflow-y-auto'
+      "
+    >
       <slot />
     </CardContent>
   </Card>
