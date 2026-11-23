@@ -1,5 +1,6 @@
 <script lang="ts" setup>
 import type { WidgetLayoutDefinition } from '@/components/widgets/widget-registry';
+import { useI18n } from 'vue-i18n';
 import { computed, ref } from 'vue';
 import { ScrollArea } from '@/components/lib/ui/scroll-area';
 import { PlusIcon } from '@lucide/vue';
@@ -8,11 +9,14 @@ const props = defineProps<{
   availableWidgets: WidgetLayoutDefinition[];
 }>();
 
+const { t } = useI18n();
 const open = ref(false),
   search = ref('');
 const filtered = computed(() =>
   props.availableWidgets.filter((w) =>
-    (w.name + ' ' + w.description).toLowerCase().includes(search.value.toLowerCase()),
+    (w.literalLabels ? w.name + ' ' + w.description : t(w.name) + ' ' + t(w.description))
+      .toLowerCase()
+      .includes(search.value.toLowerCase()),
   ),
 );
 const emit = defineEmits<{

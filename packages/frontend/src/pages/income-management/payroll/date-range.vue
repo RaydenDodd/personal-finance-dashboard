@@ -69,6 +69,10 @@ function apply() {
           size="sm"
           class="h-8 max-w-full gap-2 px-2 text-xs"
           :aria-label="'Choose ' + subject + ' date range'"
+          @click="
+            customFrom = model.from;
+            customThrough = model.through;
+          "
         >
           <span class="shrink-0">{{ presets.find((p) => p.id === model.preset)?.name ?? 'Custom' }}</span>
           <span class="text-muted-foreground truncate text-[10px]"
