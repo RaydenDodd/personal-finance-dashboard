@@ -72,7 +72,7 @@ function apply() {
         >
           <span class="shrink-0">{{ presets.find((p) => p.id === model.preset)?.name ?? 'Custom' }}</span>
           <span class="text-muted-foreground truncate text-[10px]"
-            ><time :datetime="model.from">{{ model.from }}</time> ?
+            ><time :datetime="model.from">{{ model.from }}</time> &ndash;
             <time :datetime="model.through">{{ model.through }}</time></span
           >
           <ChevronDownIcon class="size-3.5 shrink-0" />
@@ -105,7 +105,7 @@ function apply() {
                 @click="model = shiftPayrollRange(model, -1)"
                 ><ChevronLeftIcon class="size-4"
               /></Button>
-              <span class="text-muted-foreground text-[10px]">{{ model.from }} ? {{ model.through }}</span>
+              <span class="text-muted-foreground text-[10px]">{{ model.from }} &ndash; {{ model.through }}</span>
               <Button
                 size="icon"
                 variant="ghost"

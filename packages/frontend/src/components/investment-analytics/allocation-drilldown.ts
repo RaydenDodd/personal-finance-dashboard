@@ -25,7 +25,7 @@ export function allocationDrilldown(analytics: InvestmentAnalytics, mode: string
             ? {
                 children: e.contributions.map((c, i) => ({
                   id: c.portfolioId + ':' + (c.fundId ?? 'direct') + ':' + i,
-                  name: (c.fundSymbol ?? 'Direct') + ' ? ' + c.portfolioName,
+                  name: (c.fundSymbol ?? 'Direct') + ' / ' + c.portfolioName,
                   amount: Number(c.value),
                 })),
               }

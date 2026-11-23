@@ -180,7 +180,7 @@ const saveSettings = async (patch: Record<string, unknown>, close = false) => {
         "
         class="text-muted-foreground text-xs font-normal"
       >
-        ? current</span
+        &middot; current</span
       ></template
     >
     <template #action>
