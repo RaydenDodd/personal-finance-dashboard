@@ -5,7 +5,8 @@ import { Button } from '@/components/lib/ui/button';
 import WidgetWrapper from '@/components/widgets/components/widget-wrapper.vue';
 import ModuleBody from '@/components/widgets/components/module-body.vue';
 import { useModuleLayout } from '@/components/widgets/composables/use-module-layout';
-import { ChartPieIcon, WorkflowIcon } from '@lucide/vue';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/lib/ui/popover';
+import { SettingsIcon, ChartPieIcon, WorkflowIcon } from '@lucide/vue';
 import DrilldownDonut from '@/components/common/charts/drilldown-donut.vue';
 import MoneyFlowChart from '@/pages/analytics/subpages/cash-flow/components/money-flow-chart.vue';
 import { incomeAllocation, incomeBreakdown } from './income-allocation';
@@ -55,26 +56,32 @@ function toggle(id: string) {
   >
     <template #title>{{ part === 'breakdown' ? 'Income breakdown' : 'Income allocation' }}</template>
     <template v-if="part !== 'breakdown'" #action>
-      <div class="bg-muted/60 flex shrink-0 gap-0.5 rounded-lg p-0.5" role="group" aria-label="Allocation view">
-        <Button
-          size="icon-sm"
-          aria-label="Doughnut"
-          title="Doughnut"
-          :variant="view === 'donut' ? 'secondary' : 'ghost'"
-          :aria-pressed="view === 'donut'"
-          @click="view = 'donut'"
-          ><ChartPieIcon class="size-3.5"
-        /></Button>
-        <Button
-          size="icon-sm"
-          aria-label="Flow diagram"
-          title="Flow diagram"
-          :variant="view === 'flow' ? 'secondary' : 'ghost'"
-          :aria-pressed="view === 'flow'"
-          @click="view = 'flow'"
-          ><WorkflowIcon class="size-3.5"
-        /></Button>
-      </div>
+      <slot name="action" /><Popover
+        ><PopoverTrigger as-child
+          ><Button variant="ghost" size="icon-sm" aria-label="Income allocation settings"
+            ><SettingsIcon class="text-muted-foreground size-4" /></Button></PopoverTrigger
+        ><PopoverContent align="end" class="w-40"
+          ><div class="bg-muted/60 flex shrink-0 gap-0.5 rounded-lg p-0.5" role="group" aria-label="Allocation view">
+            <Button
+              size="icon-sm"
+              aria-label="Doughnut"
+              title="Doughnut"
+              :variant="view === 'donut' ? 'secondary' : 'ghost'"
+              :aria-pressed="view === 'donut'"
+              @click="view = 'donut'"
+              ><ChartPieIcon class="size-3.5"
+            /></Button>
+            <Button
+              size="icon-sm"
+              aria-label="Flow diagram"
+              title="Flow diagram"
+              :variant="view === 'flow' ? 'secondary' : 'ghost'"
+              :aria-pressed="view === 'flow'"
+              @click="view = 'flow'"
+              ><WorkflowIcon class="size-3.5"
+            /></Button>
+          </div> </PopoverContent
+      ></Popover>
     </template>
     <template v-if="allocation">
       <div v-if="part !== 'breakdown' && view === 'donut'" :class="bounded ? 'relative min-h-0 flex-1' : 'min-w-0'">
@@ -84,6 +91,7 @@ function toggle(id: string) {
           label="Income allocation"
           :height-class="bounded ? 'h-44' : 'h-60'"
           :compact="part === 'chart'"
+          :show-legend="false"
         />
       </div>
       <div

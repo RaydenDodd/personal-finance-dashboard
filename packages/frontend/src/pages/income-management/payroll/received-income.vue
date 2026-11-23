@@ -13,7 +13,7 @@ import { useChartTooltipPosition } from '@/composable/charts/use-chart-tooltip-p
 import { STACKED_CHART_STYLE, stackedSegmentAt } from '@/composable/charts/stacked-chart';
 import { nearestChartBucket } from '@/composable/charts/chart-hit-testing';
 import { useLocalStorage, useResizeObserver } from '@vueuse/core';
-import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
+import { computed, provide, nextTick, onMounted, reactive, ref, watch } from 'vue';
 import * as d3 from 'd3';
 import DateRange from './date-range.vue';
 import { payrollRange, payrollToday, type PayrollRange } from './date-range';
@@ -22,6 +22,8 @@ import { money, payrollCategories } from './format';
 import { payrollPeriodFieldUnavailable } from './completeness';
 import CategoryLegend from './category-legend.vue';
 import { useModuleLayout } from '@/components/widgets/composables/use-module-layout';
+const headerControls = ref<HTMLElement | null>(null);
+provide('widget-header-controls', headerControls);
 const { bounded } = useModuleLayout();
 const { dashboardRange } = useDashboardPeriod();
 const plotHeight = ref(260);
@@ -122,7 +124,7 @@ function render() {
     colors = getChartColors(),
     w = Math.max(200, width.value),
     h = bounded.value ? plotHeight.value : w < 500 ? 260 : 320,
-    m = { left: w < 400 ? 42 : 60, right: w < 400 ? 10 : 20, top: 18, bottom: 28 };
+    m = { left: w < 400 ? 38 : 44, right: w < 400 ? 10 : 20, top: 18, bottom: 28 };
   root.selectAll('*').remove();
   root.attr('viewBox', `0 0 ${w} ${h}`);
   if (!rows.value.length) return;
@@ -323,82 +325,84 @@ onMounted(() => nextTick(render));
 <template>
   <Card
     class="@container flex min-h-0 min-w-0 flex-col overflow-hidden"
-    :class="bounded ? 'h-full p-4' : 'p-5 sm:p-6'"
+    :class="bounded ? 'h-full px-4 py-2 sm:px-6 sm:py-3' : 'p-5 sm:p-6'"
     data-testid="payroll-received-income"
     ><header class="mb-2 flex shrink-0 items-center justify-between gap-2">
-      <div>
+      <div class="flex min-w-0 flex-wrap items-center gap-2">
         <h2 class="font-semibold">Received income</h2>
-        <p class="text-muted-foreground text-xs">Total compensation</p>
+        <span ref="headerControls" class="flex min-w-0 items-center gap-1" />
       </div>
-      <Popover
-        ><PopoverTrigger as-child
-          ><Button variant="ghost" size="icon" aria-label="Received income chart settings"
-            ><SettingsIcon class="size-4" /></Button></PopoverTrigger
-        ><PopoverContent align="end" class="w-80 space-y-4"
-          ><div>
-            <p class="mb-2 text-sm font-medium">Aggregation</p>
-            <div class="bg-muted flex rounded-lg p-1">
-              <Button
-                v-for="option in [
-                  { id: 'paycheck', label: 'Paycheck' },
-                  { id: 'monthly', label: 'Month' },
-                  { id: 'quarterly', label: 'Quarter' },
-                  { id: 'yearly', label: 'Year' },
-                ]"
-                :key="option.id"
-                size="sm"
-                :variant="aggregation === option.id ? 'secondary' : 'ghost'"
-                class="h-7 flex-1 px-2 text-xs"
-                @click="aggregation = option.id as typeof aggregation"
-                >{{ option.label }}</Button
-              >
+      <div class="flex shrink-0 items-center gap-1">
+        <slot name="action" /><Popover
+          ><PopoverTrigger as-child
+            ><Button variant="ghost" size="icon" aria-label="Received income chart settings"
+              ><SettingsIcon class="size-4" /></Button></PopoverTrigger
+          ><PopoverContent align="end" class="w-80 space-y-4"
+            ><div>
+              <p class="mb-2 text-sm font-medium">Aggregation</p>
+              <div class="bg-muted flex rounded-lg p-1">
+                <Button
+                  v-for="option in [
+                    { id: 'paycheck', label: 'Paycheck' },
+                    { id: 'monthly', label: 'Month' },
+                    { id: 'quarterly', label: 'Quarter' },
+                    { id: 'yearly', label: 'Year' },
+                  ]"
+                  :key="option.id"
+                  size="sm"
+                  :variant="aggregation === option.id ? 'secondary' : 'ghost'"
+                  class="h-7 flex-1 px-2 text-xs"
+                  @click="aggregation = option.id as typeof aggregation"
+                  >{{ option.label }}</Button
+                >
+              </div>
             </div>
-          </div>
-          <div>
-            <p class="mb-2 text-sm font-medium">Display</p>
-            <div class="bg-muted inline-flex rounded-lg p-1">
-              <Button
-                size="sm"
-                class="h-7 px-3 text-xs"
-                :variant="!percentage ? 'secondary' : 'ghost'"
-                @click="percentage = false"
-                >Dollars</Button
-              ><Button
-                size="sm"
-                class="h-7 px-3 text-xs"
-                :variant="percentage ? 'secondary' : 'ghost'"
-                @click="percentage = true"
-                >Percent</Button
-              >
+            <div>
+              <p class="mb-2 text-sm font-medium">Display</p>
+              <div class="bg-muted inline-flex rounded-lg p-1">
+                <Button
+                  size="sm"
+                  class="h-7 px-3 text-xs"
+                  :variant="!percentage ? 'secondary' : 'ghost'"
+                  @click="percentage = false"
+                  >Dollars</Button
+                ><Button
+                  size="sm"
+                  class="h-7 px-3 text-xs"
+                  :variant="percentage ? 'secondary' : 'ghost'"
+                  @click="percentage = true"
+                  >Percent</Button
+                >
+              </div>
             </div>
-          </div>
-          <label class="block space-y-2 text-sm"
-            >Employer<select
-              v-model="employmentId"
-              aria-label="Received income employer"
-              class="border-input bg-background h-9 w-full rounded-md border px-2 text-sm"
+            <label class="block space-y-2 text-sm"
+              >Employer<select
+                v-model="employmentId"
+                aria-label="Received income employer"
+                class="border-input bg-background h-9 w-full rounded-md border px-2 text-sm"
+              >
+                <option value="all">All employers</option>
+                <option v-for="employment in data?.employments" :key="employment.id" :value="employment.id">
+                  {{ employment.employerName }} / {{ employment.jobTitle || 'Employment' }}
+                </option>
+              </select></label
             >
-              <option value="all">All employers</option>
-              <option v-for="employment in data?.employments" :key="employment.id" :value="employment.id">
-                {{ employment.employerName }} / {{ employment.jobTitle || 'Employment' }}
-              </option>
-            </select></label
-          >
-          <div v-if="compactControls" class="space-y-2">
-            <p class="text-sm font-medium">Categories</p>
-            <CategoryLegend
-              :categories="categories"
-              :hidden="hidden"
-              :total-compensation="totalCompensation"
-              @toggle="toggle"
-            />
-          </div>
-          <p class="text-muted-foreground text-xs">
-            Employer retirement is included. Hover a segment for its amount and share; hover a dot for total
-            compensation.
-          </p></PopoverContent
-        ></Popover
-      >
+            <div v-if="compactControls" class="space-y-2">
+              <p class="text-sm font-medium">Categories</p>
+              <CategoryLegend
+                :categories="categories"
+                :hidden="hidden"
+                :total-compensation="totalCompensation"
+                @toggle="toggle"
+              />
+            </div>
+            <p class="text-muted-foreground text-xs">
+              Employer retirement is included. Hover a segment for its amount and share; hover a dot for total
+              compensation.
+            </p></PopoverContent
+          ></Popover
+        >
+      </div>
     </header>
     <DateRange
       v-model="range"

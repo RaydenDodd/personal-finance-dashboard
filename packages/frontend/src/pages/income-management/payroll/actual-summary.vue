@@ -48,13 +48,14 @@ const categories = computed(() =>
 </script>
 <template>
   <WidgetWrapper v-if="dashboardRange" data-testid="actual-income-donut"
-    ><template #title>Actual income</template
+    ><template #title>Actual income</template><template #action><slot name="action" /></template
     ><DrilldownDonut
       :data="allocation"
       :total="allocation.reduce((sum, n) => sum + n.amount, 0)"
       label="Actual income"
       :height-class="bounded ? 'h-44' : 'h-60'"
       compact
+      :show-legend="false"
   /></WidgetWrapper>
   <Card
     v-else

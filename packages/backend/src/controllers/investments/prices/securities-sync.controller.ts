@@ -56,6 +56,7 @@ function createPricesSyncController(ownerScoped = false) {
     async ({ body, user }) => {
       let scope: string[] | undefined;
       const requiredFrom = new Map<string, string>();
+      let benchmarkFrom: string | undefined;
       let discovery:
         | { added: { id: string; symbol: string | null }[]; unresolved: { symbol: string; reason: string }[] }
         | undefined;
@@ -83,6 +84,13 @@ function createPricesSyncController(ownerScoped = false) {
             attributes: ['id'],
           });
           const portfolioIds = portfolios.map((p) => p.id);
+          if (portfolioIds.length && body.benchmarkSymbols?.length) {
+            const [first] = await sqlRows<{ date: string | null }>(
+              'SELECT min(date)::text AS date FROM "InvestmentDailyAccountValues" WHERE "portfolioId" IN (:ids) AND "knownValue" IS NOT NULL',
+              { ids: portfolioIds },
+            );
+            benchmarkFrom = first?.date ?? undefined;
+          }
           const [past, records] = await Promise.all([
             InvestmentTransaction.findAll({
               where: { portfolioId: { [Op.in]: portfolioIds } },
@@ -142,8 +150,12 @@ function createPricesSyncController(ownerScoped = false) {
         const matches = found.filter(
           (s) => s.symbol === symbol && s.currencyCode === 'USD' && s.assetClass === 'stocks',
         );
-        if (matches.length === 1)
-          ids.add((await addSecurityFromSearch({ searchResult: matches[0]!, skipPriceFetch: true })).security.id);
+        if (matches.length === 1) {
+          const id = (await addSecurityFromSearch({ searchResult: matches[0]!, skipPriceFetch: true })).security.id;
+          ids.add(id);
+          // Benchmarks need the same evidenced time span as the account comparison.
+          if (benchmarkFrom) requiredFrom.set(id, benchmarkFrom);
+        }
       }
       const currentOptions = { force: true, ...(ownerScoped && { securityIds: [...ids] }) };
       if (body?.historical) {

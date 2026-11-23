@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import WidgetHeaderControls from '@/components/widgets/components/widget-header-controls.vue';
 import { useDashboardPeriod } from '@/components/widgets/composables/use-dashboard-period';
 import { computed, inject, ref, watch } from 'vue';
 import { Button } from '@/components/lib/ui/button';
@@ -245,14 +246,23 @@ const recordedPortfolios = computed(() =>
 );
 const priceRiskFallback = computed(
   () =>
-    !allHistory.value.some((row) => row.returnPercent !== null) && Boolean(props.analytics.priceRisk?.points.length),
+    !(props.kind === 'benchmark' && props.analytics.accountHistory) &&
+    !allHistory.value.some((row) => row.returnPercent !== null) &&
+    Boolean(props.analytics.priceRisk?.points.length),
 );
 const comparablePortfolioPoints = computed(() =>
-  priceRiskFallback.value
-    ? withinRange(props.analytics.priceRisk?.points ?? [], range.value.from, range.value.through)
-    : allHistory.value
-        .filter((row) => row.returnPercent !== null)
-        .map((row) => ({ date: row.date, returnPercent: row.returnPercent! })),
+  props.kind === 'benchmark' && props.analytics.accountHistory
+    ? props.analytics.accountHistory.dates.flatMap((date, i) => {
+        const value = props.analytics.accountHistory!.periodReturnPercent?.[i];
+        return value == null || date < range.value.from || date > range.value.through
+          ? []
+          : [{ date, returnPercent: value }];
+      })
+    : priceRiskFallback.value
+      ? withinRange(props.analytics.priceRisk?.points ?? [], range.value.from, range.value.through)
+      : allHistory.value
+          .filter((row) => row.returnPercent !== null)
+          .map((row) => ({ date: row.date, returnPercent: row.returnPercent! })),
 );
 const selectedIncome = computed(() =>
   props.analytics.dividends.filter(
@@ -406,7 +416,11 @@ const chartSeries = computed<InvestmentChartSeries[]>(() => {
           color: colors[i % colors.length]!,
         }))
       : [{ key: 'gain', label: gainLabel.value, color: colors[0]! }];
-  if (props.analytics.accountHistory && !recordedAccountFallback.value && props.kind !== 'portfolio-comparison')
+  if (
+    props.analytics.accountHistory &&
+    !recordedAccountFallback.value &&
+    ['performance', 'value-capital'].includes(props.kind)
+  )
     return [
       {
         key: 'marketValue',
@@ -455,7 +469,11 @@ const chartSeries = computed<InvestmentChartSeries[]>(() => {
     return [
       {
         key: 'portfolio',
-        label: priceRiskFallback.value ? 'Current holdings · price only' : 'Selected portfolio · cash-flow adjusted',
+        label: props.analytics.accountHistory
+          ? 'Portfolio - estimated return'
+          : priceRiskFallback.value
+            ? 'Current holdings · price only'
+            : 'Selected portfolio · cash-flow adjusted',
         color: colors[0]!,
       },
       ...props.analytics.benchmarks.map((row, index) => ({
@@ -518,7 +536,11 @@ const chartPoints = computed<InvestmentChartPoint[]>(() => {
       values: { gain: period ? null : chartNumber(row.cumulativeGain) },
     }));
   }
-  if (props.analytics.accountHistory && !recordedAccountFallback.value && props.kind !== 'portfolio-comparison')
+  if (
+    props.analytics.accountHistory &&
+    !recordedAccountFallback.value &&
+    ['performance', 'value-capital'].includes(props.kind)
+  )
     return allHistory.value.map((row) => ({
       date: row.date,
       values: {
@@ -884,7 +906,10 @@ const health = computed(() =>
       concentration.
     </p>
     <template v-if="showChart">
-      <HistoryCoverage v-if="analytics.accountHistory && !compact" :history="analytics.accountHistory" />
+      <HistoryCoverage
+        v-if="analytics.accountHistory && !compact && showInformation"
+        :history="analytics.accountHistory"
+      />
       <DateRange v-model="range" :earliest="earliest" :compact="compact" subject="investment">
         <template #actions
           ><Popover v-if="kind === 'performance'"
@@ -1177,8 +1202,8 @@ const health = computed(() =>
       </p>
     </template>
     <template v-if="['allocation', 'sector', 'geography'].includes(kind)">
-      <label v-if="!compact" class="text-muted-foreground flex flex-wrap items-center gap-2 text-xs"
-        >Allocation by<select
+      <WidgetHeaderControls
+        ><select
           :value="allocationMode"
           aria-label="Investment allocation mode"
           class="bg-background max-w-full rounded-md border px-2 py-1.5 text-xs"
@@ -1192,7 +1217,7 @@ const health = computed(() =>
           <option v-for="[id, label] in INVESTMENT_ALLOCATION_MODES" :key="id" :value="id">
             {{ label }}
           </option>
-        </select></label
+        </select></WidgetHeaderControls
       >
       <DrilldownDonut
         :data="allocationTree"
@@ -1200,6 +1225,7 @@ const health = computed(() =>
         :label="allocationTotalLabel"
         :height-class="compact ? 'h-56' : 'h-64'"
         :compact="compact"
+        :show-legend="false"
       />
       <p
         v-show="inlineInformation && showInformation"

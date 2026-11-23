@@ -405,3 +405,30 @@ it('keeps dollar and percent performance on the same date-selected account histo
   await wrapper.setProps({ settings: { dateRange: 'MAX', unit: 'gains' } });
   expect(wrapper.findComponent({ name: 'SeriesChart' }).props('points').at(-1).values.gain).toBe(-50);
 });
+
+it('uses the existing account-return history instead of clipping benchmarks to today?s youngest holding', () => {
+  const analytics = base();
+  analytics.priceRisk = {
+    points: [{ date: '2026-06-26', returnPercent: '0', drawdown: '0' }],
+  } as InvestmentAnalytics['priceRisk'];
+  analytics.benchmarks = [
+    {
+      id: 'spy',
+      symbol: 'SPY',
+      returnType: 'price-only',
+      points: [
+        { date: '2019-12-13', returnPercent: '0' },
+        { date: '2026-06-26', returnPercent: '100' },
+      ],
+    },
+  ] as InvestmentAnalytics['benchmarks'];
+  analytics.accountHistory = { dates: ['2019-12-13', '2026-06-26'], periodReturnPercent: ['0', '10'] } as NonNullable<
+    InvestmentAnalytics['accountHistory']
+  >;
+  analytics.coverage.historyStart = '2019-12-13';
+  const wrapper = panel('benchmark', analytics);
+  const points = wrapper.findComponent({ name: 'SeriesChart' }).props('points');
+  expect(points[0].date).toBe('2019-12-13');
+  expect(points[0].values.portfolio).toBe(0);
+  expect(points.at(-1).values.portfolio).toBeCloseTo(10);
+});

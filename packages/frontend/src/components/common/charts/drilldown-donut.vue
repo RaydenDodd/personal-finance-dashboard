@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useModuleLayout } from '@/components/widgets/composables/use-module-layout';
-import { computed, ref, watch } from 'vue';
+import { computed, inject, ref, watch, type Ref } from 'vue';
 import { ChevronLeftIcon } from '@lucide/vue';
 import { Button } from '@/components/lib/ui/button';
 import ExpenseDonut from '@/components/widgets/expenses-structure/donut-chart.vue';
@@ -25,6 +25,13 @@ const props = withDefaults(
   { heightClass: 'h-64', showLegend: true },
 );
 const { bounded } = useModuleLayout();
+const incomeHeight = inject<Ref<number> | null>('income-chart-height', null);
+const investmentHeight = inject<Ref<number> | null>('investment-chart-height', null);
+const plotHeight = computed(() =>
+  bounded.value && !props.showLegend
+    ? Math.max(140, (incomeHeight?.value ?? (investmentHeight?.value ?? 248) + 40) - (current.value ? 32 : 0))
+    : undefined,
+);
 const path = ref<string[]>([]);
 // Tiny 2px-bordered arcs disappear on a phone. Keep them accessible in a nested pie.
 function levelRows(nodes: DonutNode[]): DonutNode[] {
@@ -93,6 +100,7 @@ const money = (n: number) => new Intl.NumberFormat(undefined, { style: 'currency
       :total-label="current?.name ?? label"
       :chart-label="label + ' doughnut'"
       :height-class="heightClass"
+      :style="plotHeight ? { height: plotHeight + 'px' } : undefined"
       selection-mode="highlight"
       show-percentages
       @category-click="select($event.categoryId)"

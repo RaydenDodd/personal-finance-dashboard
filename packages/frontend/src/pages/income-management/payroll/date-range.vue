@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import WidgetHeaderControls from '@/components/widgets/components/widget-header-controls.vue';
 import { Button } from '@/components/lib/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/lib/ui/popover';
 import { ScrollArea } from '@/components/lib/ui/scroll-area';
@@ -56,96 +57,98 @@ function apply() {
 }
 </script>
 <template>
-  <div
-    v-if="!dashboardRange"
-    class="flex min-w-0 flex-wrap items-center gap-1.5"
-    :data-testid="subject + '-date-range'"
-    data-chart-controls
-  >
-    <Popover v-model:open="open">
-      <PopoverTrigger as-child>
-        <Button
-          variant="outline"
-          size="sm"
-          class="h-8 max-w-full gap-2 px-2 text-xs"
-          :aria-label="'Choose ' + subject + ' date range'"
-          @click="
-            customFrom = model.from;
-            customThrough = model.through;
-          "
-        >
-          <span class="shrink-0">{{ presets.find((p) => p.id === model.preset)?.name ?? 'Custom' }}</span>
-          <span class="text-muted-foreground truncate text-[10px]"
-            ><time :datetime="model.from">{{ model.from }}</time> &ndash;
-            <time :datetime="model.through">{{ model.through }}</time></span
+  <WidgetHeaderControls>
+    <div
+      v-if="!dashboardRange"
+      class="flex min-w-0 flex-wrap items-center gap-1.5"
+      :data-testid="subject + '-date-range'"
+      data-chart-controls
+    >
+      <Popover v-model:open="open">
+        <PopoverTrigger as-child>
+          <Button
+            variant="outline"
+            size="sm"
+            class="h-8 max-w-full gap-2 px-2 text-xs"
+            :aria-label="'Choose ' + subject + ' date range'"
+            @click="
+              customFrom = model.from;
+              customThrough = model.through;
+            "
           >
-          <ChevronDownIcon class="size-3.5 shrink-0" />
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent class="w-[min(20rem,calc(100vw-1.5rem))] p-0" align="start" :collision-padding="8">
-        <ScrollArea
-          class="max-h-[min(80dvh,var(--reka-popover-content-available-height))]"
-          viewport-class="max-h-[min(75dvh,32rem)]"
-        >
-          <div class="space-y-3 p-3">
-            <div class="grid grid-cols-3 gap-1" role="group" aria-label="Date presets">
-              <Button
-                v-for="preset in presets"
-                :key="preset.id"
-                size="sm"
-                :variant="model.preset === preset.id ? 'secondary' : 'ghost'"
-                :aria-pressed="model.preset === preset.id"
-                @click="choose(preset.id)"
-                >{{ preset.name }}</Button
-              >
-            </div>
-            <div class="flex items-center justify-between border-y py-1">
-              <Button
-                size="icon"
-                variant="ghost"
-                class="size-8"
-                :disabled="model.preset === 'all'"
-                :aria-label="'Previous ' + subject + ' period'"
-                @click="model = shiftPayrollRange(model, -1)"
-                ><ChevronLeftIcon class="size-4"
-              /></Button>
-              <span class="text-muted-foreground text-[10px]">{{ model.from }} &ndash; {{ model.through }}</span>
-              <Button
-                size="icon"
-                variant="ghost"
-                class="size-8"
-                :disabled="forwardDisabled || model.preset === 'all'"
-                :aria-label="'Next ' + subject + ' period'"
-                @click="model = shiftPayrollRange(model, 1)"
-                ><ChevronRightIcon class="size-4"
-              /></Button>
-            </div>
-            <form class="space-y-3" @submit.prevent="apply">
-              <div class="grid grid-cols-2 gap-2">
-                <label class="min-w-0 text-xs"
-                  >From<input
-                    v-model="customFrom"
-                    type="date"
-                    required
-                    :max="payrollToday()"
-                    class="border-input bg-background mt-1 h-9 w-full min-w-0 rounded-md border px-1 text-xs"
-                /></label>
-                <label class="min-w-0 text-xs"
-                  >Through<input
-                    v-model="customThrough"
-                    type="date"
-                    required
-                    :min="customFrom"
-                    :max="payrollToday()"
-                    class="border-input bg-background mt-1 h-9 w-full min-w-0 rounded-md border px-1 text-xs"
-                /></label>
+            <span class="shrink-0">{{ presets.find((p) => p.id === model.preset)?.name ?? 'Custom' }}</span>
+            <span class="text-muted-foreground hidden truncate text-[10px] sm:inline"
+              ><time :datetime="model.from">{{ model.from }}</time> &ndash;
+              <time :datetime="model.through">{{ model.through }}</time></span
+            >
+            <ChevronDownIcon class="size-3.5 shrink-0" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent class="w-[min(20rem,calc(100vw-1.5rem))] p-0" align="start" :collision-padding="8">
+          <ScrollArea
+            class="max-h-[min(80dvh,var(--reka-popover-content-available-height))]"
+            viewport-class="max-h-[min(75dvh,32rem)]"
+          >
+            <div class="space-y-3 p-3">
+              <div class="grid grid-cols-3 gap-1" role="group" aria-label="Date presets">
+                <Button
+                  v-for="preset in presets"
+                  :key="preset.id"
+                  size="sm"
+                  :variant="model.preset === preset.id ? 'secondary' : 'ghost'"
+                  :aria-pressed="model.preset === preset.id"
+                  @click="choose(preset.id)"
+                  >{{ preset.name }}</Button
+                >
               </div>
-              <Button size="sm" type="submit">Apply</Button>
-            </form>
-          </div>
-        </ScrollArea>
-      </PopoverContent>
-    </Popover>
-    <slot name="actions" />
-  </div>
+              <div class="flex items-center justify-between border-y py-1">
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  class="size-8"
+                  :disabled="model.preset === 'all'"
+                  :aria-label="'Previous ' + subject + ' period'"
+                  @click="model = shiftPayrollRange(model, -1)"
+                  ><ChevronLeftIcon class="size-4"
+                /></Button>
+                <span class="text-muted-foreground text-[10px]">{{ model.from }} &ndash; {{ model.through }}</span>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  class="size-8"
+                  :disabled="forwardDisabled || model.preset === 'all'"
+                  :aria-label="'Next ' + subject + ' period'"
+                  @click="model = shiftPayrollRange(model, 1)"
+                  ><ChevronRightIcon class="size-4"
+                /></Button>
+              </div>
+              <form class="space-y-3" @submit.prevent="apply">
+                <div class="grid grid-cols-2 gap-2">
+                  <label class="min-w-0 text-xs"
+                    >From<input
+                      v-model="customFrom"
+                      type="date"
+                      required
+                      :max="payrollToday()"
+                      class="border-input bg-background mt-1 h-9 w-full min-w-0 rounded-md border px-1 text-xs"
+                  /></label>
+                  <label class="min-w-0 text-xs"
+                    >Through<input
+                      v-model="customThrough"
+                      type="date"
+                      required
+                      :min="customFrom"
+                      :max="payrollToday()"
+                      class="border-input bg-background mt-1 h-9 w-full min-w-0 rounded-md border px-1 text-xs"
+                  /></label>
+                </div>
+                <Button size="sm" type="submit">Apply</Button>
+              </form>
+            </div>
+          </ScrollArea>
+        </PopoverContent>
+      </Popover>
+      <slot name="actions" />
+    </div>
+  </WidgetHeaderControls>
 </template>

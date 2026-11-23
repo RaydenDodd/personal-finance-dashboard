@@ -17,18 +17,21 @@ import { formatAxisCurrency } from '@/composable/charts/format-axis-currency';
 import { useChartTooltipPosition } from '@/composable/charts/use-chart-tooltip-position';
 import { nearestChartPoint } from '@/composable/charts/chart-hit-testing';
 import { useLocalStorage, useResizeObserver } from '@vueuse/core';
-import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
+import { computed, provide, nextTick, onMounted, reactive, ref, watch } from 'vue';
 import * as d3 from 'd3';
 import DateRange from './date-range.vue';
 import { payrollRange, payrollToday, type PayrollRange } from './date-range';
 import { usePayroll } from './use-payroll';
 import { money } from './format';
 import { useModuleLayout } from '@/components/widgets/composables/use-module-layout';
+const headerControls = ref<HTMLElement | null>(null);
+provide('widget-header-controls', headerControls);
 const { bounded } = useModuleLayout();
 const { dashboardRange } = useDashboardPeriod();
 const plotHeight = ref(250);
-const props = withDefaults(defineProps<{ data?: PayrollDashboard; settingsKey?: string }>(), {
+const props = withDefaults(defineProps<{ data?: PayrollDashboard; settingsKey?: string; title?: string }>(), {
   settingsKey: 'payroll:salary-history',
+  title: 'Salary history',
 });
 const savedRange = useLocalStorage<PayrollRange>(props.settingsKey + ':range', payrollRange('all'));
 const localRange = ref(savedRange.value.preset === 'custom' ? savedRange.value : payrollRange(savedRange.value.preset));
@@ -80,7 +83,7 @@ function render() {
     root = d3.select(svgRef.value),
     w = Math.max(200, width.value),
     h = bounded.value ? plotHeight.value : w < 500 ? 250 : 300,
-    m = { left: w < 400 ? 42 : 58, right: w < 400 ? 10 : 18, top: 26, bottom: 32 };
+    m = { left: w < 400 ? 38 : 44, right: w < 400 ? 10 : 18, top: 26, bottom: 32 };
   root.selectAll('*').remove();
   root.attr('viewBox', `0 0 ${w} ${h}`);
   if (!allEvents.value.length) return;
@@ -267,11 +270,12 @@ onMounted(() => nextTick(render));
 <template>
   <Card
     class="@container flex min-h-0 min-w-0 flex-col overflow-hidden"
-    :class="bounded ? 'h-full p-4' : 'p-5 sm:p-6'"
+    :class="bounded ? 'h-full px-4 py-2 sm:px-6 sm:py-3' : 'p-5 sm:p-6'"
     data-testid="payroll-salary-history"
     ><header class="mb-2 flex shrink-0 items-center justify-between gap-2">
       <div class="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5">
-        <h2 class="font-semibold">Salary history</h2>
+        <h2 class="font-semibold">{{ title }}</h2>
+        <span ref="headerControls" class="flex min-w-0 items-center gap-1" />
         <span
           v-if="data?.summary.salaryGrowthPercent != null"
           data-testid="salary-growth-badge"
@@ -290,28 +294,30 @@ onMounted(() => nextTick(render));
           <span :class="width < 640 && 'sr-only'">salary growth</span>
         </span>
       </div>
-      <Popover
-        ><PopoverTrigger as-child
-          ><Button variant="ghost" size="icon" aria-label="Salary chart settings"
-            ><SettingsIcon class="size-4" /></Button></PopoverTrigger
-        ><PopoverContent align="end" class="w-72"
-          ><label class="block space-y-2 text-sm"
-            >Employer<select
-              v-model="employmentId"
-              aria-label="Salary employer"
-              class="border-input bg-background h-9 w-full rounded-md border px-2 text-sm"
+      <div class="flex shrink-0 items-center gap-1">
+        <slot name="action" /><Popover
+          ><PopoverTrigger as-child
+            ><Button variant="ghost" size="icon" aria-label="Salary chart settings"
+              ><SettingsIcon class="size-4" /></Button></PopoverTrigger
+          ><PopoverContent align="end" class="w-72"
+            ><label class="block space-y-2 text-sm"
+              >Employer<select
+                v-model="employmentId"
+                aria-label="Salary employer"
+                class="border-input bg-background h-9 w-full rounded-md border px-2 text-sm"
+              >
+                <option value="all">All employers</option>
+                <option v-for="employment in data?.employments" :key="employment.id" :value="employment.id">
+                  {{ employment.employerName }} / {{ employment.jobTitle || 'Employment' }}
+                </option>
+              </select></label
             >
-              <option value="all">All employers</option>
-              <option v-for="employment in data?.employments" :key="employment.id" :value="employment.id">
-                {{ employment.employerName }} / {{ employment.jobTitle || 'Employment' }}
-              </option>
-            </select></label
-          >
-          <p class="text-muted-foreground mt-3 text-xs">
-            Base salary uses regular pay rates. Event dates are first observed unless verified.
-          </p></PopoverContent
-        ></Popover
-      >
+            <p class="text-muted-foreground mt-3 text-xs">
+              Base salary uses regular pay rates. Event dates are first observed unless verified.
+            </p></PopoverContent
+          ></Popover
+        >
+      </div>
     </header>
     <DateRange v-model="range" :earliest="earliest" :compact="bounded" class="mb-2 shrink-0" />
     <div v-if="query.isLoading.value && !data" class="bg-muted h-72 animate-pulse rounded-md" />

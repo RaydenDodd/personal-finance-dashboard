@@ -8,10 +8,11 @@
     <CardHeader :class="isDashboard ? 'sm:py-3' : ''">
       <slot name="header">
         <div class="grid grid-cols-[minmax(0,1fr)_max-content] items-center justify-between gap-1">
-          <div class="flex min-w-0 items-center gap-2">
+          <div class="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
             <h3 class="min-w-0 font-semibold tracking-tight">
               <slot name="title" />
             </h3>
+            <div ref="headerControls" class="flex min-w-0 flex-wrap items-center gap-1" data-widget-header-controls />
             <Loader2Icon v-if="isFetching" class="text-muted-foreground size-4 shrink-0 animate-spin" />
           </div>
 
@@ -32,9 +33,11 @@
 import { Card, CardContent, CardHeader } from '@/components/lib/ui/card';
 import { cn } from '@/lib/utils';
 import { Loader2Icon } from '@lucide/vue';
-import { inject } from 'vue';
+import { inject, provide, ref } from 'vue';
 import { useModuleLayout } from '../composables/use-module-layout';
 const { bounded } = useModuleLayout();
+const headerControls = ref<HTMLElement | null>(null);
+provide('widget-header-controls', headerControls);
 
 withDefaults(
   defineProps<{

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useResizeObserver } from '@vueuse/core';
 import { useDashboardPeriod } from './composables/use-dashboard-period';
 import { useModuleLayout } from './composables/use-module-layout';
 import type { DashboardWidgetConfig } from '@/api/user-settings';
@@ -30,9 +31,16 @@ const definition = computed(() => INVESTMENT_WIDGET_DEFINITIONS[widget.value.wid
 const optimisticSettings = ref<Record<string, unknown>>({});
 const pageSettings = inject<Ref<Record<string, unknown>> | null>('investment-page-settings', null);
 const fullPage = inject('investment-full-page', false);
+const bodyRef = ref<InstanceType<typeof ScrollArea> | HTMLDivElement | null>(null);
+const availableHeight = ref(0);
+useResizeObserver(bodyRef, (entries) => {
+  if (bounded.value) availableHeight.value = entries[0]?.contentRect.height ?? 0;
+});
 provide(
   'investment-chart-height',
   computed(() => {
+    if (bounded.value && availableHeight.value > 100 && kind.value !== 'heatmap')
+      return Math.max(140, availableHeight.value - (kind.value === 'performance' ? 78 : 46));
     const base = kind.value === 'heatmap' ? (fullPage ? 380 : 340) : fullPage ? 288 : 208;
     return base + Math.max(0, (fullPage || bounded.value ? (widget.value.rowSpan ?? 1) : 1) - 1) * 180;
   }),
@@ -86,12 +94,18 @@ const broad = useInvestmentAnalytics({
 });
 const narrow = useInvestmentHistory({
   portfolioIds,
-  enabled: focusedHistory,
-  includeCapital: () => ['performance', 'value-capital'].includes(kind.value),
+  enabled: () => focusedHistory.value || kind.value === 'benchmark',
+  includeCapital: () => ['performance', 'value-capital', 'benchmark'].includes(kind.value),
   gainFrom: () => investmentRange(settings.value, '1900-01-01').from,
   includeEvents: () => Boolean(settings.value.showEvents),
 });
-const data = computed(() => (focusedHistory.value ? narrow.data.value : broad.data.value));
+const data = computed(() =>
+  focusedHistory.value
+    ? narrow.data.value
+    : kind.value === 'benchmark' && broad.data.value && narrow.data.value?.accountHistory
+      ? { ...broad.data.value, accountHistory: narrow.data.value.accountHistory }
+      : broad.data.value,
+);
 const isPending = computed(() => (focusedHistory.value ? narrow.isPending.value : broad.isPending.value));
 const isFetching = computed(() => (focusedHistory.value ? narrow.isFetching.value : broad.isFetching.value));
 const error = computed(() => (focusedHistory.value ? narrow.error.value : broad.error.value));
@@ -208,9 +222,10 @@ const saveSettings = async (patch: Record<string, unknown>, close = false) => {
       />
     </template>
     <component
+      ref="bodyRef"
       :is="bounded ? ScrollArea : 'div'"
       :class="bounded ? 'min-h-0 min-w-0 flex-1' : 'min-w-0'"
-      viewport-class="[&>div]:!block"
+      viewport-class="pr-2 [&>div]:!block"
       :data-investment-instance="widget.instanceId ?? widget.widgetId"
     >
       <LoadingState v-if="isPending" />

@@ -12,9 +12,9 @@ import { getPayroll } from '@/api/payroll';
 import { getIncomeDashboard } from '@/api/income-management';
 import type { DashboardWidgetConfig } from '@/api/user-settings';
 import { Button } from '@/components/lib/ui/button';
-import { ArrowUpRightIcon } from '@lucide/vue';
+import PayrollWidgetActions from './payroll-widget-actions.vue';
 import { useQuery } from '@tanstack/vue-query';
-import { computed, inject, type Ref } from 'vue';
+import { computed, inject, provide, type Ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { calculateIncomePlan } from '@bt/shared/finance-income';
 import ActualSummary from '@/pages/income-management/payroll/actual-summary.vue';
@@ -31,6 +31,10 @@ const { dashboardRange } = useDashboardPeriod();
 const config = inject<Ref<DashboardWidgetConfig>>('dashboard-widget-config')!;
 const router = useRouter();
 const id = computed(() => config.value.widgetId);
+provide(
+  'income-chart-height',
+  computed(() => 312 + Math.max(0, (config.value.rowSpan ?? 1) - 1) * 400),
+);
 const key = computed(() => 'dashboard-payroll-' + (config.value.instanceId ?? id.value));
 const projected = computed(() => id.value.startsWith('projected-income'));
 const today = () => new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
@@ -103,16 +107,6 @@ const detail = computed(
 
 <template>
   <div class="flex min-h-0 min-w-0 flex-col md:h-full" :data-payroll-widget="id">
-    <div class="flex h-7 shrink-0 justify-end">
-      <Button
-        as-child
-        variant="ghost"
-        size="icon-sm"
-        :aria-label="projected ? 'Open Projected Income' : 'Open Actual Income'"
-        ><router-link :to="projected ? '/finances/income/projected' : '/finances/income/actual'"
-          ><ArrowUpRightIcon class="text-muted-foreground size-4" /></router-link
-      ></Button>
-    </div>
     <div class="min-h-0 flex-1">
       <template v-if="projected">
         <LoadingState v-if="planPending" />
@@ -125,7 +119,8 @@ const detail = computed(
             :divisor="divisor"
             :period-label="periodLabel"
             @edit="router.push({ path: '/finances/income/projected/edit', query: { plan: plan.id } })"
-          />
+            ><template #action><PayrollWidgetActions projected /></template
+          ></ProjectedSummary>
           <IncomeAllocationView
             v-else
             :result="result"
@@ -134,7 +129,8 @@ const detail = computed(
             :period-label="periodLabel"
             part="chart"
             :view="config.config?.view === 'flow' ? 'flow' : 'donut'"
-          />
+            ><template #action><PayrollWidgetActions projected :settings="false" /></template
+          ></IncomeAllocationView>
         </template>
         <div v-else class="bg-card rounded-xl border p-5 text-sm">
           Set up your projected income first.<Button as-child variant="link"
@@ -146,10 +142,22 @@ const detail = computed(
         <LoadingState v-if="isPending" />
         <ErrorState v-else-if="isError" message="Actual payroll could not be loaded." @retry="refetch()" />
         <template v-else-if="data">
-          <ActualSummary v-if="id === 'payroll-summary'" :data="data" :from="from" :through="through" />
-          <SalaryHistory v-else-if="id === 'payroll-salary-history'" :settings-key="key" :data="data" />
-          <ReceivedIncome v-else-if="id === 'payroll-received-income'" :settings-key="key" :data="data" />
-          <DetailSummary v-else :data="data" :kind="detail" :from="from" :through="through" />
+          <ActualSummary v-if="id === 'payroll-summary'" :data="data" :from="from" :through="through"
+            ><template #action><PayrollWidgetActions /></template
+          ></ActualSummary>
+          <SalaryHistory
+            v-else-if="['payroll-salary-history', 'payroll-growth'].includes(id)"
+            :title="id === 'payroll-growth' ? 'Salary growth' : 'Salary history'"
+            :settings-key="key"
+            :data="data"
+            ><template #action><PayrollWidgetActions :settings="false" /></template
+          ></SalaryHistory>
+          <ReceivedIncome v-else-if="id === 'payroll-received-income'" :settings-key="key" :data="data"
+            ><template #action><PayrollWidgetActions :settings="false" /></template
+          ></ReceivedIncome>
+          <DetailSummary v-else :data="data" :kind="detail" :from="from" :through="through"
+            ><template #action><PayrollWidgetActions /></template
+          ></DetailSummary>
         </template>
       </template>
     </div>

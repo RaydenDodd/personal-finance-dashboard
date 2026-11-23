@@ -23,9 +23,15 @@ defineEmits<{ edit: [] }>();
     class="@container flex min-h-0 min-w-0 flex-col overflow-hidden"
     :class="bounded ? 'h-full p-4' : 'p-5 sm:p-7'"
     data-testid="income-summary"
-    ><div class="flex shrink-0 items-start justify-between gap-3">
+    ><header v-if="$slots.action" class="mb-3 flex items-center justify-between gap-2">
+      <h3 class="font-semibold">Projected income</h3>
+      <slot name="action" />
+    </header>
+    <div class="flex shrink-0 items-start justify-between gap-3">
       <div class="min-w-0">
-        <p class="text-muted-foreground text-sm">Projected {{ periodLabel.toLowerCase() }} income</p>
+        <p v-if="!$slots.action" class="text-muted-foreground text-sm">
+          Projected {{ periodLabel.toLowerCase() }} income
+        </p>
         <p
           class="mt-2 font-semibold tracking-tight"
           :class="bounded ? 'text-[clamp(1.5rem,9cqi,2.25rem)]' : 'text-4xl'"
@@ -42,6 +48,7 @@ defineEmits<{ edit: [] }>();
         </p>
       </div>
       <Button
+        v-if="!$slots.action"
         :size="bounded || dashboardRange ? 'icon-sm' : 'default'"
         :variant="bounded || dashboardRange ? 'ghost' : 'default'"
         class="shrink-0"

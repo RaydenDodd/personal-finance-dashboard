@@ -85,7 +85,18 @@ function sortBy(key: string) {
         aria-label="Search investment holdings"
         placeholder="Search securities"
         class="border-input bg-background h-8 max-w-full rounded-md border px-3 text-sm"
-      /><span class="text-muted-foreground text-xs">{{ rows.length }} combined positions</span>
+      /><select
+        v-model="sort"
+        aria-label="Sort investment holdings"
+        class="border-input bg-background h-8 rounded-md border px-2 text-xs md:hidden"
+      >
+        <option value="marketValue">Market value</option>
+        <option value="quantity">Shares</option>
+        <option value="dividends">Dividends</option>
+        <option value="dailyChange">Daily change</option>
+        <option value="weight">Weight</option>
+        <option value="unrealizedGain">Unrealized gain</option></select
+      ><span class="text-muted-foreground text-xs">{{ rows.length }} combined positions</span>
     </div>
     <ScrollArea class="h-[min(32rem,65dvh)] min-w-0 rounded-md border">
       <div class="space-y-2 p-2 md:hidden" data-testid="investment-mobile-holdings">
@@ -196,16 +207,16 @@ function sortBy(key: string) {
           <thead class="bg-muted/80 text-muted-foreground sticky top-0 z-10">
             <tr>
               <th class="p-3"><button @click="sortBy('symbol')">Security ↕</button></th>
-              <th class="p-3 text-right">Shares / units</th>
+              <th class="p-3 text-right"><button @click="sortBy('quantity')">Shares / units &#8597;</button></th>
               <th class="p-3 text-right">Average cost</th>
               <th class="p-3 text-right"><button @click="sortBy('costBasis')">Open cost basis ↕</button></th>
               <th class="p-3 text-right">Latest price</th>
               <th class="p-3 text-right"><button @click="sortBy('marketValue')">Market value ↕</button></th>
               <th class="p-3 text-right"><button @click="sortBy('unrealizedGain')">Unrealized ↕</button></th>
               <th class="p-3 text-right">Realized</th>
-              <th class="p-3 text-right">Dividends</th>
-              <th class="p-3 text-right">Daily</th>
-              <th class="p-3 text-right">Weight</th>
+              <th class="p-3 text-right"><button @click="sortBy('dividends')">Dividends &#8597;</button></th>
+              <th class="p-3 text-right"><button @click="sortBy('dailyChange')">Daily &#8597;</button></th>
+              <th class="p-3 text-right"><button @click="sortBy('weight')">Weight &#8597;</button></th>
             </tr>
           </thead>
           <tbody v-for="row in shown" :key="row.id" class="divide-border/60 border-b last:border-0">

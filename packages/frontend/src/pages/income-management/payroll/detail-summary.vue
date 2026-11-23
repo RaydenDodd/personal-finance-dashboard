@@ -99,7 +99,8 @@ const careerVisible = computed(
 </script>
 <template>
   <WidgetWrapper class="@container min-h-0 min-w-0 overflow-hidden">
-    <template #title>{{ title }}</template>
+    <template #title>{{ title }}</template
+    ><template #action><slot name="action" /></template>
     <ModuleBody>
       <template v-if="summary">
         <template v-if="kind === 'growth' && careerVisible"

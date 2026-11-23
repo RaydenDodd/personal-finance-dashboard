@@ -65,7 +65,7 @@ function render() {
   const width = containerRef.value.clientWidth;
   const height = containerRef.value.clientHeight;
   if (!width || !height || !props.points.length) return;
-  const margin = { top: 16, right: 12, bottom: 30, left: width < 450 ? 48 : 68 };
+  const margin = { top: 16, right: 12, bottom: 30, left: width < 450 ? 40 : 44 };
   const w = Math.max(1, width - margin.left - margin.right),
     h = height - margin.top - margin.bottom;
   const points = [...props.points].sort((a, b) => a.date.localeCompare(b.date));
@@ -91,7 +91,7 @@ function render() {
   const padding = Math.max((high - low) * 0.08, Math.max(Math.abs(high), Math.abs(low)) * 0.005, 1e-10);
   const y = d3
     .scaleLinear()
-    .domain([low - padding, high + padding])
+    .domain([props.bars && low === 0 ? 0 : low - padding, high + padding])
     .nice()
     .range([h, 0]);
   const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
@@ -112,20 +112,27 @@ function render() {
       d3
         .axisBottom(x)
         .ticks(width < 450 ? 3 : 6)
+        .tickValues(
+          props.bars
+            ? dates.filter((_, i) => i % Math.max(1, Math.ceil(dates.length / (width < 450 ? 3 : 6))) === 0)
+            : x.ticks(width < 450 ? 3 : 6),
+        )
         .tickFormat((date) =>
           d3.timeFormat(
-            hasIntraday && +maxDate - +minDate < 3 * 86400000
-              ? '%a %H:%M'
-              : +maxDate - +minDate < 62 * 86400000
-                ? '%b %d'
-                : '%b %y',
+            props.bars && dates.length === 1
+              ? '%b %Y'
+              : hasIntraday && +maxDate - +minDate < 3 * 86400000
+                ? '%a %H:%M'
+                : +maxDate - +minDate < 62 * 86400000
+                  ? '%b %d'
+                  : '%b %y',
           )(date as Date),
         ),
     )
     .call((axis) => axis.select('.domain').remove())
     .call((axis) => axis.selectAll('text').attr('fill', 'var(--muted-foreground)').attr('font-size', 10));
   const selectedBars = g.append('g');
-  const barWidth = Math.min(46, Math.max(4, (w / Math.max(points.length, 1)) * 0.65));
+  const barWidth = Math.min(100, Math.max(4, (w / Math.max(points.length, 1)) * 0.65));
   if (props.bars) {
     points.forEach((point) => {
       let positive = 0,
