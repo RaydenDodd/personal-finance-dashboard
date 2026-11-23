@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useUserStore } from '@/stores/user';
 import UiButton from '@/components/lib/ui/button/Button.vue';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/lib/ui/collapsible';
 import { ROUTES_NAMES } from '@/routes';
@@ -121,7 +122,11 @@ watch(
   </router-link>
 
   <p v-if="!bottomNav" class="text-muted-foreground px-3 pt-3 pb-1 text-xs font-medium">Finances</p>
-  <router-link v-if="!bottomNav" v-slot="{ isActive }" :to="{ name: ROUTES_NAMES.personalFinance }">
+  <router-link
+    v-if="!bottomNav && useUserStore().user?.id === 1"
+    v-slot="{ isActive }"
+    :to="{ name: ROUTES_NAMES.personalFinance }"
+  >
     <ui-button
       variant="ghost"
       as="span"

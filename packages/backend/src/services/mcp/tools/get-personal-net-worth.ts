@@ -20,5 +20,9 @@ export const getPersonalNetWorthTool = defineTool({
       .optional(),
     granularity: z.enum(['monthly', 'daily']).optional(),
   },
-  run: async ({ userId, args }) => ({ data: await getFinanceDashboard(userId, args) }),
+  run: async ({ userId, args }) => {
+    if (userId !== Number(process.env.FINANCE_OWNER_USER_ID || '1'))
+      throw new Error('Personal Net Worth is available only to the owner.');
+    return { data: await getFinanceDashboard(userId, args) };
+  },
 });

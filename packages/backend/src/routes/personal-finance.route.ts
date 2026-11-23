@@ -12,9 +12,21 @@ import personalFinanceSheetsRoutes from './personal-finance-sheets.route';
 
 const router = Router();
 router.use(authenticateSession);
+// Income is available to every user; the owner's Sheet/manual net-worth workspace is not.
+router.use('/income', incomeRouter);
+router.use((req, res, next) => {
+  const ownerId = Number(process.env.FINANCE_OWNER_USER_ID || '1');
+  if (req.user?.id !== ownerId)
+    return res
+      .status(403)
+      .json({
+        status: 'error',
+        response: { message: 'Personal Net Worth and Google Sheets are available only to the owner.' },
+      });
+  next();
+});
 router.use('/sheets-sync', personalFinanceSheetsRoutes);
 router.use('/principal', principalRouter);
-router.use('/income', incomeRouter);
 router.get(
   '/audit',
   createController(z.object({}), async ({ user }) => ({ data: await finance.getFinanceAudit(user.id) })),

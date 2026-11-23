@@ -1,5 +1,7 @@
 """Owner-only scheduled classifier and weekly report. All inference stays local."""
 import argparse
+import contextlib
+from scoped_api import create_session, remove_session
 import collections
 import csv
 import datetime as dt
@@ -83,6 +85,65 @@ class Api:
             if len(batch)<500:return rows
         raise RuntimeError('Unexpected transaction count; pagination incomplete')
 
+class ScopedApi(Api):
+    def __init__(self, email):
+        super().__init__(); self.email=email; self.session=None
+    def __enter__(self):
+        self.user_id,self.session,cookie=create_session(self.email)
+        self.opener.addheaders=[('Cookie',cookie)]
+        session=self.request('/auth/get-session')
+        if self.email.lower() not in json.dumps(session).lower():
+            remove_session(self.session);raise RuntimeError('Classifier session identity mismatch')
+        return self
+    def __exit__(self,*args):
+        try: super().__exit__(*args)
+        finally: remove_session(self.session)
+
+@contextlib.contextmanager
+def user_scope(user_id):
+    global STATE
+    previous=STATE
+    if user_id != 1:
+        STATE=previous/('user-'+str(user_id)); STATE.mkdir(exist_ok=True,mode=0o700)
+    try: yield
+    finally: STATE=previous
+
+def matches_rule(row, rule):
+    for item in rule['conditions']['items']:
+        field=item['field'];op=item['operator'];v=item['value']
+        if field=='transactionType': matched=row.get('transactionType')==v
+        elif field in ('note','merchant'):
+            text=str(row.get('note') or '').lower();terms=[str(x).lower() for x in v]
+            matched=any((text==t if op=='equals_any' else text.startswith(t) if op=='starts_with_any' else text.endswith(t) if op=='ends_with_any' else t in text) for t in terms)
+            if op=='not_contains_any':matched=not matched
+            if op=='is_empty':matched=not text
+        elif field=='amount':
+            if item['currency'].get('mode')=='specific' and row.get('currencyCode')!=item['currency'].get('code'):return False
+            amount=abs(float(row['amount']));lo=v.get('min',0);hi=v.get('max',float('inf'))
+            matched=amount>=lo if op=='gte' else amount<=hi if op=='lte' else amount==lo if op=='equals' else lo<=amount<=hi
+        else:return False  # Native evaluator remains authoritative for unsupported conditions.
+        if not matched:return False
+    return rule['conditions']['match']=='all'
+
+def apply_saved_rules(api, rows, categories):
+    other=next(c['id'] for c in categories if c['name']=='Other');changed=0
+    rules=api.request('/automations')
+    for rule in rules:
+        if not rule.get('isEnabled'):continue
+        ids=[r['id'] for r in rows if r.get('categoryId')==other and spend(r) and not r.get('isPending') and not r.get('splits') and matches_rule(r,rule)]
+        for offset in range(0,len(ids),40):
+            result=api.request('/automations/'+rule['id']+'/apply',{'transactionIds':ids[offset:offset+40]})
+            changed+=result.get('appliedCount',result.get('data',{}).get('appliedCount',0))
+        if ids:rows=api.transactions()
+    return changed
+
+def classify_all():
+    results={}
+    for email in ['rayden@vt.edu','mhen9535@gmail.com']:
+        with ScopedApi(email) as api:
+            with user_scope(api.user_id): results[str(api.user_id)]=classify(api)
+    return results
+
 def model(rows,categories,cutoff=None,overrides=True,held_merchants=None):
     applied=read('applied.json',{})
     training=[]
@@ -103,6 +164,8 @@ def model(rows,categories,cutoff=None,overrides=True,held_merchants=None):
 
 def classify(api):
     rows=api.transactions();categories=api.request('/categories')
+    rules_applied=apply_saved_rules(api,rows,categories)
+    if rules_applied:rows=api.transactions()
     predictor=model(rows,categories)
     other=next(c['id'] for c in categories if c['name']=='Other')
     threshold=dt.datetime.now(ZONE).date()-dt.timedelta(days=45)
@@ -128,7 +191,7 @@ def classify(api):
         applied[row['id']]['afterMeta']=actual.get('categorizationMeta');applied[row['id']]['pending']=False;save('applied.json',applied)
         changed+=1
     save('latest-review.json',{'at':dt.datetime.now(dt.timezone.utc).isoformat(),'version':VERSION,'trainingRows':len(predictor.training_ids),'predictions':review,'changed':changed})
-    return {'changed':changed,'reviewed':len(review),'trainingRows':len(predictor.training_ids)}
+    return {'changed':changed,'rulesApplied':rules_applied,'reviewed':len(review),'trainingRows':len(predictor.training_ids)}
 
 def previous_week(today):
     end=today-dt.timedelta(days=today.weekday())
@@ -290,9 +353,9 @@ if __name__=='__main__':
     args=parser.parse_args()
     if args.mode=='send':result=send()
     elif args.mode=='test-email':result=deliver('MoneyMatter report delivery is configured. Weekly and Friday–Sunday spending reports will be sent Tuesdays at 9 AM Eastern. Classification runs locally on the Pi; no cloud AI service is used.','MoneyMatter reporting — delivery check','setup-2026-11-18')
+    elif args.mode=='classify':result=classify_all()
     else:
         with Api() as api:
-            if args.mode=='classify':result=classify(api)
-            elif args.mode=='evaluate':result=evaluate(api,dt.date.fromisoformat(args.start),dt.date.fromisoformat(args.end))
+            if args.mode=='evaluate':result=evaluate(api,dt.date.fromisoformat(args.start),dt.date.fromisoformat(args.end))
             else:result=prepare(api,refresh_banks=args.mode=='prepare')
     print(json.dumps(result if args.mode not in ('prepare','preview') else {'prepared':True,'sync':result['sync'],'weekNetCents':result['week']['netCents'],'weekendNetCents':result['weekend']['netCents']}))

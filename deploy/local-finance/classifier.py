@@ -68,6 +68,7 @@ class Classifier:
                 self.totals[category] += 1
 
     def result(self, category, method, score, automatic=False, reason=''):
+        category={'Bar, cafe':'Cafe','Alcohol, tobacco':'Bars, alcohol'}.get(category,category)
         if category not in self.ids:
             return {'categoryId':None, 'label':'Review needed', 'method':'abstain', 'score':0,
                     'automatic':False, 'reason':'No matching existing category'}

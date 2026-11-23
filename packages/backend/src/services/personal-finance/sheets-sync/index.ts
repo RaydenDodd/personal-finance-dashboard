@@ -338,6 +338,7 @@ export async function runAllSheetSyncs() {
   );
   let completed = 0;
   for (const user of users) {
+    if (user.userId !== Number(process.env.FINANCE_OWNER_USER_ID || '1')) continue;
     const result = await runSheetSync(user.userId);
     if (!('skipped' in result) && !('failed' in result)) completed++;
   }

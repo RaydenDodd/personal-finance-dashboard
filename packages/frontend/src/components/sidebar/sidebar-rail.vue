@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useUserStore } from '@/stores/user';
 import ResponsiveHoverCard from '@/components/common/responsive-hover-card.vue';
 import UiButton from '@/components/lib/ui/button/Button.vue';
 import { Card } from '@/components/lib/ui/card';
@@ -94,7 +95,9 @@ interface RailNavItem {
 
 const navItems = computed<RailNavItem[]>(() => [
   { routeName: ROUTES_NAMES.home, icon: LayoutDashboardIcon, label: t('navigation.dashboard') },
-  { routeName: ROUTES_NAMES.personalFinance, icon: WalletIcon, label: t('navigation.personalNetWorth') },
+  ...(useUserStore().user?.id === 1
+    ? [{ routeName: ROUTES_NAMES.personalFinance, icon: WalletIcon, label: t('navigation.personalNetWorth') }]
+    : []),
   {
     routeName: ROUTES_NAMES.investmentOverview,
     icon: TrendingUpIcon,

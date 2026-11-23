@@ -1,5 +1,6 @@
 import { i18nChunkGuard } from '@/i18n/route-guard';
 import { RESET_PASSWORD_PATH } from '@/lib/reset-password-token';
+import { useUserStore } from '@/stores/user';
 import type { RouteRecordRaw } from 'vue-router';
 import { createRouter, createWebHistory } from 'vue-router';
 
@@ -75,6 +76,7 @@ const routes: RouteRecordRaw[] = [
       {
         path: '/personal-finance',
         name: ROUTES_NAMES.personalFinance,
+        beforeEnter: () => (useUserStore().user?.id === 1 ? true : { name: ROUTES_NAMES.home }),
         component: () => import('@/pages/personal-finance/index.vue'),
         meta: { i18nChunks: ['pages/dashboard'] },
       },
