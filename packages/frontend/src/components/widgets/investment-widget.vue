@@ -74,6 +74,11 @@ const settings = computed(() =>
           performerPeriod: 'custom',
         }
       : {}),
+    ...(dashboardRange.value &&
+    kind.value === 'performance' &&
+    (optimisticSettings.value.dashboardPeriod ?? widget.value.config?.dashboardPeriod) === 'today'
+      ? { dateRange: '1D', from: payrollToday(), through: payrollToday() }
+      : {}),
     ...(kind.value === 'performance'
       ? {
           portfolioIds: [],
@@ -225,7 +230,6 @@ const saveSettings = async (patch: Record<string, unknown>, close = false) => {
           ><ArrowUpRightIcon class="text-muted-foreground size-4" /></router-link
       ></Button>
       <InvestmentWidgetSettings
-        v-if="!(dashboardRange && kind === 'performance')"
         v-model:open="settingsOpen"
         :kind="kind"
         :settings="settings"

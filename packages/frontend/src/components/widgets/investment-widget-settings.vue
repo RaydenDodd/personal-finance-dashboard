@@ -93,6 +93,27 @@ const fieldClass = 'bg-background border-input min-h-9 w-full rounded-md border 
         </header>
         <ScrollArea class="min-h-0 flex-1" viewport-class="max-h-[min(55dvh,28rem)]"
           ><div class="space-y-4 p-4">
+            <fieldset v-if="dashboardRange && kind === 'performance'" class="space-y-2">
+              <legend class="mb-1 text-sm font-medium">Period</legend>
+              <div class="flex gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  :variant="draft.dashboardPeriod !== 'today' ? 'default' : 'outline'"
+                  :aria-pressed="draft.dashboardPeriod !== 'today'"
+                  @click="draft.dashboardPeriod = 'selected'"
+                  >Dashboard month</Button
+                >
+                <Button
+                  type="button"
+                  size="sm"
+                  :variant="draft.dashboardPeriod === 'today' ? 'default' : 'outline'"
+                  :aria-pressed="draft.dashboardPeriod === 'today'"
+                  @click="draft.dashboardPeriod = 'today'"
+                  >1D · Current day</Button
+                >
+              </div>
+            </fieldset>
             <fieldset v-if="kind !== 'performance'" class="space-y-2">
               <legend class="mb-1 text-sm font-medium">Portfolios</legend>
               <label class="flex items-center gap-2 text-sm">
