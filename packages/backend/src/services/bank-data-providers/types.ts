@@ -96,6 +96,8 @@ export interface ProviderAccount {
 }
 
 export interface SyncedTransactionRow {
+  /** Provider window eligibility uses posting time; display time may be an earlier purchase date. */
+  postedAt?: Date;
   originalId: string;
   time: Date;
   /**

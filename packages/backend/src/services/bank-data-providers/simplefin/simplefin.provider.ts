@@ -21,12 +21,13 @@ import { withTransaction } from '@services/common/with-transaction';
 import { SyncStatus, setAccountSyncStatus, setAccountsSyncStatus } from '../sync/sync-status-tracker';
 import { PROVIDER_TO_ACCOUNT_TYPE } from '../types';
 import { encryptCredentials } from '../utils/credential-encryption';
+import { findSyncAnchor } from '../utils/find-sync-anchor';
 import { linkAndEmitSyncedTransactions } from '../utils/link-and-emit-synced-transactions';
 import { persistSyncedTransactions } from '../utils/persist-synced-transactions';
-import { resolveSyncStart } from '../utils/resolve-sync-start';
 import { writeBankBalanceWithHistory } from '../utils/write-bank-balance-with-history';
 import { SimplefinApiClient } from './api-client';
 import { normalizeMerchantCategoryCode } from './merchant-category-code';
+import { simplefinSyncStart } from './sync-window';
 import {
   SimplefinAccount,
   SimplefinAccountSet,
@@ -43,8 +44,8 @@ import {
  * range exceeds a *recommended* 45 days ("In the future, this may be capped").
  * We page in 44-day windows to stay safely under that recommendation (and the
  * exclusive end-date means a window spans exactly its width). Batched fetching
- * keeps the request count low despite the smaller windows: ~5 requests for the
- * 180-day initial backfill, ~9 for a full-year period load, regardless of how
+ * keeps the request count low despite the smaller windows: ~3 requests for the
+ * 90-day initial backfill, ~9 for a full-year period load, regardless of how
  * many accounts are synced.
  */
 const MAX_WINDOW_MS = 44 * 24 * 60 * 60 * 1000;
@@ -55,12 +56,13 @@ const MAX_WINDOW_MS = 44 * 24 * 60 * 60 * 1000;
  * daily request budget — ~5 windows at {@link MAX_WINDOW_MS}. Users can pull
  * older history on demand via the "load transactions for period" picker.
  */
-const INITIAL_BACKFILL_DAYS = 180;
+const INITIAL_BACKFILL_DAYS = 90;
 
 /** Per-account slice of a batched windowed `/accounts` fetch. */
 interface AccountTransactionsBucket {
   transactions: SimplefinTransaction[];
   balance: string | null;
+  warnings: string[];
 }
 
 const isTransientBridgeError = ({ error }: { error: unknown }): boolean =>
@@ -278,7 +280,7 @@ export class SimplefinProvider extends BaseBankDataProvider {
       logLabel: 'Sync',
       resolveWindow: async ({ account }) => {
         const to = new Date();
-        const { from, matchPlanned } = await resolveSyncStart({ account, to, backfillDays: INITIAL_BACKFILL_DAYS });
+        const { from, matchPlanned } = await this.resolveIncrementalStart(account, to);
         return { from, to, matchPlanned };
       },
     });
@@ -328,7 +330,7 @@ export class SimplefinProvider extends BaseBankDataProvider {
     const to = new Date();
     const plans = await Promise.all(
       accounts.map(async (account) => {
-        const { from, matchPlanned } = await resolveSyncStart({ account, to, backfillDays: INITIAL_BACKFILL_DAYS });
+        const { from, matchPlanned } = await this.resolveIncrementalStart(account, to);
         return { account, matchPlanned, createFromDate: from };
       }),
     );
@@ -390,6 +392,17 @@ export class SimplefinProvider extends BaseBankDataProvider {
             });
           }
 
+          if (!bucket.warnings.length)
+            await linked.update({
+              externalData: {
+                ...linked.externalData,
+                simplefinLastFetchedAt: to.toISOString(),
+                simplefinLastImportedCount: ids.length,
+                simplefinLastNewTransactionAt: ids.length
+                  ? new Date().toISOString()
+                  : linked.externalData?.simplefinLastNewTransactionAt,
+              },
+            });
           await runPendingLinkAbsorb({ accountId: account.id, userId });
           return ids;
         })();
@@ -409,6 +422,7 @@ export class SimplefinProvider extends BaseBankDataProvider {
         });
         logger.info(`[SimpleFIN] Sync: ${createdIds.length} transactions created for account ${account.id}`);
 
+        if (bucket.warnings.length) throw new ServiceUnavailableError({ message: bucket.warnings.join('; ') });
         await setAccountSyncStatus({ accountId: account.id, status: SyncStatus.COMPLETED, userId });
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error';
@@ -527,6 +541,17 @@ export class SimplefinProvider extends BaseBankDataProvider {
           logger.info(`[SimpleFIN] ${logLabel}: balance unavailable for account ${account.id}, left unchanged`);
         }
 
+        if (logLabel === 'Sync')
+          await account.update({
+            externalData: {
+              ...account.externalData,
+              simplefinLastFetchedAt: to.toISOString(),
+              simplefinLastImportedCount: ingested.createdIds.length,
+              simplefinLastNewTransactionAt: ingested.createdIds.length
+                ? new Date().toISOString()
+                : account.externalData?.simplefinLastNewTransactionAt,
+            },
+          });
         logger.info(
           `[SimpleFIN] ${logLabel}: ${ingested.createdIds.length} transactions created for account ${account.id}`,
         );
@@ -567,7 +592,7 @@ export class SimplefinProvider extends BaseBankDataProvider {
       const accountSet = await this.getAccountsTracked({
         connectionId,
         apiClient,
-        params: { accountId: accountExternalId, startDate: window.from, endDate: window.to },
+        params: { accountId: accountExternalId, startDate: window.from, endDate: window.to, pending: true },
       });
       const account = accountSet.accounts.find((acc) => acc.id === accountExternalId);
       if (!account) {
@@ -579,6 +604,8 @@ export class SimplefinProvider extends BaseBankDataProvider {
         });
       }
 
+      const warnings = this.accountWarnings(accountSet, account);
+      if (warnings.length) throw new ServiceUnavailableError({ message: warnings.join('; ') });
       balance = account.balance ?? balance;
 
       for (const tx of account.transactions ?? []) {
@@ -615,15 +642,18 @@ export class SimplefinProvider extends BaseBankDataProvider {
     // windows is stored once.
     const byAccount = new Map<string, Map<string, SimplefinTransaction>>();
     const balances = new Map<string, string | null>();
+    const warnings = new Map<string, Set<string>>();
 
     for (const window of windows) {
       const accountSet = await this.getAccountsTracked({
         connectionId,
         apiClient,
-        params: { startDate: window.from, endDate: window.to },
+        params: { startDate: window.from, endDate: window.to, pending: true },
       });
 
       for (const account of accountSet.accounts) {
+        if (!warnings.has(account.id)) warnings.set(account.id, new Set());
+        for (const message of this.accountWarnings(accountSet, account)) warnings.get(account.id)!.add(message);
         if (!byAccount.has(account.id)) byAccount.set(account.id, new Map());
         const txById = byAccount.get(account.id)!;
         for (const tx of account.transactions ?? []) {
@@ -639,6 +669,7 @@ export class SimplefinProvider extends BaseBankDataProvider {
       result.set(externalId, {
         transactions: [...txById.values()],
         balance: balances.get(externalId) ?? null,
+        warnings: [...(warnings.get(externalId) ?? [])],
       });
     }
     return result;
@@ -716,7 +747,8 @@ export class SimplefinProvider extends BaseBankDataProvider {
         .toSorted((a, b) => a.posted - b.posted)
         .map((tx) => ({
           originalId: tx.id,
-          time: new Date((tx.transacted_at ?? tx.posted) * 1000),
+          time: new Date((tx.transacted_at || tx.posted) * 1000),
+          postedAt: new Date(tx.posted * 1000),
           amount: tx.amount,
           note: tx.description || tx.payee || tx.memo || '',
           externalData: {
@@ -757,6 +789,37 @@ export class SimplefinProvider extends BaseBankDataProvider {
       connectionId,
       request: async () => {
         const accountSet = await apiClient.getAccounts(params);
+        const fetchedAt = new Date().toISOString();
+        const connection = await this.getConnection(connectionId);
+        const previous = (connection.metadata as any)?.simplefinFetch;
+        const accounts = { ...previous?.accounts };
+        for (const account of accountSet.accounts) {
+          const posted = (account.transactions ?? []).filter((tx) => !tx.pending && tx.posted > 0);
+          accounts[account.id] = {
+            balanceDate: account['balance-date'] ? new Date(account['balance-date'] * 1000).toISOString() : null,
+            latestPostedAt: posted.length
+              ? new Date(Math.max(...posted.map((tx) => tx.posted)) * 1000).toISOString()
+              : (accounts[account.id]?.latestPostedAt ?? null),
+            postedCount: posted.length,
+            pendingCount: (account.transactions ?? []).length - posted.length,
+            warnings: this.accountWarnings(accountSet, account),
+            fetchedAt,
+          };
+        }
+        await connection.update({
+          metadata: {
+            ...connection.metadata,
+            simplefinFetch: {
+              fetchedAt,
+              from: params?.startDate?.toISOString(),
+              through: params?.endDate?.toISOString(),
+              warnings: (accountSet.errlist ?? [])
+                .map((e) => e.msg)
+                .concat(accountSet.errlist?.length ? [] : (accountSet.errors ?? [])),
+              accounts,
+            },
+          },
+        });
         this.surfaceAccountSetErrors({ accountSet });
         try {
           const { captureSimplefinValuations } = await import('@services/personal-finance');
@@ -798,6 +861,45 @@ export class SimplefinProvider extends BaseBankDataProvider {
         message: authErrors.map((e) => e.msg).join('; ') || t({ key: 'bankDataProviders.simplefin.invalidAccessUrl' }),
       });
     }
+  }
+
+  private accountWarnings(accountSet: SimplefinAccountSet, account: SimplefinAccount): string[] {
+    if (!accountSet.errlist?.length) return accountSet.errors ?? [];
+    return accountSet.errlist
+      .filter(
+        (error) =>
+          (!error.conn_id && !error.account_id) ||
+          error.account_id === account.id ||
+          (!!error.conn_id && error.conn_id === account.conn_id),
+      )
+      .map((error) => error.msg);
+  }
+
+  private async resolveIncrementalStart(account: Accounts, to: Date) {
+    const anchor = await findSyncAnchor({ account, to });
+    const connection = await this.getConnection(account.bankDataProviderConnectionId!);
+    const checkpoint = account.externalData?.simplefinLastFetchedAt;
+    // Upgrade compatibility: an existing account covered by a completed batch has already been fetched,
+    // even if it has no transactions. Newly linked accounts must still receive their initial backfill.
+    const fetchedAt =
+      typeof checkpoint === 'string'
+        ? new Date(checkpoint)
+        : connection.lastSyncAt && account.createdAt <= connection.lastSyncAt
+          ? connection.lastSyncAt
+          : null;
+    return {
+      anchor,
+      from: simplefinSyncStart({
+        to,
+        anchor,
+        fetchedAt,
+        linkedAt: account.externalData?.bankConnection?.linkedAt
+          ? new Date(account.externalData.bankConnection.linkedAt)
+          : null,
+        backfillDays: INITIAL_BACKFILL_DAYS,
+      }),
+      matchPlanned: !!anchor,
+    };
   }
 
   /** Index the protocol-v2 `connections` array by `conn_id` for org lookups. */

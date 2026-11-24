@@ -11,6 +11,7 @@ import { logger } from '@js/utils/logger';
 import axios, { AxiosInstance } from 'axios';
 import { setTimeout as delay } from 'node:timers/promises';
 
+import { reserveSimplefinRequest } from './request-budget';
 import { SimplefinAccountSet, SimplefinGetAccountsParams } from './types';
 
 const ACCOUNTS_REQUEST_TIMEOUT_MS = 300_000;
@@ -42,8 +43,10 @@ const toEpochSeconds = (date: Date): number => Math.floor(date.getTime() / 1000)
  */
 export class SimplefinApiClient {
   private client: AxiosInstance;
+  private accessUrl: string;
 
   constructor(accessUrl: string) {
+    this.accessUrl = accessUrl;
     let parsed: URL;
     try {
       parsed = new URL(accessUrl);
@@ -142,6 +145,14 @@ export class SimplefinApiClient {
    * GET /accounts — account info and (optionally) transactions for a window.
    */
   async getAccounts(params: SimplefinGetAccountsParams = {}): Promise<SimplefinAccountSet> {
+    if (
+      params.startDate &&
+      params.endDate &&
+      (params.endDate.getTime() < params.startDate.getTime() ||
+        params.endDate.getTime() - params.startDate.getTime() > 90 * 86400000)
+    ) {
+      throw new ValidationError({ message: 'SimpleFIN requests must span between zero and 90 days.' });
+    }
     // `version=2` is required by the bridge for the structured-error / connection
     // response shape; without it the server may fall back to the v1 schema.
     const query: Record<string, string | number> = { version: SIMPLEFIN_PROTOCOL_VERSION };
@@ -150,9 +161,18 @@ export class SimplefinApiClient {
     if (params.endDate) query['end-date'] = toEpochSeconds(params.endDate);
     if (params.accountId) query['account'] = params.accountId;
     if (params.balancesOnly) query['balances-only'] = 1;
+    if (params.pending) query.pending = 1;
 
     for (let attempt = 0; ; attempt += 1) {
       try {
+        const requestCount = await reserveSimplefinRequest(this.accessUrl, params.accountId);
+        logger.info('[SimpleFIN] Accounts request', {
+          requestCount,
+          scope: params.accountId ? 'account' : 'all',
+          from: params.startDate?.toISOString(),
+          through: params.endDate?.toISOString(),
+          balancesOnly: !!params.balancesOnly,
+        });
         const response = await this.client.get<SimplefinAccountSet>('/accounts', { params: query });
         return response.data;
       } catch (error) {

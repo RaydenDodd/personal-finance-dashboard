@@ -70,7 +70,19 @@ export type AiCategorizationStatus =
 /**
  * Account sync status for SYNC_STATUS_CHANGED event
  */
+export interface BankDataFreshness {
+  newTransactions?: number;
+  lastNewTransactionAt?: string | null;
+  fetchedAt: string;
+  balanceDate: string | null;
+  latestPostedAt: string | null;
+  postedCount: number;
+  pendingCount: number;
+  warnings: string[];
+}
+
 export interface SyncAccountStatus extends EntityLogoFields {
+  providerData?: BankDataFreshness;
   accountId: string;
   status: string;
   startedAt: string | null;

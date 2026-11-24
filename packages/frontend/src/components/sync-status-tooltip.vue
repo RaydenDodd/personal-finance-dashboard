@@ -3,7 +3,7 @@
     <p class="mb-3 text-sm">{{ $t('syncStatusTooltip.title') }}</p>
     <dl v-if="accountStatuses.length" class="text-muted-foreground mb-3 grid gap-1 text-xs">
       <div class="flex flex-wrap justify-between gap-2">
-        <dt>{{ $t('syncStatusTooltip.lastSuccessful') }}</dt>
+        <dt>Last completed import</dt>
         <dd>
           {{
             scheduleStatus?.lastSuccessfulSyncAt
@@ -24,6 +24,10 @@
       </div>
     </dl>
 
+    <p v-if="accountStatuses.some((account) => account.providerData)" class="text-muted-foreground mb-3 text-xs">
+      A successful API request does not mean the bank refreshed its transactions. Pending items are imported only after
+      the provider marks them posted.
+    </p>
     <!-- Just completed: success / partial-failure banner -->
     <div
       v-if="showSuccessMessage"
@@ -153,6 +157,38 @@
               </span>
             </div>
           </div>
+          <dl v-if="account.providerData" class="text-muted-foreground grid gap-1 text-[10px]">
+            <div>API fetched: {{ new Date(account.providerData.fetchedAt).toLocaleString() }}</div>
+            <div>
+              Bank balance as of:
+              {{
+                account.providerData.balanceDate
+                  ? new Date(account.providerData.balanceDate).toLocaleString()
+                  : 'Not supplied'
+              }}
+            </div>
+            <div>
+              Latest posted transaction:
+              {{
+                account.providerData.latestPostedAt
+                  ? new Date(account.providerData.latestPostedAt).toLocaleDateString()
+                  : 'None returned'
+              }}
+            </div>
+            <div>
+              {{ account.providerData.postedCount }} posted returned &middot;
+              {{ account.providerData.pendingCount }} pending
+            </div>
+            <div v-if="account.providerData.newTransactions != null">
+              New records imported last run: {{ account.providerData.newTransactions }}
+            </div>
+            <div v-if="account.providerData.lastNewTransactionAt">
+              Last new record: {{ new Date(account.providerData.lastNewTransactionAt).toLocaleString() }}
+            </div>
+            <p v-for="warning in account.providerData.warnings" :key="warning" class="text-destructive-text">
+              {{ warning }}
+            </p>
+          </dl>
           <p
             v-if="account.status === SyncStatus.FAILED && account.error"
             class="text-muted-foreground line-clamp-2 text-[10px] wrap-break-word"
@@ -297,7 +333,7 @@ const visibleAccounts = computed<AccountSyncStatus[]>(() => {
         account.status === SyncStatus.FAILED,
     );
   }
-  return props.accountStatuses.filter((account) => account.status === SyncStatus.FAILED);
+  return props.accountStatuses.filter((account) => account.status === SyncStatus.FAILED || account.providerData);
 });
 
 const failedAccounts = computed(() => {

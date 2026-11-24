@@ -77,7 +77,7 @@ export const persistSyncedTransactions = async ({
     }
 
     // Never create rows before the link date: that history is already absorbed into the opening balance.
-    if (createFromDate && row.time < createFromDate) {
+    if (createFromDate && (row.postedAt ?? row.time) < createFromDate) {
       skippedPreLinkCount += 1;
       continue;
     }

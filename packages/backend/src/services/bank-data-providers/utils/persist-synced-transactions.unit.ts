@@ -28,7 +28,9 @@ const sync = () =>
     matchPlanned: false,
     checkpoint: async () => {},
   });
-beforeEach(() => { jest.resetAllMocks(); });
+beforeEach(() => {
+  jest.resetAllMocks();
+});
 describe('historical import protection during provider persistence', () => {
   it('enriches MCC without replacing a corrected category, amount or provenance', async () => {
     const update = jest.fn(async () => {});
@@ -47,5 +49,33 @@ describe('historical import protection during provider persistence', () => {
     expect(createTransaction).toHaveBeenCalledTimes(1);
     expect(result.createdTransactionIds).toEqual([]);
     expect(result.mergedIntoPlannedCount).toBe(0);
+  });
+});
+
+describe('late-posting SimpleFIN transactions', () => {
+  it('imports by posting date, preserves purchase date, and skips it on repeated syncs', async () => {
+    const created = new Map<string, any>();
+    jest
+      .mocked(findOneTransaction)
+      .mockImplementation(async (query: any) => created.get(query.where?.originalId) ?? null);
+    jest.mocked(createTransaction).mockImplementation(async (payload: any) => {
+      const existing = { id: 'late-row', externalData: payload.externalData, update: jest.fn() };
+      created.set(payload.originalId, existing);
+      return [existing] as any;
+    });
+    const run = () =>
+      persistSyncedTransactions({
+        account: { id: 'account-1' } as Accounts,
+        userId: 1,
+        accountType: ACCOUNT_TYPES.simplefin,
+        matchPlanned: false,
+        checkpoint: async () => {},
+        createFromDate: new Date('2026-11-19Z'),
+        rows: [{ ...row, time: new Date('2026-11-10Z'), postedAt: new Date('2026-11-22Z') }],
+      });
+    expect((await run()).createdTransactionIds).toEqual(['late-row']);
+    expect((await run()).createdTransactionIds).toEqual([]);
+    expect(createTransaction).toHaveBeenCalledTimes(1);
+    expect(jest.mocked(createTransaction).mock.calls[0]![0].time).toEqual(new Date('2026-11-10Z'));
   });
 });

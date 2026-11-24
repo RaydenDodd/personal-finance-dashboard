@@ -1,4 +1,5 @@
 import { api } from '@/api/_api';
+import type { BankDataFreshness } from '@bt/shared/types';
 import { BANK_PROVIDER_TYPE, type ConnectionNeedingReauth, type ConnectionStatusSummary } from '@bt/shared/types';
 
 export type { ConnectionNeedingReauth, ConnectionStatusSummary };
@@ -320,6 +321,7 @@ export enum SyncStatus {
 }
 
 export interface AccountSyncStatus {
+  providerData?: BankDataFreshness;
   accountId: string;
   accountName: string;
   providerType: string;

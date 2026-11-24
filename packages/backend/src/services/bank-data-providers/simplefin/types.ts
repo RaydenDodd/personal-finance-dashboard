@@ -157,4 +157,6 @@ export interface SimplefinGetAccountsParams {
   accountId?: string;
   /** Return account balances only, omitting transactions (cheap probe). */
   balancesOnly?: boolean;
+  /** Retrieve pending rows for freshness reporting; persistence still excludes them. */
+  pending?: boolean;
 }

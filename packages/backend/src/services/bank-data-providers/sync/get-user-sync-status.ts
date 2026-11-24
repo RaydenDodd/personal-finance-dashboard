@@ -1,5 +1,6 @@
 import {
   ACCOUNT_STATUSES,
+  type BankDataFreshness,
   DEFAULT_BANK_SYNC_HOURS_UTC,
   type ConnectionNeedingReauth,
   type ConnectionStatusSummary,
@@ -225,8 +226,24 @@ export async function getUserAccountsSyncStatus(userId: number): Promise<{
     }
 
     const connection = account.bankDataProviderConnection;
+    const providerData = (
+      connection.metadata as { simplefinFetch?: { accounts?: Record<string, BankDataFreshness> } } | null
+    )?.simplefinFetch?.accounts?.[account.externalId];
     return {
       ...status,
+      providerData: providerData
+        ? {
+            ...providerData,
+            newTransactions:
+              typeof account.externalData?.simplefinLastImportedCount === 'number'
+                ? account.externalData.simplefinLastImportedCount
+                : undefined,
+            lastNewTransactionAt:
+              typeof account.externalData?.simplefinLastNewTransactionAt === 'string'
+                ? account.externalData.simplefinLastNewTransactionAt
+                : null,
+          }
+        : undefined,
       accountName: account.name || 'Unknown',
       providerType: connection.providerType,
       bankDataProviderConnectionId: connection.id,

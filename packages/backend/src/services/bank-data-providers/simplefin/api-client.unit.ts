@@ -4,7 +4,9 @@ import axios, { AxiosInstance } from 'axios';
 import { setTimeout as delay } from 'node:timers/promises';
 
 import { SimplefinApiClient } from './api-client';
+import { reserveSimplefinRequest } from './request-budget';
 
+jest.mock('./request-budget', () => ({ reserveSimplefinRequest: jest.fn().mockResolvedValue(1) }));
 jest.mock('node:timers/promises', () => ({ setTimeout: jest.fn().mockResolvedValue(undefined) }));
 jest.mock('@i18n/index', () => ({ t: ({ key }: { key: string }) => key }));
 jest.mock('@js/utils/logger', () => ({ logger: { info: jest.fn() } }));
@@ -41,6 +43,7 @@ describe('SimpleFIN GET transport retry', () => {
       const client = new SimplefinApiClient('https://test-user:private-password@example.invalid/access');
       expect(await client.getAccounts({ startDate: new Date('2026-11-01Z'), balancesOnly: true })).toBe(accountSet);
       expect(get).toHaveBeenCalledTimes(2);
+      expect(reserveSimplefinRequest).toHaveBeenCalledTimes(2);
       expect(get.mock.calls[1]).toEqual(get.mock.calls[0]);
       expect(delay).toHaveBeenCalledTimes(1);
       expect(delay).toHaveBeenCalledWith(500);
@@ -95,5 +98,21 @@ describe('SimpleFIN GET transport retry', () => {
     expect(axios.post).toHaveBeenCalledTimes(1);
     expect(get).not.toHaveBeenCalled();
     expect(delay).not.toHaveBeenCalled();
+  });
+  it('refuses a >90-day request before contacting the provider', async () => {
+    await expect(
+      new SimplefinApiClient('https://user:pass@example.invalid/access').getAccounts({
+        startDate: new Date('2026-01-01Z'),
+        endDate: new Date('2026-05-01Z'),
+      }),
+    ).rejects.toThrow('90 days');
+    expect(get).not.toHaveBeenCalled();
+  });
+  it('does not retry or call the provider after the request budget is exhausted', async () => {
+    jest.mocked(reserveSimplefinRequest).mockRejectedValueOnce(new TooManyRequests({ message: 'Budget reached' }));
+    await expect(new SimplefinApiClient('https://user:pass@example.invalid/access').getAccounts()).rejects.toThrow(
+      'Budget reached',
+    );
+    expect(get).not.toHaveBeenCalled();
   });
 });
