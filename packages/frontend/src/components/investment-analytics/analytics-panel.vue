@@ -262,7 +262,10 @@ const comparablePortfolioPoints = computed(() =>
       ? withinRange(props.analytics.priceRisk?.points ?? [], range.value.from, range.value.through)
       : allHistory.value
           .filter((row) => row.returnPercent !== null)
-          .map((row) => ({ date: row.date, returnPercent: row.returnPercent! })),
+          .map((row) => ({
+            date: row.date,
+            returnPercent: row.returnPercent!,
+          })),
 );
 const selectedIncome = computed(() =>
   props.analytics.dividends.filter(
@@ -291,7 +294,12 @@ const calendarCells = computed(() => {
     ...Array.from({ length: count }, (_, i) => {
       const date = calendarMonth.value + '-' + String(i + 1).padStart(2, '0');
       const rows = selectedIncome.value.filter((row) => row.date.slice(0, 10) === date && row.type === 'dividend');
-      return { date, day: i + 1, count: rows.length, amount: rows.reduce((sum, row) => sum + Number(row.amount), 0) };
+      return {
+        date,
+        day: i + 1,
+        count: rows.length,
+        amount: rows.reduce((sum, row) => sum + Number(row.amount), 0),
+      };
     }),
   ];
 });
@@ -541,7 +549,11 @@ const chartSeries = computed<InvestmentChartSeries[]>(() => {
       { key: 'contributions', label: 'Contributions', color: colors[0]! },
       { key: 'withdrawals', label: 'Withdrawals', color: colors[1]! },
       { key: 'netContributions', label: 'Net invested', color: '#e6bf27' },
-      { key: 'previousAverage', label: 'Previous six periods average', color: '#a1a1aa' },
+      {
+        key: 'previousAverage',
+        label: 'Previous six periods average',
+        color: '#a1a1aa',
+      },
     ];
   return activeSeries.value.map((key, index) => ({
     key,
@@ -734,8 +746,14 @@ function rebase(value: number | null, base: number | null) {
 }
 const allocationMode = computed(() =>
   String(
-    props.settings.allocationMode ??
-      (props.kind === 'sector' ? 'sector' : props.kind === 'geography' ? 'country' : 'holdings'),
+    dashboardRange.value
+      ? props.kind === 'sector'
+        ? 'sector'
+        : props.kind === 'geography'
+          ? 'country'
+          : 'holdings'
+      : (props.settings.allocationMode ??
+          (props.kind === 'sector' ? 'sector' : props.kind === 'geography' ? 'country' : 'holdings')),
   ),
 );
 const allocationTree = computed(() => allocationDrilldown(props.analytics, allocationMode.value));
@@ -1022,7 +1040,9 @@ const health = computed(() =>
           ></template
         >
       </DateRange>
-      <WidgetHeaderControls v-if="['performance', 'portfolio-comparison'].includes(kind) && performanceSummary"
+      <component
+        :is="dashboardRange ? 'div' : WidgetHeaderControls"
+        v-if="['performance', 'portfolio-comparison'].includes(kind) && performanceSummary"
         ><div
           data-testid="investment-performance-summary"
           class="flex items-baseline gap-2 text-sm whitespace-nowrap sm:gap-3 sm:text-base"
@@ -1033,7 +1053,7 @@ const health = computed(() =>
             title="Estimated return weighted by dated deposits and withdrawals (Modified Dietz). Supported account history only."
             >{{ pct(performanceSummary.percent) }}</strong
           >
-        </div></WidgetHeaderControls
+        </div></component
       >
       <strong v-if="kind === 'dividends' && compact" class="text-2xl font-semibold tabular-nums">{{
         money(
@@ -1282,7 +1302,7 @@ const health = computed(() =>
       </p>
     </template>
     <template v-if="['allocation', 'sector', 'geography'].includes(kind)">
-      <WidgetHeaderControls
+      <WidgetHeaderControls v-if="!dashboardRange"
         ><select
           :value="allocationMode"
           aria-label="Investment allocation mode"

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { format, parseISO } from 'date-fns';
 import { computeTrendPeriods } from './cash-flow-widget/helpers';
-import { useResizeObserver } from '@vueuse/core';
+import { useMediaQuery, useResizeObserver } from '@vueuse/core';
 import { useDashboardPeriod } from './composables/use-dashboard-period';
 import { useModuleLayout } from './composables/use-module-layout';
 import type { DashboardWidgetConfig } from '@/api/user-settings';
@@ -18,10 +18,12 @@ import { computed, inject, provide, ref, unref, type Ref } from 'vue';
 import ErrorState from './components/error-state.vue';
 import LoadingState from './components/loading-state.vue';
 import WidgetWrapper from './components/widget-wrapper.vue';
+import WidgetHeaderControls from './components/widget-header-controls.vue';
 import InvestmentWidgetSettings from './investment-widget-settings.vue';
 import { INVESTMENT_WIDGET_DEFINITIONS, investmentWidgetKind, investmentWidgetSettings } from './investment-widgets';
 
 const { dashboardRange } = useDashboardPeriod();
+const mobileHeader = useMediaQuery('(max-width: 639px)');
 const { bounded } = useModuleLayout();
 const widget = inject<Ref<DashboardWidgetConfig>>('dashboard-widget-config')!;
 const persist =
@@ -29,11 +31,19 @@ const persist =
     'dashboard-save-widget-config',
   );
 const kind = computed(() => investmentWidgetKind(widget.value.widgetId) ?? 'overview');
+const hasPeriodControls = computed(
+  () => Boolean(dashboardRange.value) && ['performance', 'portfolio-comparison', 'heatmap'].includes(kind.value),
+);
 const definition = computed(() => INVESTMENT_WIDGET_DEFINITIONS[widget.value.widgetId]);
 const defaultCurrentDay = inject<Ref<boolean> | boolean>('investment-default-current-day', false);
 const optimisticSettings = ref<Record<string, unknown>>(
   unref(defaultCurrentDay) && ['performance', 'heatmap'].includes(kind.value)
-    ? { dateRange: '1D', from: payrollToday(), through: payrollToday(), colorBy: 'daily' }
+    ? {
+        dateRange: '1D',
+        from: payrollToday(),
+        through: payrollToday(),
+        colorBy: 'daily',
+      }
     : {},
 );
 const pageSettings = inject<Ref<Record<string, unknown>> | null>('investment-page-settings', null);
@@ -80,13 +90,23 @@ const settings = computed(() =>
         }
       : {}),
     ...(dashboardRange.value &&
-    ['performance', 'heatmap'].includes(kind.value) &&
+    ['performance', 'portfolio-comparison', 'heatmap'].includes(kind.value) &&
     ['today', 'month'].includes(
       String(optimisticSettings.value.dashboardPeriod ?? widget.value.config?.dashboardPeriod),
     )
       ? (optimisticSettings.value.dashboardPeriod ?? widget.value.config?.dashboardPeriod) === 'month'
-        ? { dateRange: '1M', from: payrollToday().slice(0, 7) + '-01', through: payrollToday(), colorBy: 'custom' }
-        : { dateRange: '1D', from: payrollToday(), through: payrollToday(), colorBy: 'daily' }
+        ? {
+            dateRange: '1M',
+            from: payrollToday().slice(0, 7) + '-01',
+            through: payrollToday(),
+            colorBy: 'custom',
+          }
+        : {
+            dateRange: '1D',
+            from: payrollToday(),
+            through: payrollToday(),
+            colorBy: 'daily',
+          }
       : {}),
     ...(kind.value === 'performance'
       ? {
@@ -131,7 +151,10 @@ const data = computed(() =>
   focusedHistory.value
     ? narrow.data.value
     : kind.value === 'benchmark' && broad.data.value && narrow.data.value?.accountHistory
-      ? { ...broad.data.value, accountHistory: narrow.data.value.accountHistory }
+      ? {
+          ...broad.data.value,
+          accountHistory: narrow.data.value.accountHistory,
+        }
       : broad.data.value,
 );
 const isPending = computed(() => (focusedHistory.value ? narrow.isPending.value : broad.isPending.value));
@@ -209,7 +232,11 @@ const saveSettings = async (patch: Record<string, unknown>, close = false) => {
 </script>
 
 <template>
-  <WidgetWrapper :is-fetching="isFetching" :data-investment-widget="kind">
+  <WidgetWrapper
+    :is-fetching="isFetching"
+    :data-investment-widget="kind"
+    :compact-header="hasPeriodControls && mobileHeader"
+  >
     <template #title
       >{{ definition?.name ?? 'Investment analytics'
       }}<span
@@ -248,16 +275,11 @@ const saveSettings = async (patch: Record<string, unknown>, close = false) => {
         @save="saveSettings($event, true)"
       />
     </template>
-    <component
-      ref="bodyRef"
-      :is="bounded ? ScrollArea : 'div'"
-      :class="bounded ? 'min-h-0 min-w-0 flex-1' : 'min-w-0'"
-      viewport-class="pr-2 [&>div]:!block"
-      :data-investment-instance="widget.instanceId ?? widget.widgetId"
-    >
+    <component :is="mobileHeader ? WidgetHeaderControls : 'div'" :class="mobileHeader ? '' : 'mb-2'">
       <div
-        v-if="dashboardRange && ['performance', 'heatmap'].includes(kind)"
-        class="mb-2 flex gap-1"
+        v-if="hasPeriodControls"
+        class="bg-muted/60 inline-flex shrink-0 gap-0.5 rounded-lg p-0.5"
+        data-chart-controls
         role="group"
         aria-label="Widget period"
       >
@@ -268,12 +290,21 @@ const saveSettings = async (patch: Record<string, unknown>, close = false) => {
           ]"
           :key="value"
           size="sm"
+          class="h-7 px-2 text-xs"
           :variant="(settings.dashboardPeriod === 'today' ? 'today' : 'month') === value ? 'secondary' : 'ghost'"
           :aria-pressed="(settings.dashboardPeriod === 'today' ? 'today' : 'month') === value"
           @click="saveSettings({ dashboardPeriod: value })"
           >{{ label }}</Button
         >
       </div>
+    </component>
+    <component
+      ref="bodyRef"
+      :is="bounded ? ScrollArea : 'div'"
+      :class="bounded ? 'min-h-0 min-w-0 flex-1' : 'min-w-0'"
+      viewport-class="pr-2 [&>div]:!block"
+      :data-investment-instance="widget.instanceId ?? widget.widgetId"
+    >
       <LoadingState v-if="isPending" />
       <ErrorState v-else-if="error" message="Investment analytics could not be loaded." @retry="refetch()" />
       <AnalyticsPanel

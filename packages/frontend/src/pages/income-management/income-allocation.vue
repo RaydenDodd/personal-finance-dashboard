@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, nextTick } from 'vue';
+import { useMediaQuery } from '@vueuse/core';
 import type { IncomePlanInput, IncomePlanResult } from '@bt/shared/finance-income';
 import { Button } from '@/components/lib/ui/button';
 import WidgetHeaderControls from '@/components/widgets/components/widget-header-controls.vue';
@@ -23,6 +24,7 @@ const props = withDefaults(
   }>(),
   { part: 'all' },
 );
+const mobileHeader = useMediaQuery('(max-width: 639px)');
 const view = defineModel<'donut' | 'flow'>('view', { default: 'donut' });
 const expanded = ref<string[]>([]);
 const { bounded } = useModuleLayout();
@@ -57,9 +59,13 @@ function toggle(id: string) {
     :data-testid="part === 'breakdown' ? 'income-breakdown-card' : 'income-allocation'"
   >
     <template #title>{{ part === 'breakdown' ? 'Income breakdown' : 'Income allocation' }}</template>
-    <WidgetHeaderControls v-if="part !== 'breakdown'">
+    <component
+      :is="mobileHeader ? WidgetHeaderControls : 'div'"
+      v-if="part !== 'breakdown'"
+      :class="mobileHeader ? '' : 'mb-2 flex justify-end'"
+    >
       <div
-        class="bg-muted/60 inline-flex shrink-0 gap-0.5 rounded-lg p-0.5 sm:hidden"
+        class="bg-muted/60 inline-flex shrink-0 gap-0.5 rounded-lg p-0.5"
         role="group"
         aria-label="Allocation view"
         data-chart-controls
@@ -83,7 +89,7 @@ function toggle(id: string) {
           ><WorkflowIcon class="size-3.5"
         /></Button>
       </div>
-    </WidgetHeaderControls>
+    </component>
     <template v-if="part !== 'breakdown'" #action>
       <slot name="action" /><Popover
         ><PopoverTrigger as-child
