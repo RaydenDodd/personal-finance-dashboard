@@ -101,8 +101,8 @@ const fieldClass = 'bg-background border-input min-h-9 w-full rounded-md border 
                   size="sm"
                   :variant="draft.dashboardPeriod !== 'today' ? 'default' : 'outline'"
                   :aria-pressed="draft.dashboardPeriod !== 'today'"
-                  @click="draft.dashboardPeriod = 'selected'"
-                  >Dashboard month</Button
+                  @click="draft.dashboardPeriod = 'month'"
+                  >1M</Button
                 >
                 <Button
                   type="button"

@@ -265,12 +265,11 @@ const saveSettings = async (patch: Record<string, unknown>, close = false) => {
           v-for="[value, label] in [
             ['today', '1D'],
             ['month', '1M'],
-            ['selected', 'Dashboard month'],
           ]"
           :key="value"
           size="sm"
-          :variant="(settings.dashboardPeriod ?? 'selected') === value ? 'secondary' : 'ghost'"
-          :aria-pressed="(settings.dashboardPeriod ?? 'selected') === value"
+          :variant="(settings.dashboardPeriod === 'today' ? 'today' : 'month') === value ? 'secondary' : 'ghost'"
+          :aria-pressed="(settings.dashboardPeriod === 'today' ? 'today' : 'month') === value"
           @click="saveSettings({ dashboardPeriod: value })"
           >{{ label }}</Button
         >

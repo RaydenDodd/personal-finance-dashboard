@@ -14,7 +14,7 @@ import type { DashboardWidgetConfig } from '@/api/user-settings';
 import { Button } from '@/components/lib/ui/button';
 import PayrollWidgetActions from './payroll-widget-actions.vue';
 import { useQuery } from '@tanstack/vue-query';
-import { computed, inject, provide, type Ref } from 'vue';
+import { computed, inject, provide, ref, watch, type Ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { calculateIncomePlan } from '@bt/shared/finance-income';
 import ActualSummary from '@/pages/income-management/payroll/actual-summary.vue';
@@ -30,6 +30,33 @@ import ErrorState from './components/error-state.vue';
 const { dashboardRange } = useDashboardPeriod();
 const config = inject<Ref<DashboardWidgetConfig>>('dashboard-widget-config')!;
 const router = useRouter();
+const persistConfig =
+  inject<(args: { widgetId: string; config: Record<string, unknown> }) => Promise<unknown>>(
+    'dashboard-save-widget-config',
+  );
+const allocationViewOverride = ref<'donut' | 'flow' | null>(null);
+const allocationSaveError = ref('');
+watch(
+  () => config.value.config?.view,
+  () => {
+    allocationViewOverride.value = null;
+  },
+);
+const allocationView = computed<'donut' | 'flow'>(
+  () => allocationViewOverride.value ?? (config.value.config?.view === 'flow' ? 'flow' : 'donut'),
+);
+async function changeAllocationView(view: 'donut' | 'flow') {
+  allocationViewOverride.value = view;
+  allocationSaveError.value = '';
+  try {
+    await persistConfig?.({
+      widgetId: config.value.instanceId ?? config.value.widgetId,
+      config: { ...config.value.config, view },
+    });
+  } catch {
+    allocationSaveError.value = 'The view changed, but could not be saved. Please try again.';
+  }
+}
 const id = computed(() => config.value.widgetId);
 provide(
   'income-chart-height',
@@ -133,9 +160,11 @@ const detail = computed(
             :divisor="divisor"
             :period-label="periodLabel"
             part="chart"
-            :view="config.config?.view === 'flow' ? 'flow' : 'donut'"
+            :view="allocationView"
+            @update:view="changeAllocationView"
             ><template #action><PayrollWidgetActions projected :settings="false" /></template
           ></IncomeAllocationView>
+          <p v-if="allocationSaveError" class="text-destructive mt-1 text-xs" role="alert">{{ allocationSaveError }}</p>
         </template>
         <div v-else class="bg-card rounded-xl border p-5 text-sm">
           Set up your projected income first.<Button as-child variant="link"

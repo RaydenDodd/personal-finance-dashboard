@@ -1282,7 +1282,7 @@ const health = computed(() =>
       </p>
     </template>
     <template v-if="['allocation', 'sector', 'geography'].includes(kind)">
-      <WidgetHeaderControls v-if="!dashboardRange"
+      <WidgetHeaderControls
         ><select
           :value="allocationMode"
           aria-label="Investment allocation mode"
@@ -1299,38 +1299,6 @@ const health = computed(() =>
           </option>
         </select></WidgetHeaderControls
       >
-      <div v-if="dashboardRange" class="mb-2 flex flex-wrap gap-1" role="group" aria-label="Investment allocation view">
-        <Button
-          v-for="[id, label] in [
-            ['holdings', 'Holdings'],
-            ['underlying', 'Companies'],
-            ['sector', 'Sector'],
-          ]"
-          :key="id"
-          size="sm"
-          :variant="allocationMode === id ? 'secondary' : 'ghost'"
-          :aria-pressed="allocationMode === id"
-          class="h-7 px-2 text-xs"
-          @click="
-            selectedCategory = null;
-            emit('settings-change', { allocationMode: id });
-          "
-          >{{ label }}</Button
-        >
-        <select
-          :value="allocationMode"
-          aria-label="More allocation views"
-          class="bg-background h-7 max-w-28 min-w-0 rounded-md border px-1 text-xs"
-          @change="
-            selectedCategory = null;
-            emit('settings-change', { allocationMode: ($event.target as HTMLSelectElement).value });
-          "
-        >
-          <option v-for="[id, label] in INVESTMENT_ALLOCATION_MODES" :key="id" :value="id">
-            {{ ['holdings', 'underlying', 'sector'].includes(id) ? 'More views' : label }}
-          </option>
-        </select>
-      </div>
       <DrilldownDonut
         :data="allocationTree"
         :total="allocation.reduce((sum, row) => sum + Number(row.value), 0)"
