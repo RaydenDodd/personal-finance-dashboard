@@ -78,7 +78,12 @@ function render() {
     minDate = new Date(+minDate - 86400000);
     maxDate = new Date(+maxDate + 86400000);
   }
-  const x = d3.scaleTime().domain([minDate, maxDate]).range([0, w]);
+  const barWidth = Math.min(100, Math.max(4, (w / Math.max(points.length, 1)) * 0.65));
+  const inset = props.bars ? Math.min(w / 2, barWidth / 2 + 4) : 0;
+  const x = d3
+    .scaleTime()
+    .domain([minDate, maxDate])
+    .range([inset, w - inset]);
   const value = (point: InvestmentChartPoint, key: string) => point.values[key];
   const values = points.flatMap((point) =>
     props.bars
@@ -142,7 +147,6 @@ function render() {
     .call((axis) => axis.select('.domain').remove())
     .call((axis) => axis.selectAll('text').attr('fill', 'var(--muted-foreground)').attr('font-size', 10));
   const selectedBars = g.append('g');
-  const barWidth = Math.min(100, Math.max(4, (w / Math.max(points.length, 1)) * 0.65));
   if (props.bars) {
     points.forEach((point) => {
       let positive = 0,
