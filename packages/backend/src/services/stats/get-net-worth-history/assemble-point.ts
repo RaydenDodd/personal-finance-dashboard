@@ -34,6 +34,8 @@ export interface AccountSignSplit {
 export const assembleNetWorthPoint = ({
   date,
   assetAccounts,
+  savingsAccounts = { owedCents: asCents(0), surplusCents: asCents(0) },
+  investmentAccounts = { owedCents: asCents(0), surplusCents: asCents(0) },
   creditCard,
   overdraft,
   loanCents,
@@ -43,6 +45,8 @@ export const assembleNetWorthPoint = ({
 }: {
   date: string;
   assetAccounts: AccountSignSplit;
+  savingsAccounts?: AccountSignSplit;
+  investmentAccounts?: AccountSignSplit;
   creditCard: AccountSignSplit;
   overdraft: AccountSignSplit;
   loanCents: Cents;
@@ -50,11 +54,14 @@ export const assembleNetWorthPoint = ({
   vehicleCents: Cents;
   ventureCents: Cents;
 }): NetWorthHistoryPointCents & { liabilitiesTotal: Cents; netWorth: Cents } => {
-  const overdraftOwedCents = asCents(overdraft.owedCents + assetAccounts.owedCents);
+  const overdraftOwedCents = asCents(
+    overdraft.owedCents + assetAccounts.owedCents + savingsAccounts.owedCents + investmentAccounts.owedCents,
+  );
 
   const assets: Record<NetWorthAssetKind, Cents> = {
     cash: asCents(assetAccounts.surplusCents + creditCard.surplusCents + overdraft.surplusCents),
-    investments: portfolioCents,
+    savings: savingsAccounts.surplusCents,
+    investments: asCents(portfolioCents + investmentAccounts.surplusCents),
     vehicles: vehicleCents,
     ventures: ventureCents,
   };

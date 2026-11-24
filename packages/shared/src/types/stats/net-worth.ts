@@ -131,10 +131,10 @@ export type NetWorthLiabilityKind = (typeof NET_WORTH_LIABILITY_KINDS)[number];
 
 // Asset classes the report splits net-worth assets into. Report-specific rather than
 // ACCOUNT_CATEGORIES values because vehicles and ventures are their own entities, and
-// `cash` folds every deposit account (regular/savings/cash, plus a positive-balance
-// card or overdraft) into one bucket. The client derives filtered views by toggling
+// `savings` uses the savings account category; `cash` holds other deposit accounts
+// and positive card/overdraft balances. The client derives filtered views by toggling
 // kinds, so it never refetches.
-export const NET_WORTH_ASSET_KINDS = ['cash', 'investments', 'vehicles', 'ventures'] as const;
+export const NET_WORTH_ASSET_KINDS = ['cash', 'savings', 'investments', 'vehicles', 'ventures'] as const;
 export type NetWorthAssetKind = (typeof NET_WORTH_ASSET_KINDS)[number];
 
 // Every amount below is a decimal in the user's base currency.

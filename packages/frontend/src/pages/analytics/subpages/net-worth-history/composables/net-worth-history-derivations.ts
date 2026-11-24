@@ -23,6 +23,7 @@ import {
 // the net-worth line stays the theme foreground, so they never collide with these.
 export const NET_WORTH_ASSET_KIND_COLORS: Record<NetWorthAssetKind, string> = {
   cash: 'rgb(16, 185, 129)', // emerald
+  savings: 'rgb(20, 184, 166)', // teal
   investments: 'rgb(59, 130, 246)', // blue
   vehicles: 'rgb(245, 158, 11)', // amber
   ventures: 'rgb(168, 85, 247)', // purple
@@ -31,6 +32,7 @@ export const NET_WORTH_ASSET_KIND_COLORS: Record<NetWorthAssetKind, string> = {
 /** i18n label key per asset kind, shared by the filter, legend and tooltip. */
 export const NET_WORTH_ASSET_KIND_LABEL_KEYS: Record<NetWorthAssetKind, string> = {
   cash: 'netWorthHistory.assetKinds.cash',
+  savings: 'netWorthHistory.assetKinds.savings',
   investments: 'netWorthHistory.assetKinds.investments',
   vehicles: 'netWorthHistory.assetKinds.vehicles',
   ventures: 'netWorthHistory.assetKinds.ventures',

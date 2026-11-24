@@ -50,7 +50,13 @@ export function assembleRecordedHistory({
   const point = (date: string, source: 'imported' | 'recorded') =>
     ({
       date,
-      assets: { cash: asCents(0), investments: asCents(0), vehicles: asCents(0), ventures: asCents(0) },
+      assets: {
+        cash: asCents(0),
+        savings: asCents(0),
+        investments: asCents(0),
+        vehicles: asCents(0),
+        ventures: asCents(0),
+      },
       assetsTotal: asCents(0),
       liabilities: {
         [ACCOUNT_CATEGORIES.creditCard]: asCents(0),
@@ -70,7 +76,11 @@ export function assembleRecordedHistory({
       const kind = liabilityKind === ACCOUNT_CATEGORIES.creditCard ? 'credit-card' : 'overdraft';
       p.liabilities[kind] = asCents(p.liabilities[kind] + value);
     } else {
-      const kind = ['investments', 'retirement', 'investment'].includes(category) ? 'investments' : 'cash';
+      const kind = ['saving', 'savings'].includes(category)
+        ? 'savings'
+        : ['investments', 'retirement', 'investment', 'crypto'].includes(category)
+          ? 'investments'
+          : 'cash';
       p.assets[kind] = asCents(p.assets[kind] + value);
     }
   };

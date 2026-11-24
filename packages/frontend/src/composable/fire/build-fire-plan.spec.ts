@@ -18,6 +18,7 @@ const NOW = new Date(2026, 8, 24);
 const point = ({
   date = '2026-09-24',
   cash = 0,
+  savings = 0,
   investments = 0,
   vehicles = 0,
   ventures = 0,
@@ -27,6 +28,7 @@ const point = ({
 }: {
   date?: string;
   cash?: number;
+  savings?: number;
   investments?: number;
   vehicles?: number;
   ventures?: number;
@@ -35,15 +37,15 @@ const point = ({
   loan?: number;
 }): NetWorthHistoryPoint => ({
   date,
-  assets: { cash, investments, vehicles, ventures },
-  assetsTotal: cash + investments + vehicles + ventures,
+  assets: { cash, savings, investments, vehicles, ventures },
+  assetsTotal: cash + savings + investments + vehicles + ventures,
   liabilities: {
     [ACCOUNT_CATEGORIES.creditCard]: creditCard,
     [ACCOUNT_CATEGORIES.overdraft]: overdraft,
     [ACCOUNT_CATEGORIES.loan]: loan,
   },
   liabilitiesTotal: creditCard + overdraft + loan,
-  netWorth: cash + investments + vehicles + ventures + creditCard + overdraft + loan,
+  netWorth: cash + savings + investments + vehicles + ventures + creditCard + overdraft + loan,
 });
 
 const cashFlowPeriods = ({ months, expenses = 3_000 }: { months: number; expenses?: number }): CashFlowPeriodData[] =>
@@ -565,5 +567,13 @@ describe('buildFirePlan selected target type', () => {
     };
     expect(pmt('lean') / pmt('regular')).toBeCloseTo(0.7, 9);
     expect(pmt('fat') / pmt('regular')).toBeCloseTo(1.5, 9);
+  });
+});
+
+describe('savings split compatibility', () => {
+  it('continues including savings in the FIRE account total', () => {
+    const p = build({ fire: READY, points: [point({ cash: 100, savings: 200, investments: 300 })] });
+    expect(p.inputs.balance).toBe(600);
+    expect(p.inputs.buckets.accounts).toBe(300);
   });
 });

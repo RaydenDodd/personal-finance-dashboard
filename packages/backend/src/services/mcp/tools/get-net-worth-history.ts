@@ -10,7 +10,7 @@ export const getNetWorthHistoryTool = defineTool({
   toolset: 'core',
   access: 'read',
   description:
-    'Get net worth over time as points, each with assets by kind (cash, investments, vehicles, ventures), liabilities by kind (credit-card, loan, overdraft) and the net worth, in the base currency. Subtracts credit limits when the includeCreditLimitInStats setting is on. A degraded field lists securities or currencies that could not be priced.',
+    'Get net worth over time as points, each with assets by kind (cash, savings, investments, vehicles, ventures), liabilities by kind (credit-card, loan, overdraft) and the net worth, in the base currency. Subtracts credit limits when the includeCreditLimitInStats setting is on. A degraded field lists securities or currencies that could not be priced.',
   input: {
     ...statsRangeInput,
     granularity: z

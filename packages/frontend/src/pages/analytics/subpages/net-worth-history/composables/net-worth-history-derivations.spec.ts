@@ -36,6 +36,7 @@ const buildPoint = ({
   date,
   // `assets` is shorthand for the `cash` kind — most tests only need one asset bucket.
   assets = 0,
+  savings = 0,
   investments = 0,
   vehicles = 0,
   ventures = 0,
@@ -45,6 +46,7 @@ const buildPoint = ({
 }: {
   date: string;
   assets?: number;
+  savings?: number;
   investments?: number;
   vehicles?: number;
   ventures?: number;
@@ -52,8 +54,8 @@ const buildPoint = ({
   loan?: number;
   overdraft?: number;
 }): NetWorthHistoryPoint => {
-  const assetsByKind = { cash: assets, investments, vehicles, ventures };
-  const assetsTotal = assets + investments + vehicles + ventures;
+  const assetsByKind = { cash: assets, savings, investments, vehicles, ventures };
+  const assetsTotal = assets + savings + investments + vehicles + ventures;
   const liabilitiesTotal = creditCard + loan + overdraft;
   return {
     date,
@@ -450,5 +452,16 @@ describe('granularity helpers', () => {
 
     const granularity = autoGranularity({ from, to });
     expect(countBuckets({ from, to, granularity })).toBeLessThanOrEqual(MAX_NET_WORTH_HISTORY_BUCKETS);
+  });
+});
+
+describe('savings asset presentation', () => {
+  it('shows savings as a filterable series without changing the all-category total', () => {
+    const points = [buildPoint({ date: '2026-11-24', assets: 100, savings: 200, investments: 300 })];
+    expect(assetKindsWithActivity({ points })).toEqual(['cash', 'savings', 'investments']);
+    const [all] = buildDisplayPoints({ points, selectedAssetKinds: ALL_ASSET_KINDS, selectedLiabilityKinds: [] });
+    expect(all!.assetsTotal).toBe(600);
+    const [saved] = buildDisplayPoints({ points, selectedAssetKinds: ['savings'], selectedLiabilityKinds: [] });
+    expect(saved!.assetsTotal).toBe(200);
   });
 });

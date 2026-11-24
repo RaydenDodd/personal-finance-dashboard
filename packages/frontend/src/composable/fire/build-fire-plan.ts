@@ -130,6 +130,7 @@ const ZERO_BUCKETS: FireBuckets = {
 const toFireBuckets = ({ point }: { point: NetWorthHistoryPoint }): FireBuckets => ({
   accounts:
     point.assets.cash +
+    (point.assets.savings ?? 0) +
     point.liabilities[ACCOUNT_CATEGORIES.creditCard] +
     point.liabilities[ACCOUNT_CATEGORIES.overdraft],
   portfolios: point.assets.investments,

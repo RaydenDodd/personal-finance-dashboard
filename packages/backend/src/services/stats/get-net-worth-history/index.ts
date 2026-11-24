@@ -291,6 +291,8 @@ export const getNetWorthHistory = async ({
   // An account missing from the category map (created between the two reads)
   // counts as an asset account rather than being dropped.
   const assetAccountsSeries: Record<string, Record<string, number>> = {};
+  const savingsAccountsSeries: Record<string, Record<string, number>> = {};
+  const investmentAccountsSeries: Record<string, Record<string, number>> = {};
   const creditCardSeries: Record<string, Record<string, number>> = {};
   const overdraftSeries: Record<string, Record<string, number>> = {};
   const loanCentsByDate = new Map<string, number>();
@@ -305,6 +307,10 @@ export const getNetWorthHistory = async ({
       for (const [date, cents] of Object.entries(centsByDate)) {
         loanCentsByDate.set(date, (loanCentsByDate.get(date) ?? 0) + cents);
       }
+    } else if (category === ACCOUNT_CATEGORIES.saving) {
+      savingsAccountsSeries[accountId] = centsByDate;
+    } else if (category === ACCOUNT_CATEGORIES.investment || category === ACCOUNT_CATEGORIES.crypto) {
+      investmentAccountsSeries[accountId] = centsByDate;
     } else {
       assetAccountsSeries[accountId] = centsByDate;
     }
@@ -325,6 +331,20 @@ export const getNetWorthHistory = async ({
         series: assetAccountsSeries,
         snapshotDate: dateStr,
         partition: 'asset-accounts',
+        userId,
+        creditLimitCentsByAccount,
+      }),
+      savingsAccounts: splitSeriesBySign({
+        series: savingsAccountsSeries,
+        snapshotDate: dateStr,
+        partition: 'savings-accounts',
+        userId,
+        creditLimitCentsByAccount,
+      }),
+      investmentAccounts: splitSeriesBySign({
+        series: investmentAccountsSeries,
+        snapshotDate: dateStr,
+        partition: 'investment-accounts',
         userId,
         creditLimitCentsByAccount,
       }),
@@ -359,7 +379,15 @@ export const getNetWorthHistory = async ({
           if (!other) return point;
           const assets = {
             ...point.assets,
-            investments: asCents(point.assets.investments + other.assets.investments),
+            investments: asCents(
+              point.assets.investments +
+                readAssetValue({
+                  map: portfolioValuation.valuesByDate,
+                  dateStr: point.date,
+                  label: 'portfolio',
+                  userId,
+                }),
+            ),
             vehicles: other.assets.vehicles,
             ventures: other.assets.ventures,
           };

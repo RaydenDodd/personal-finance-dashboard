@@ -88,7 +88,7 @@ describe('assembleNetWorthPoint', () => {
       ventureCents: asCents(400),
     });
 
-    expect(point.assets).toEqual({ cash: 100, investments: 200, vehicles: 300, ventures: 400 });
+    expect(point.assets).toEqual({ cash: 100, savings: 0, investments: 200, vehicles: 300, ventures: 400 });
     expect(point.assetsTotal).toBe(1000);
     expect(point.netWorth).toBe(1000);
   });
@@ -119,3 +119,18 @@ const _cents: Cents = assembleNetWorthPoint({
   ventureCents: asCents(0),
 }).netWorth;
 void _cents;
+
+describe('savings account grouping', () => {
+  it('separates savings and investment accounts without changing overall assets or net worth', () => {
+    const p = assemble({
+      assetAccounts: split(0, 100),
+      savingsAccounts: split(-20, 500),
+      investmentAccounts: split(0, 300),
+      portfolioCents: asCents(200),
+    });
+    expect(p.assets).toEqual({ cash: 100, savings: 500, investments: 500, vehicles: 0, ventures: 0 });
+    expect(p.assetsTotal).toBe(1100);
+    expect(p.liabilitiesTotal).toBe(-20);
+    expect(p.netWorth).toBe(1080);
+  });
+});

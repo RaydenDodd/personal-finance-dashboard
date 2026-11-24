@@ -94,3 +94,59 @@ describe('native historical source authority', () => {
     ).toEqual([]);
   });
 });
+
+describe('historical savings grouping', () => {
+  it('retains original dated savings separately from cash and investments', () => {
+    const result = assembleRecordedHistory({
+      accounts: [
+        { id: 'saved', included: true, categoryId: 'savings', balanceKind: 'asset', currencyCode: 'USD' },
+        { id: 'invested', included: true, categoryId: 'investments', balanceKind: 'asset', currencyCode: 'USD' },
+      ] as FinanceAccount[],
+      snapshots: [],
+      history: [
+        {
+          date: '2024-08-01',
+          balances: { saved: 200, invested: 300 },
+          valuationDates: {},
+          complete: true,
+          total: 500,
+          knownTotal: 500,
+          categories: { savings: 200, investments: 300 },
+          missingAccountIds: [],
+        },
+      ],
+      mappings: [],
+      nativeAccounts: [],
+      nativeSnapshots: [],
+    });
+    expect(result[0]!.assets.savings).toBe(20000);
+    expect(result[0]!.assets.investments).toBe(30000);
+    expect(result[0]!.assets.cash).toBe(0);
+    expect(result[0]!.assetsTotal).toBe(50000);
+    expect(result[0]!.liabilitiesTotal).toBeNull();
+  });
+});
+
+describe('native account category grouping', () => {
+  it('uses the editable savings category for recorded bank balances', () => {
+    const [p] = assembleRecordedHistory({
+      accounts: [],
+      snapshots: [],
+      history: [],
+      mappings: [],
+      nativeAccounts: [
+        {
+          id: 'saved',
+          name: 'Emergency fund',
+          accountCategory: 'saving',
+          currencyCode: 'USD',
+          excludeFromStats: false,
+        },
+      ],
+      nativeSnapshots: [{ id: 's', nativeAccountId: 'saved', date: '2026-11-05', balanceCents: 12500, createdAt: '1' }],
+    });
+    expect(p!.assets.savings).toBe(12500);
+    expect(p!.assets.cash).toBe(0);
+    expect(p!.netWorth).toBe(12500);
+  });
+});
