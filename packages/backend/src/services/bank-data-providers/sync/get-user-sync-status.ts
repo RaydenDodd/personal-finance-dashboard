@@ -206,6 +206,14 @@ export async function getUserAccountsSyncStatus(userId: number): Promise<{
   const enrichedStatuses = statuses.map((status, i) => {
     const account = accounts[i]!;
 
+    const connection = account.bankDataProviderConnection;
+    const providerData = (
+      connection.metadata as { simplefinFetch?: { accounts?: Record<string, BankDataFreshness> } } | null
+    )?.simplefinFetch?.accounts?.[account.externalId];
+    if (providerData?.warnings.length && ![SyncStatus.QUEUED, SyncStatus.SYNCING].includes(status.status)) {
+      status = { ...status, status: SyncStatus.FAILED, error: providerData.warnings.join('; ') };
+    }
+
     summary.total++;
     switch (status.status) {
       case SyncStatus.SYNCING:
@@ -225,10 +233,6 @@ export async function getUserAccountsSyncStatus(userId: number): Promise<{
         break;
     }
 
-    const connection = account.bankDataProviderConnection;
-    const providerData = (
-      connection.metadata as { simplefinFetch?: { accounts?: Record<string, BankDataFreshness> } } | null
-    )?.simplefinFetch?.accounts?.[account.externalId];
     return {
       ...status,
       providerData: providerData

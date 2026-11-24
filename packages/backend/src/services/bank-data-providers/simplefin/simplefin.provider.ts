@@ -27,6 +27,7 @@ import { persistSyncedTransactions } from '../utils/persist-synced-transactions'
 import { writeBankBalanceWithHistory } from '../utils/write-bank-balance-with-history';
 import { SimplefinApiClient } from './api-client';
 import { normalizeMerchantCategoryCode } from './merchant-category-code';
+import { simplefinAccountWarnings } from './response-errors';
 import { simplefinSyncStart } from './sync-window';
 import {
   SimplefinAccount,
@@ -864,15 +865,7 @@ export class SimplefinProvider extends BaseBankDataProvider {
   }
 
   private accountWarnings(accountSet: SimplefinAccountSet, account: SimplefinAccount): string[] {
-    if (!accountSet.errlist?.length) return accountSet.errors ?? [];
-    return accountSet.errlist
-      .filter(
-        (error) =>
-          (!error.conn_id && !error.account_id) ||
-          error.account_id === account.id ||
-          (!!error.conn_id && error.conn_id === account.conn_id),
-      )
-      .map((error) => error.msg);
+    return simplefinAccountWarnings(accountSet, account);
   }
 
   private async resolveIncrementalStart(account: Accounts, to: Date) {
