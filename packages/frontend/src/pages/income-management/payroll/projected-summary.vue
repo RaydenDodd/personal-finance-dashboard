@@ -34,7 +34,7 @@ defineEmits<{ edit: [] }>();
         </p>
         <p
           class="mt-2 font-semibold tracking-tight"
-          :class="bounded ? 'text-[clamp(1.5rem,9cqi,2.25rem)]' : 'text-4xl'"
+          :class="bounded ? 'text-[clamp(1.5rem,9cqi,2.25rem)]' : 'text-[clamp(1.25rem,8cqi,2.25rem)]'"
         >
           {{ money(result ? result.annual.totalComp / divisor : null) }}
         </p>
@@ -51,12 +51,14 @@ defineEmits<{ edit: [] }>();
         v-if="!$slots.action"
         :size="bounded || dashboardRange ? 'icon-sm' : 'default'"
         :variant="bounded || dashboardRange ? 'ghost' : 'default'"
-        class="shrink-0"
+        class="shrink-0 max-sm:size-8 max-sm:p-0"
         aria-label="Edit projections"
         title="Edit projections"
         @click="$emit('edit')"
-        ><SquarePenIcon v-if="bounded || dashboardRange" class="size-4" /><template v-else
-          >Edit projections</template
+        ><SquarePenIcon :class="bounded || dashboardRange ? 'size-4' : 'size-4 sm:hidden'" /><span
+          v-if="!bounded && !dashboardRange"
+          class="hidden sm:inline"
+          >Edit projections</span
         ></Button
       >
     </div>

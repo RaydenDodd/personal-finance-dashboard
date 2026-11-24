@@ -13,6 +13,7 @@ import { useLocalStorage } from '@vueuse/core';
 import PeriodButtons from './period-buttons.vue';
 import IncomeAllocationView from './income-allocation.vue';
 import { incomeAllocation } from './income-allocation';
+import DashboardEditToolbar from '@/pages/dashboard/components/dashboard-edit-toolbar.vue';
 import DashboardPageLayout from '@/pages/dashboard/components/dashboard-page-layout.vue';
 import { pageBlock, defaultPageLayout } from '@/pages/dashboard/composables/page-blocks';
 const pageLayout = ref<InstanceType<typeof DashboardPageLayout> | null>(null);
@@ -69,12 +70,26 @@ onMounted(load);
     ><div class="mx-auto w-full max-w-6xl space-y-6 p-4 md:p-6">
       <header class="flex flex-wrap items-center justify-between gap-3">
         <h1 class="text-2xl font-semibold">Projected Income</h1>
-        <div class="flex flex-wrap items-center gap-3">
-          <PeriodButtons v-model="period" />
-        </div>
       </header>
       <Callout v-if="error" variant="destructive">{{ error }}</Callout>
       <DashboardPageLayout ref="pageLayout" page="income" :registry="blocks" :default-layout="defaultLayout">
+        <template #toolbar="{ grid }">
+          <div
+            class="flex min-w-0 items-center justify-between gap-2"
+            :class="grid?.isEditMode ? 'flex-wrap' : ''"
+            data-testid="projected-income-controls"
+          >
+            <PeriodButtons v-model="period" />
+            <DashboardEditToolbar
+              compact-on-mobile
+              :is-edit-mode="grid?.isEditMode ?? false"
+              :is-saving="grid?.isSaving"
+              @enter="grid?.enterEditMode()"
+              @save="grid?.saveLayout()"
+              @cancel="grid?.cancelEdit()"
+            />
+          </div>
+        </template>
         <template #summary>
           <ProjectedSummary
             :result="result"

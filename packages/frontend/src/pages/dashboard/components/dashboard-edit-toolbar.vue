@@ -5,6 +5,7 @@ import { SettingsIcon } from '@lucide/vue';
 defineProps<{
   isEditMode: boolean;
   isSaving?: boolean;
+  compactOnMobile?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -23,9 +24,16 @@ const emit = defineEmits<{
       <Button size="sm" :disabled="isSaving" @click="emit('save')"> {{ $t('common.actions.done') }} </Button>
     </template>
     <template v-else>
-      <Button variant="outline" size="sm" @click="emit('enter')">
+      <Button
+        variant="outline"
+        size="sm"
+        :class="compactOnMobile ? 'max-sm:size-8 max-sm:shrink-0 max-sm:p-0' : ''"
+        :aria-label="$t('dashboard.editMode.customize')"
+        :title="$t('dashboard.editMode.customize')"
+        @click="emit('enter')"
+      >
         <SettingsIcon class="size-3.5" />
-        {{ $t('dashboard.editMode.customize') }}
+        <span :class="compactOnMobile ? 'hidden sm:inline' : ''">{{ $t('dashboard.editMode.customize') }}</span>
       </Button>
     </template>
   </div>
