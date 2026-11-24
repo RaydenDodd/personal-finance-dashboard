@@ -39,9 +39,9 @@ const categories = computed(() =>
         {
           label: 'Employer retirement',
           value: summary.value.employerRetirement,
-          color: incomeColors.savingsInvestments,
+          color: incomeColors.employerRetirement,
         },
-        { label: 'Total compensation', value: summary.value.totalCompensation, color: incomeColors.retirement },
+        { label: 'Total compensation', value: summary.value.totalCompensation, color: incomeColors.income },
       ]
     : [],
 );
@@ -68,7 +68,8 @@ const categories = computed(() =>
         <div>
           <p class="text-muted-foreground text-xs font-medium">Current annualized base salary</p>
           <p
-            class="text-primary-text mt-2 font-semibold tracking-tight tabular-nums"
+            :style="{ color: incomeColors.salary }"
+            class="mt-2 font-semibold tracking-tight tabular-nums"
             :class="bounded ? 'text-3xl' : 'text-4xl'"
           >
             {{ money(summary.currentSalary) }}

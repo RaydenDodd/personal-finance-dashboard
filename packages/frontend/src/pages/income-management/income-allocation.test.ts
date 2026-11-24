@@ -14,17 +14,21 @@ function calculation() {
   return input;
 }
 describe('native income chart adapter', () => {
-  it('preserves the original four pie destinations in both native charts without changing the calculation', () => {
+  it('preserves the five separate financial destinations in both native charts without changing the calculation', () => {
     const result = calculateIncomePlan(calculation());
     const before = structuredClone(result);
     const presentation = incomeAllocation(result)!;
     expect(presentation.groups.map((g) => g.name)).toEqual([
       'Spending Money',
-      'Savings and Investments',
+      'Savings',
+      'Investments',
       'Retirement',
       'Taxes',
     ]);
-    expect(presentation.groups.map((g) => g.amount)).toEqual(result.allocations.map((a) => a.yearly));
+    expect(
+      presentation.groups.find((g) => g.id === 'savings')!.amount +
+        presentation.groups.find((g) => g.id === 'investments')!.amount,
+    ).toBeCloseTo(result.allocations.find((a) => a.id === 'savingsInvestments')!.yearly, 6);
     expect(presentation.groups.reduce((n, g) => n + g.amount, 0)).toBeCloseTo(result.annual.totalComp, 2);
     expect(presentation.groups.find((g) => g.id === 'taxes')?.children.map((n) => n.name)).toContain('Social Security');
     const retirement = presentation.groups.find((g) => g.id === 'retirement')!;
@@ -74,7 +78,16 @@ describe('native income chart adapter', () => {
       }
       expect(fields.find((f) => f.id === 'traditionalIra')?.amount).toBe(0);
       expect(fields.find((f) => f.id === 'rothIra')?.amount).toBe(0);
-      expect(groups.map((g) => g.id)).toEqual(['income', 'taxes', 'pre', 'post', 'employer', 'savings', 'spending']);
+      expect(groups.map((g) => g.id)).toEqual([
+        'income',
+        'taxes',
+        'pre',
+        'post',
+        'employer',
+        'savings',
+        'investments',
+        'spending',
+      ]);
       expect(result).toEqual(before);
     },
   );

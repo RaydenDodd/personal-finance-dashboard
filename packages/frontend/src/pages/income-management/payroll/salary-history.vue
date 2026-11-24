@@ -138,7 +138,6 @@ function render() {
     .call((g) => g.selectAll('path,line').attr('stroke', colors.grid))
     .call((g) => g.selectAll('text').attr('fill', colors.text));
   const grouped = d3.group(visibleEvents, (e) => e.employmentId);
-  let region = 0;
   for (const [id, events] of grouped) {
     const employment = data.value?.employments.find((e) => e.id === id);
     const before = events.filter((e) => e.date <= bounds.value.from).at(-1);
@@ -168,15 +167,15 @@ function render() {
       .attr('y', m.top)
       .attr('width', Math.max(0, x(new Date(through + 'T12:00:00')) - x(new Date(points[0]!.date + 'T12:00:00'))))
       .attr('height', h - m.top - m.bottom)
-      .attr('fill', region++ % 2 === 0 ? colors.primary : colors.appSavings)
+      .attr('fill', colors.financial.salary)
       .attr('opacity', 0.025);
-    root.append('path').datum(points).attr('d', area).attr('fill', colors.primary).attr('opacity', 0.1);
+    root.append('path').datum(points).attr('d', area).attr('fill', colors.financial.salary).attr('opacity', 0.1);
     root
       .append('path')
       .datum(points)
       .attr('d', line)
       .attr('fill', 'none')
-      .attr('stroke', colors.primary)
+      .attr('stroke', colors.financial.salary)
       .attr('stroke-width', 2.5);
     const markers = events.filter((e) => e.date >= bounds.value.from && e.date <= through);
     root
@@ -188,7 +187,9 @@ function render() {
       .attr('cx', (e) => x(new Date(e.date + 'T12:00:00')))
       .attr('cy', (e) => y(e.salary))
       .attr('r', 6)
-      .attr('fill', (e) => (e.change == null ? colors.primary : e.change < 0 ? colors.appExpense : colors.appIncome))
+      .attr('fill', (e) =>
+        e.change == null ? colors.financial.salary : e.change < 0 ? colors.appExpense : colors.appIncome,
+      )
       .attr('stroke', colors.card)
       .attr('stroke-width', 2);
     if (w > 550 && markers.length < 12)
@@ -254,7 +255,7 @@ function render() {
         .attr('cy', (e) => y(e.salary))
         .attr('class', 'salary-hover-dot')
         .attr('r', snap ? 7 : 5)
-        .attr('fill', colors.primary)
+        .attr('fill', colors.financial.salary)
         .attr('stroke', colors.card)
         .attr('stroke-width', 2);
       void nextTick(() => updateTooltipPosition(event));

@@ -318,7 +318,7 @@ const renderChart = () => {
       id: 'taxes',
       name: t('analytics.cashFlow.composition.taxes'),
       value: flow.taxes,
-      color: colors.primary,
+      color: colors.financial.taxes,
       // Taxes end at their mid node: nothing is bought with them, so no ribbon runs on to the right.
       items: [],
       shareLabel: '',

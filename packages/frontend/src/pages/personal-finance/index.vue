@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { FINANCIAL_COLORS, accountFinancialColor } from '@bt/shared/financial-colors';
 import { loadAccounts } from '@/api/accounts';
 import {
   commitFinanceImport,
@@ -190,7 +191,10 @@ const summaryPoint = computed(() =>
 const allMissing = computed(() =>
   included.value.filter((a) => summaryPoint.value?.missingAccountIds.includes(a.id) || a.latestBalance === null),
 );
-const categoryById = (id: string) => data.value?.categories.find((c) => c.id === id);
+const financialCategories = computed(() =>
+  (data.value?.categories ?? []).map((c) => ({ ...c, color: accountFinancialColor(c.id + ' ' + c.name) })),
+);
+const categoryById = (id: string) => financialCategories.value.find((c) => c.id === id);
 const accountById = (id: string) => data.value?.accounts.find((a) => a.id === id);
 const changePercent = (value: FinanceDashboard['monthlyChange']) =>
   typeof value === 'object' && value !== null ? value.percent : null;
@@ -228,7 +232,7 @@ const chartModel = computed(
     mode: 'line' | 'overlay' | 'stacked' | 'bar' | 'donut';
     percentage?: boolean;
   } => {
-    const categories = data.value?.categories ?? [];
+    const categories = financialCategories.value;
     const catSeries = categories.map((c) => ({ id: c.id, name: c.name, color: c.color }));
     const rows = history.value.map((p) => ({
       label: p.date,
@@ -247,7 +251,14 @@ const chartModel = computed(
         series: [
           ...series,
           ...(compare
-            ? [{ id: 'total', name: 'Total net worth (recorded accounts)', color: 'var(--foreground)', lineOnly: true }]
+            ? [
+                {
+                  id: 'total',
+                  name: 'Total net worth (recorded accounts)',
+                  color: 'var(--financial-net-worth)',
+                  lineOnly: true,
+                },
+              ]
             : []),
         ],
         mode: categoryDisplay.value,
@@ -332,9 +343,9 @@ const chartModel = computed(
       return {
         rows: accountRows,
         series: [
-          { id: 'value', name: account?.name ?? 'Account value', color: 'var(--primary)' },
+          { id: 'value', name: account?.name ?? 'Account value', color: accountFinancialColor(account?.categoryId) },
           ...(chart.value === 'principal'
-            ? [{ id: 'principal', name: 'Net contributed principal', color: 'var(--app-savings-color)' }]
+            ? [{ id: 'principal', name: 'Net contributed principal', color: FINANCIAL_COLORS.investments }]
             : []),
         ],
         mode: 'line',
@@ -342,7 +353,7 @@ const chartModel = computed(
     }
     return {
       rows: history.value.map((p) => ({ label: p.date, values: { total: recordedNetWorth(p) }, partial: !p.complete })),
-      series: [{ id: 'total', name: 'Net worth', color: 'var(--primary)' }],
+      series: [{ id: 'total', name: 'Net worth', color: 'var(--financial-net-worth)' }],
       mode: 'line',
     };
   },
@@ -904,7 +915,7 @@ const inputClass =
             </div>
           </Card>
         </template>
-        <template v-for="category in data.categories" :key="category.id" #[`category-${category.id}`]>
+        <template v-for="category in financialCategories" :key="category.id" #[`category-${category.id}`]>
           <Card
             as="button"
             type="button"
@@ -947,7 +958,7 @@ const inputClass =
                         aria-label="Category filter"
                       >
                         <option value="all">All Categories</option>
-                        <option v-for="category in data.categories" :key="category.id" :value="category.id">
+                        <option v-for="category in financialCategories" :key="category.id" :value="category.id">
                           {{ category.name }}
                         </option>
                       </select>
@@ -1436,7 +1447,7 @@ const inputClass =
             /></label>
             <label class="grid gap-1.5 text-sm"
               >Reporting category<select v-model="accountForm.categoryId" :class="inputClass">
-                <option v-for="category in data.categories" :key="category.id" :value="category.id">
+                <option v-for="category in financialCategories" :key="category.id" :value="category.id">
                   {{ category.name }}
                 </option>
               </select></label
@@ -1649,7 +1660,7 @@ const inputClass =
                 aria-label="Account category filter"
               >
                 <option value="all">All Categories</option>
-                <option v-for="category in data.categories" :key="category.id" :value="category.id">
+                <option v-for="category in financialCategories" :key="category.id" :value="category.id">
                   {{ category.name }}
                 </option>
               </select></label
@@ -1866,7 +1877,7 @@ const inputClass =
               {
                 id: 'balance',
                 name: detailScope === 'account' ? 'Account balance' : 'Recorded balances',
-                color: 'var(--primary)',
+                color: 'var(--financial-net-worth)',
               },
             ]"
             :currency="detailCurrency"

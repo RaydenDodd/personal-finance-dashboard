@@ -210,7 +210,7 @@ const careerVisible = computed(
               <p class="text-muted-foreground text-xs">Employer</p>
               <p
                 class="mt-2 text-[clamp(0.875rem,15cqi,1.5rem)] font-bold tabular-nums"
-                :style="{ color: incomeColors.savingsInvestments }"
+                :style="{ color: incomeColors.employerRetirement }"
               >
                 {{ money(summary.employerRetirement) }}
               </p>

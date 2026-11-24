@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { FINANCIAL_COLORS } from '@bt/shared/financial-colors';
 import { computed, ref, useTemplateRef } from 'vue';
 import { useQuery } from '@tanstack/vue-query';
 import { useElementSize } from '@vueuse/core';
@@ -11,6 +12,7 @@ import { ChartTooltip, ChartTooltipHeader, ChartTooltipRow } from '@/components/
 import { Button } from '@/components/lib/ui/button';
 import SummaryCard from '../../cash-flow/components/summary-card.vue';
 const props = defineProps<{ from: Date; to: Date; metric: 'income' | 'savings' }>();
+const seriesColor = computed(() => FINANCIAL_COLORS[props.metric]);
 const key = computed(() => ({ from: format(props.from, 'yyyy-MM-dd'), through: format(props.to, 'yyyy-MM-dd') }));
 const { data, isLoading, isError, refetch } = useQuery({
   queryKey: computed(() => ['income-plan-pace', key.value]),
@@ -95,13 +97,15 @@ const detailsOpen = ref(false);
           :title="metric === 'income' ? 'Received take-home income' : 'Net savings and investment funding'"
           :value="last >= 0 ? (actual[last] ?? 0) : 0"
           :value-label="money(last >= 0 ? actual[last] : null)"
-          class="text-app-income-color [&>div:last-child]:text-3xl [&>div:last-child]:font-bold"
+          :style="{ color: seriesColor }"
+          class="[&>div:last-child]:text-3xl [&>div:last-child]:font-bold"
         />
         <SummaryCard
           title="Income plan - selected period"
           :value="plan.at(-1) ?? 0"
           :value-label="money(plan.at(-1))"
-          class="text-primary [&>div:last-child]:text-3xl [&>div:last-child]:font-bold"
+          :style="{ color: seriesColor }"
+          class="[&>div:last-child]:text-3xl [&>div:last-child]:font-bold"
         />
         <SummaryCard
           :title="forecast ? 'At current pace - period end' : 'Actual vs plan - observed dates'"
@@ -140,6 +144,7 @@ const detailsOpen = ref(false);
         >
           <PacePlot
             :geometry="geometry"
+            :series-color="seriesColor"
             :width="width"
             :height="height"
             :tone="tone"
@@ -177,7 +182,8 @@ const detailsOpen = ref(false);
           >
         </div>
         <div class="text-muted-foreground flex flex-wrap gap-4 text-xs">
-          <span class="flex items-center gap-2"><i class="border-primary w-5 border-t-2" />Actual</span
+          <span class="flex items-center gap-2"
+            ><i class="w-5 border-t-2" :style="{ borderColor: seriesColor }" />Actual</span
           ><span class="flex items-center gap-2"
             ><i class="border-muted-foreground w-5 border-t-2 opacity-45" />Income plan</span
           ><span v-if="forecast" class="flex items-center gap-2"

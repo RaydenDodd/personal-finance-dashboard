@@ -14,7 +14,7 @@ import type {
 import DrilldownDonut from '@/components/common/charts/drilldown-donut.vue';
 import { allocationDrilldown } from './allocation-drilldown';
 import ModuleBody from '@/components/widgets/components/module-body.vue';
-import { CATEGORICAL_SERIES_PALETTE as colors } from '@/composable/charts/categorical-series-palette';
+import { FINANCIAL_COLORS as financial, investmentSeriesColor } from '@bt/shared/financial-colors';
 import DateRange from '@/pages/income-management/payroll/date-range.vue';
 import { type PayrollRange } from '@/pages/income-management/payroll/date-range';
 import { INVESTMENT_ALLOCATION_MODES } from '@/components/widgets/investment-widgets';
@@ -456,12 +456,12 @@ const performanceSummary = computed(() => {
 const chartSeries = computed<InvestmentChartSeries[]>(() => {
   if (gainView.value)
     return recordedAccountFallback.value || props.kind === 'portfolio-comparison'
-      ? props.analytics.portfolios.map((p, i) => ({
+      ? props.analytics.portfolios.map((p) => ({
           key: p.id,
           label: p.name,
-          color: colors[i % colors.length]!,
+          color: investmentSeriesColor(p.id, /ira|retire|401/i.test(p.accountType + p.name)),
         }))
-      : [{ key: 'gain', label: gainLabel.value, color: colors[0]! }];
+      : [{ key: 'gain', label: gainLabel.value, color: financial.investments }];
   if (
     props.analytics.accountHistory &&
     !recordedAccountFallback.value &&
@@ -471,42 +471,42 @@ const chartSeries = computed<InvestmentChartSeries[]>(() => {
       {
         key: 'marketValue',
         label: 'Combined investment value',
-        color: colors[0]!,
+        color: financial.investments,
       },
       ...(props.kind === 'value-capital'
         ? [
             {
               key: 'knownNetInvested',
               label: 'Recorded net funding',
-              color: colors[3]!,
+              color: financial.investments,
             },
           ]
         : []),
     ];
   if (props.kind === 'dividends')
     return [
-      { key: 'cash', label: 'Cash dividends', color: colors[0]! },
-      { key: 'reinvested', label: 'Reinvested dividends', color: colors[2]! },
+      { key: 'cash', label: 'Cash dividends', color: financial.cash },
+      { key: 'reinvested', label: 'Reinvested dividends', color: financial.investments },
       {
         key: 'unknown',
         label: 'Distribution treatment unknown',
-        color: colors[3]!,
+        color: financial.deductions,
       },
-      { key: 'interest', label: 'Interest', color: colors[1]! },
+      { key: 'interest', label: 'Interest', color: financial.highYieldSavings },
     ];
   if (props.kind === 'portfolio-comparison' || recordedAccountFallback.value)
     return [
-      ...recordedPortfolios.value.map((row, index) => ({
+      ...recordedPortfolios.value.map((row) => ({
         key: row.id,
         label: row.name,
-        color: colors[index % colors.length]!,
+        color: investmentSeriesColor(row.id),
       })),
       ...(props.kind === 'value-capital' && allHistory.value.some((p) => p.knownNetInvested != null)
         ? [
             {
               key: 'knownNetInvested',
               label: historyLabels.knownNetInvested!,
-              color: colors[3]!,
+              color: financial.investments,
             },
           ]
         : []),
@@ -520,12 +520,12 @@ const chartSeries = computed<InvestmentChartSeries[]>(() => {
           : priceRiskFallback.value
             ? 'Current holdings · price only'
             : 'Selected portfolio · cash-flow adjusted',
-        color: colors[0]!,
+        color: financial.investments,
       },
-      ...props.analytics.benchmarks.map((row, index) => ({
+      ...props.analytics.benchmarks.map((row) => ({
         key: row.id,
         label: `${row.symbol} · ${row.returnType}`,
-        color: colors[(index + 1) % colors.length]!,
+        color: investmentSeriesColor(row.id),
       })),
     ];
   if (props.kind === 'risk')
@@ -541,24 +541,35 @@ const chartSeries = computed<InvestmentChartSeries[]>(() => {
       {
         key: 'returnPercent',
         label: 'Current holdings · price only',
-        color: colors[0]!,
+        color: financial.investments,
       },
     ];
   if (props.kind === 'contributions')
     return [
-      { key: 'contributions', label: 'Contributions', color: colors[0]! },
-      { key: 'withdrawals', label: 'Withdrawals', color: colors[1]! },
-      { key: 'netContributions', label: 'Net invested', color: '#e6bf27' },
+      { key: 'contributions', label: 'Contributions', color: financial.investments },
+      { key: 'withdrawals', label: 'Withdrawals', color: financial.cash },
+      { key: 'netContributions', label: 'Net invested', color: financial.investments },
       {
         key: 'previousAverage',
         label: 'Previous six periods average',
-        color: '#a1a1aa',
+        color: financial.deductions,
       },
     ];
-  return activeSeries.value.map((key, index) => ({
+  return activeSeries.value.map((key) => ({
     key,
     label: historyLabels[key] ?? key,
-    color: colors[index % colors.length]!,
+    color:
+      (
+        {
+          cash: financial.cash,
+          contributions: financial.investments,
+          withdrawals: financial.cash,
+          netInvested: financial.investments,
+          knownNetInvested: financial.investments,
+          marketValue: financial.investments,
+          dividends: financial.investments,
+        } as Record<string, string>
+      )[key] ?? financial.investments,
   }));
 });
 const chartPoints = computed<InvestmentChartPoint[]>(() => {
@@ -790,7 +801,7 @@ const overlapStrength = (left: string, right: string) => {
     )?.weightedOverlap ?? 0,
   );
   return {
-    backgroundColor: `color-mix(in srgb, var(--primary) ${Math.min(32, Math.max(0, value) * 0.32)}%, transparent)`,
+    backgroundColor: `color-mix(in srgb, var(--financial-investments) ${Math.min(32, Math.max(0, value) * 0.32)}%, transparent)`,
   };
 };
 const compositionDates = computed(
@@ -1638,7 +1649,10 @@ const health = computed(() =>
             ><span>{{ pct(row.weight) }}</span>
           </div>
           <div class="bg-muted mt-1 h-1.5 overflow-hidden rounded-full">
-            <div class="bg-primary h-full" :style="{ width: Math.min(Number(row.weight ?? 0), 100) + '%' }" />
+            <div
+              class="h-full bg-[var(--financial-investments)]"
+              :style="{ width: Math.min(Number(row.weight ?? 0), 100) + '%' }"
+            />
           </div></div
       ></ModuleBody>
       <p v-show="inlineInformation && showInformation" class="text-muted-foreground text-xs">

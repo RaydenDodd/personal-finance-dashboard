@@ -1,4 +1,5 @@
 ﻿<script setup lang="ts">
+import { FINANCIAL_COLORS as financial } from '@bt/shared/financial-colors';
 import { getIncomeDashboard, saveIncomeDocument } from '@/api/income-management';
 import { Card } from '@/components/lib/ui/card';
 import { Callout } from '@/components/lib/ui/callout';
@@ -27,18 +28,18 @@ const money = (n: number | null | undefined) =>
   n == null ? 'Unavailable' : new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' }).format(n);
 const percent = (n: number | null | undefined) => (n == null ? 'Unavailable' : n.toFixed(2) + '%');
 const incomeSeries: ChartSeries[] = [
-  { id: 'gross', name: 'Gross income', color: '#7b65c1' },
-  { id: 'net', name: 'Net recorded income', color: '#6cb98e' },
-  { id: 'bonus', name: 'Bonuses', color: '#e0a11e' },
-  { id: 'comp', name: 'Total Compensation', color: '#5b83ed' },
-  { id: 'spendable', name: 'Spendable income', color: '#db70af' },
+  { id: 'gross', name: 'Gross income', color: financial.salary },
+  { id: 'net', name: 'Net recorded income', color: financial.spendable },
+  { id: 'bonus', name: 'Bonuses', color: financial.bonus },
+  { id: 'comp', name: 'Total Compensation', color: financial.income },
+  { id: 'spendable', name: 'Spendable income', color: financial.spendable },
 ];
 const taxSeries: ChartSeries[] = [
-  { id: 'federal', name: 'Federal', color: '#e77066' },
-  { id: 'state', name: 'State', color: '#e0a11e' },
-  { id: 'local', name: 'Local', color: '#db70af' },
-  { id: 'socialSecurity', name: 'Social Security', color: '#7b65c1' },
-  { id: 'medicare', name: 'Medicare', color: '#5b83ed' },
+  { id: 'federal', name: 'Federal', color: financial.federalTax },
+  { id: 'state', name: 'State', color: financial.stateTax },
+  { id: 'local', name: 'Local', color: financial.localTax },
+  { id: 'socialSecurity', name: 'Social Security', color: financial.socialSecurity },
+  { id: 'medicare', name: 'Medicare', color: financial.medicare },
 ];
 const chartRows = computed<ChartRow[]>(
   () =>
@@ -106,10 +107,10 @@ const projectionRows = computed<ChartRow[]>(
     })) ?? [],
 );
 const projectionSeries: ChartSeries[] = [
-  { id: 'contributions', name: 'Without interest', color: '#a8a29e' },
-  { id: 'biweekly', name: 'Biweekly investing', color: '#7b65c1' },
-  { id: 'monthly', name: 'Monthly investing', color: '#6cb98e' },
-  { id: 'annual', name: 'Yearly investing', color: '#e0a11e' },
+  { id: 'contributions', name: 'Without interest', color: financial.investments },
+  { id: 'biweekly', name: 'Biweekly investing', color: financial.investments },
+  { id: 'monthly', name: 'Monthly investing', color: financial.investments },
+  { id: 'annual', name: 'Yearly investing', color: financial.investments },
 ];
 const finalProjection = computed(() =>
   projectionResult.value?.scenarios.find((s) => s.frequency === projection.value.contributionFrequency)?.points.at(-1),

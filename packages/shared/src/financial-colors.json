@@ -1,0 +1,43 @@
+{
+  "colors": {
+    "income": "#22C55E",
+    "salary": "#16A34A",
+    "bonus": "#4ADE80",
+    "cash": "#22C55E",
+    "spendable": "#86EFAC",
+    "savings": "#EAB308",
+    "highYieldSavings": "#FACC15",
+    "emergencyFund": "#CA8A04",
+    "certificatesOfDeposit": "#FDE047",
+    "investments": "#3B82F6",
+    "stocks": "#2563EB",
+    "etfs": "#3B82F6",
+    "mutualFunds": "#60A5FA",
+    "crypto": "#93C5FD",
+    "retirement": "#A855F7",
+    "traditional401k": "#7C3AED",
+    "roth401k": "#A855F7",
+    "employerRetirement": "#C084FC",
+    "ira": "#D8B4FE",
+    "taxes": "#EF4444",
+    "federalTax": "#B91C1C",
+    "stateTax": "#DC2626",
+    "localTax": "#EF4444",
+    "socialSecurity": "#F87171",
+    "medicare": "#FCA5A5",
+    "liabilities": "#F97316",
+    "creditCards": "#EA580C",
+    "autoLoans": "#F97316",
+    "mortgage": "#FB923C",
+    "studentLoans": "#FDBA74",
+    "deductions": "#94A3B8",
+    "healthInsurance": "#64748B",
+    "dentalInsurance": "#94A3B8",
+    "visionInsurance": "#CBD5E1",
+    "otherBenefits": "#475569"
+  },
+  "netWorth": {
+    "dark": "#F5F5F5",
+    "light": "#171717"
+  }
+}

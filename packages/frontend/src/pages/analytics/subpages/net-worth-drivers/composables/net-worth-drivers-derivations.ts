@@ -1,8 +1,6 @@
-import { CATEGORICAL_SERIES_PALETTE, OTHERS_SERIES_COLOR } from '@/composable/charts/categorical-series-palette';
+import { FINANCIAL_COLORS, investmentSeriesColor } from '@bt/shared/financial-colors';
 import type { NetWorthDriversBucket, NetWorthDriversPortfolioMeta } from '@bt/shared/types';
 import { differenceInCalendarMonths, differenceInDays, parseISO } from 'date-fns';
-
-import { NET_WORTH_ASSET_KIND_COLORS } from '../../net-worth-history/composables/net-worth-history-derivations';
 
 const DAYS_PER_YEAR = 365.25;
 
@@ -190,11 +188,6 @@ export const MAX_PORTFOLIO_SERIES = 8;
 /** Stands in for a portfolio id on the folded-tail entry; its label comes from i18n, not the API. */
 export const OTHERS_SERIES_ID = '__others__';
 
-// Green is reserved for the Saved bar, so the palette's emerald never lands on a portfolio.
-const PORTFOLIO_SERIES_PALETTE = CATEGORICAL_SERIES_PALETTE.filter(
-  (color) => color !== NET_WORTH_ASSET_KIND_COLORS.cash,
-);
-
 export interface BreakdownLegendEntry {
   portfolioId: string;
   /** Empty on the Others entry — the caller labels it from i18n. */
@@ -232,14 +225,14 @@ export const buildBreakdownModel = ({
 }): BreakdownModel => {
   const named = portfolios.slice(0, MAX_PORTFOLIO_SERIES);
 
-  const legend: BreakdownLegendEntry[] = named.map((portfolio, index) => ({
+  const legend: BreakdownLegendEntry[] = named.map((portfolio) => ({
     portfolioId: portfolio.portfolioId,
     name: portfolio.name,
-    color: PORTFOLIO_SERIES_PALETTE[index % PORTFOLIO_SERIES_PALETTE.length]!,
+    color: investmentSeriesColor(portfolio.portfolioId, /ira|401|retire/i.test(portfolio.name)),
   }));
 
   if (portfolios.length > MAX_PORTFOLIO_SERIES) {
-    legend.push({ portfolioId: OTHERS_SERIES_ID, name: '', color: OTHERS_SERIES_COLOR });
+    legend.push({ portfolioId: OTHERS_SERIES_ID, name: '', color: FINANCIAL_COLORS.investments });
   }
 
   const namedIds = new Set(named.map((portfolio) => portfolio.portfolioId));

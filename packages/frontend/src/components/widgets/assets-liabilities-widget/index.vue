@@ -21,13 +21,22 @@ import WidgetWrapper from '../components/widget-wrapper.vue';
 import { type Bucket, type BucketKey, computeAssetsLiabilities, formatShareLabel } from './helpers';
 
 const BUCKETS: Record<BucketKey, { colorClass: string; labelKey: string }> = {
-  investments: { colorClass: 'bg-primary', labelKey: 'dashboard.widgets.assetsLiabilities.buckets.investments' },
-  cash: { colorClass: 'bg-app-income-color', labelKey: 'dashboard.widgets.assetsLiabilities.buckets.cash' },
-  ventures: { colorClass: 'bg-warning', labelKey: 'dashboard.widgets.assetsLiabilities.buckets.ventures' },
+  investments: {
+    colorClass: 'bg-[var(--financial-investments)]',
+    labelKey: 'dashboard.widgets.assetsLiabilities.buckets.investments',
+  },
+  cash: { colorClass: 'bg-[var(--financial-cash)]', labelKey: 'dashboard.widgets.assetsLiabilities.buckets.cash' },
+  ventures: {
+    colorClass: 'bg-[var(--financial-investments)]',
+    labelKey: 'dashboard.widgets.assetsLiabilities.buckets.ventures',
+  },
   vehicles: { colorClass: 'bg-muted-foreground', labelKey: 'dashboard.widgets.assetsLiabilities.buckets.vehicles' },
-  loans: { colorClass: 'bg-app-expense-color', labelKey: 'dashboard.widgets.assetsLiabilities.buckets.loans' },
+  loans: {
+    colorClass: 'bg-[var(--financial-liabilities)]',
+    labelKey: 'dashboard.widgets.assetsLiabilities.buckets.loans',
+  },
   creditAndOverdrafts: {
-    colorClass: 'bg-app-expense-color/55',
+    colorClass: 'bg-[var(--financial-credit-cards)]',
     labelKey: 'dashboard.widgets.assetsLiabilities.buckets.creditAndOverdrafts',
   },
 };
@@ -89,7 +98,7 @@ const barRows = computed(() => [
     total: liabilitiesTotal.value,
     buckets: summary.value?.liabilities ?? [],
     showsNetWorth: !isUnderwater.value,
-    amountClass: liabilitiesTotal.value > 0 ? 'text-app-expense-color' : 'text-foreground',
+    amountClass: 'text-[var(--financial-liabilities)]',
   },
 ]);
 
@@ -148,7 +157,7 @@ watch([scrollRef, legendRows], () => measure(), { flush: 'post' });
     <div v-else class="flex min-h-0 flex-1 flex-col gap-3.5">
       <div>
         <p class="text-muted-foreground text-xs">{{ $t('dashboard.widgets.assetsLiabilities.netWorth') }}</p>
-        <p :class="cn('text-2xl font-bold tracking-tight tabular-nums', isUnderwater && 'text-app-expense-color')">
+        <p class="text-2xl font-bold tracking-tight text-[var(--financial-net-worth)] tabular-nums">
           {{ formatBaseCurrency(netWorth) }}
         </p>
         <p v-if="liabilitiesTotal === 0" class="text-muted-foreground mt-0.5 text-xs">

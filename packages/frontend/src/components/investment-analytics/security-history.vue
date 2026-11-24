@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { investmentTypeColor } from '@bt/shared/financial-colors';
 import { computed, ref } from 'vue';
 import { useQuery } from '@tanstack/vue-query';
 import { api } from '@/api/_api';
@@ -100,7 +101,7 @@ const points = computed(() => {
               {
                 key: 'price',
                 label: holding.symbol + ' · unit price',
-                color: 'var(--primary)',
+                color: investmentTypeColor(holding.securityType),
               },
             ]"
             :currency-code="holding.currencyCode"

@@ -1,3 +1,4 @@
+import { FINANCIAL_COLORS } from '@bt/shared/financial-colors';
 import {
   MAX_NET_WORTH_HISTORY_BUCKETS,
   type NetWorthAssetKind,
@@ -17,16 +18,13 @@ import {
   parseISO,
 } from 'date-fns';
 
-// One color per asset kind for the stacked bars, legend and tooltip dots. Fixed
-// mid-tone hues (Tailwind ~500 weight) that stay legible on both themes; cash keeps
-// a green so it still reads as the classic "assets" color. Liabilities stay red and
-// the net-worth line stays the theme foreground, so they never collide with these.
+// Shared financial identities; transaction-category colors remain independent.
 export const NET_WORTH_ASSET_KIND_COLORS: Record<NetWorthAssetKind, string> = {
-  cash: 'rgb(16, 185, 129)', // emerald
-  savings: 'rgb(20, 184, 166)', // teal
-  investments: 'rgb(59, 130, 246)', // blue
-  vehicles: 'rgb(245, 158, 11)', // amber
-  ventures: 'rgb(168, 85, 247)', // purple
+  cash: FINANCIAL_COLORS.cash,
+  savings: FINANCIAL_COLORS.savings,
+  investments: FINANCIAL_COLORS.investments,
+  vehicles: 'var(--muted-foreground)',
+  ventures: FINANCIAL_COLORS.investments,
 };
 
 /** i18n label key per asset kind, shared by the filter, legend and tooltip. */

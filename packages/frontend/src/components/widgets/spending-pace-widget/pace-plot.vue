@@ -10,6 +10,7 @@ defineProps<{
   tone: { stroke: string; fill: string };
   hoverX?: number | null;
   label: string;
+  seriesColor?: string;
 }>();
 </script>
 <template>
@@ -18,6 +19,7 @@ defineProps<{
     :width="width"
     :height="height"
     class="absolute inset-0 overflow-visible"
+    :style="{ '--pace-series': seriesColor ?? 'var(--primary)' }"
     role="img"
     :aria-label="label"
   >
@@ -35,12 +37,12 @@ defineProps<{
       stroke-opacity="0.4"
       stroke-width="1.5"
     />
-    <path v-if="geometry.spentArea" :d="geometry.spentArea" class="fill-primary" fill-opacity="0.08" />
+    <path v-if="geometry.spentArea" :d="geometry.spentArea" style="fill: var(--pace-series)" fill-opacity="0.08" />
     <path
       v-if="geometry.spentLine"
       :d="geometry.spentLine"
       fill="none"
-      class="stroke-primary"
+      style="stroke: var(--pace-series)"
       stroke-width="2.25"
       stroke-linejoin="round"
     />
@@ -68,7 +70,8 @@ defineProps<{
       :cx="geometry.todayDot.x"
       :cy="geometry.todayDot.y"
       r="4.5"
-      class="fill-primary stroke-card"
+      class="stroke-card"
+      style="fill: var(--pace-series)"
       stroke-width="2"
     />
     <circle

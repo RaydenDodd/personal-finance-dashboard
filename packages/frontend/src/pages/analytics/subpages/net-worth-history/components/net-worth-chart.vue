@@ -327,7 +327,7 @@ const renderChart = () => {
           .selectAll('.tick')
           .filter((value) => (value as number) === 0)
           .select('text')
-          .attr('fill', colors.foreground)
+          .attr('fill', colors.netWorth)
           .attr('font-weight', 600);
       });
   };
@@ -342,7 +342,7 @@ const renderChart = () => {
       .attr('y', baselineY)
       .attr('width', innerWidth)
       .attr('height', innerHeight - baselineY)
-      .attr('fill', colors.appExpense)
+      .attr('fill', colors.financial.liabilities)
       .attr('fill-opacity', OWED_REGION_TINT_OPACITY)
       .style('pointer-events', 'none');
   };
@@ -482,7 +482,7 @@ const renderChart = () => {
   drawSignedBars({
     className: 'bar-liabilities',
     accessor: (point) => point.liabilitiesTotal,
-    fill: colors.appExpense,
+    fill: colors.financial.liabilities,
   });
 
   // Zero baseline, drawn over the bars so both stacks visibly hang off it, and in
@@ -507,7 +507,7 @@ const renderChart = () => {
       .attr('x2', innerWidth)
       .attr('y1', yFor(-props.averageOwed))
       .attr('y2', yFor(-props.averageOwed))
-      .attr('stroke', colors.appExpense)
+      .attr('stroke', colors.financial.liabilities)
       .attr('stroke-opacity', AVERAGE_LINE_OPACITY)
       .attr('stroke-width', 1.5)
       .attr('stroke-dasharray', '6,4')
@@ -527,7 +527,7 @@ const renderChart = () => {
     .datum(points)
     .attr('class', 'net-worth-line')
     .attr('fill', 'none')
-    .attr('stroke', colors.foreground)
+    .attr('stroke', colors.netWorth)
     .attr('stroke-width', STACKED_CHART_STYLE.lineWidth)
     .attr('stroke-linecap', 'round')
     .style('pointer-events', 'none')
@@ -542,7 +542,7 @@ const renderChart = () => {
       .attr('cx', bandCenter)
       .attr('cy', (point) => yFor(point.netWorth))
       .attr('r', STACKED_CHART_STYLE.dotRadius)
-      .attr('fill', colors.foreground)
+      .attr('fill', colors.netWorth)
       .style('pointer-events', 'none');
   }
 
@@ -559,7 +559,7 @@ const renderChart = () => {
       .attr('cy', yFor(peak.netWorth))
       .attr('r', 5)
       .attr('fill', 'none')
-      .attr('stroke', colors.foreground)
+      .attr('stroke', colors.netWorth)
       .attr('stroke-width', 2)
       .style('pointer-events', 'none');
   }
@@ -577,7 +577,7 @@ const renderChart = () => {
   const hoverDot = g
     .append('circle')
     .attr('r', 4)
-    .attr('fill', colors.foreground)
+    .attr('fill', colors.netWorth)
     .attr('stroke', colors.card)
     .attr('stroke-width', 2)
     .style('opacity', 0);

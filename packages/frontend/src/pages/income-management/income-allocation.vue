@@ -33,7 +33,8 @@ async function openGroup(id: string) {
   const ids = (
     {
       retirement: ['pre', 'post', 'employer'],
-      savingsInvestments: ['savings'],
+      savings: ['savings'],
+      investments: ['investments'],
       otherDeductions: ['pre', 'post'],
     } as Record<string, string[]>
   )[id] ?? [id];

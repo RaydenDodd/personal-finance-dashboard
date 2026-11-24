@@ -64,7 +64,7 @@
         <p v-if="allLiabilitiesUnknown" class="text-muted-foreground text-sm">Historical liabilities unavailable</p>
         <i18n-t v-else-if="averageOwed > 0" keypath="netWorthHistory.cards.averageLiabilities" tag="p" class="text-sm">
           <template #amount>
-            <span class="text-app-expense-color font-semibold">{{ formatBaseCurrency(averageOwed) }}</span>
+            <span class="font-semibold text-[var(--financial-liabilities)]">{{ formatBaseCurrency(averageOwed) }}</span>
           </template>
         </i18n-t>
         <p v-else class="text-app-income-color flex items-center gap-1.5 text-sm font-medium">
@@ -105,7 +105,9 @@
         <div class="border-border bg-card rounded-lg border p-4">
           <i18n-t v-if="averageOwed > 0" keypath="netWorthHistory.cards.averageLiabilities" tag="p" class="text-sm">
             <template #amount>
-              <span class="text-app-expense-color font-semibold">{{ formatBaseCurrency(averageOwed) }}</span>
+              <span class="font-semibold text-[var(--financial-liabilities)]">{{
+                formatBaseCurrency(averageOwed)
+              }}</span>
             </template>
           </i18n-t>
           <p v-else class="text-app-income-color flex items-center gap-1.5 text-sm font-medium">

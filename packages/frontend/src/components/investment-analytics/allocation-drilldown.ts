@@ -1,4 +1,5 @@
 import type { DonutNode } from '@/components/common/charts/drilldown-donut.vue';
+import { investmentTypeColor, investmentSeriesColor, accountFinancialColor } from '@bt/shared/financial-colors';
 import type { InvestmentAnalytics } from '@bt/shared/types/investment-analytics';
 /** Presentation grouping of existing exposure contributions, never a second look-through calculation. */
 export function allocationDrilldown(analytics: InvestmentAnalytics, mode: string): DonutNode[] {
@@ -10,7 +11,7 @@ export function allocationDrilldown(analytics: InvestmentAnalytics, mode: string
         const contributions = e.contributions.filter((c) => c.fundId === holding.id);
         if (!contributions.length) return [];
         const amount = contributions.reduce((sum, c) => sum + Number(c.value), 0);
-        return [{ id: e.id, name: e.unknown ? e.name : e.symbol, amount }];
+        return [{ id: e.id, name: e.unknown ? e.name : e.symbol, amount, color: investmentSeriesColor(e.id) }];
       });
       // A recognized fund without constituent evidence remains a fund in Direct Holdings.
       if (!children.some((c) => !analytics.exposure.find((e) => e.id === c.id)?.unknown)) children = [];
@@ -21,12 +22,14 @@ export function allocationDrilldown(analytics: InvestmentAnalytics, mode: string
           id: e.id,
           name: e.unknown ? e.name : e.symbol,
           amount: Number(e.totalValue),
+          color: investmentSeriesColor(e.id),
           ...(mode === 'underlying'
             ? {
                 children: e.contributions.map((c, i) => ({
                   id: c.portfolioId + ':' + (c.fundId ?? 'direct') + ':' + i,
                   name: (c.fundSymbol ?? 'Direct') + ' / ' + c.portfolioName,
                   amount: Number(c.value),
+                  color: investmentSeriesColor(c.portfolioId + (c.fundId ?? 'direct')),
                 })),
               }
             : {}),
@@ -37,6 +40,12 @@ export function allocationDrilldown(analytics: InvestmentAnalytics, mode: string
       id: row.key,
       name: row.label,
       amount: Number(row.value),
+      color:
+        mode === 'holdings'
+          ? investmentTypeColor(holding?.securityType)
+          : mode === 'accountType'
+            ? accountFinancialColor(row.key + ' ' + row.label)
+            : investmentSeriesColor(row.key),
       ...(children.length ? { children: children.sort((a, b) => b.amount - a.amount) } : {}),
     };
   });

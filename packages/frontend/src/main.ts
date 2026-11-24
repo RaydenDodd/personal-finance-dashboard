@@ -3,6 +3,7 @@ import '@/styles/global.css';
 import { installChunkReloadHandler } from '@/common/utils/chunk-reload-handler';
 import { identifyCurrentTheme } from '@/common/utils/color-theme';
 import { installVisualViewportSizing } from '@/common/utils/visual-viewport';
+import { installFinancialColors } from '@/composable/charts/financial-colors';
 import { getDateFnsLocale } from '@/composable/use-date-locale';
 import { i18n, initializeLocale, loadChunks } from '@/i18n';
 import { installForegroundSessionCheck } from '@/lib/foreground-session';
@@ -23,6 +24,7 @@ import { preparePrivateClientStorage } from './registerServiceWorker';
 
 stashResetPasswordToken();
 identifyCurrentTheme();
+installFinancialColors();
 installVisualViewportSizing();
 installForegroundSessionCheck();
 if (!import.meta.env.DEV) {

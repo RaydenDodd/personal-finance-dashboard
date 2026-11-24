@@ -199,7 +199,7 @@ def previous_week(today):
 
 def summarize(rows,start,end,names):
     totals=collections.Counter();pending=0;unclassified=[];excluded=0;warnings=[];refunds=0
-    seen=collections.Counter()
+    seen=collections.Counter();daily=collections.Counter()
     for row in rows:
         if not start<=local_date(row)<end:continue
         if row.get('isPending'):
@@ -212,13 +212,14 @@ def summarize(rows,start,end,names):
         except ValueError:warnings.append('A purchase has no verified USD amount');continue
         seen[(row.get('accountId'),row['time'],row.get('note'),amount)]+=1
         totals[names.get(row.get('categoryId'),'Other')]+=amount
+        daily[str(local_date(row))]+=amount
         if names.get(row.get('categoryId'),'Other')=='Other':
             unclassified.append({'date':str(local_date(row)),'merchant':row.get('note') or 'Unknown merchant','amountCents':amount,'id':row['id']})
     gross=sum(totals.values())
     duplicate_groups=sum(count>1 for count in seen.values())
     if duplicate_groups:warnings.append(f'{duplicate_groups} groups have identical account, timestamp, description and amount; review possible duplicates. No records were removed.')
     return {'from':str(start),'through':str(end-dt.timedelta(days=1)),'grossCents':gross,'refundCents':refunds,
-            'netCents':gross-refunds,'categoriesCents':dict(totals),'pendingCount':pending,
+            'netCents':gross-refunds,'dailyCents':dict(daily),'categoriesCents':dict(totals),'pendingCount':pending,
             'review':unclassified,'excludedCount':excluded,'warnings':warnings}
 
 def refresh(api):
@@ -248,7 +249,8 @@ def prepare(api,refresh_banks=True):
     rows=api.transactions();categories=api.request('/categories');names={c['id']:c['name'] for c in categories}
     start,end=previous_week(dt.datetime.now(ZONE).date())
     report={'preparedAt':dt.datetime.now(dt.timezone.utc).isoformat(),'week':summarize(rows,start,end,names),
-            'weekend':summarize(rows,end-dt.timedelta(days=3),end,names),'sync':status,'classifier':classification}
+            'weekend':summarize(rows,end-dt.timedelta(days=3),end,names),'sync':status,'classifier':classification,
+            'categoryStyles':{c['name']:{'color':c.get('color'), 'icon':c.get('icon')} for c in categories}}
     suggestions={p['id']:p for p in read('latest-review.json',{}).get('predictions',[])}
     for item in report['week']['review']:
         guess=suggestions.get(item['id'],{})
@@ -278,7 +280,7 @@ def report_text(report):
             'Totals use currently posted records. Late bank postings or future refunds can change the final amounts.']
     return '\n'.join(lines)
 
-def deliver(text,subject,key):
+def deliver(text,subject,key,html=None):
     marker=STATE/('sent-'+key+'.json')
     if marker.exists():return {'alreadySent':True}
     config=json.loads(pathlib.Path('/etc/finance-operations/email.json').read_text())
@@ -287,6 +289,7 @@ def deliver(text,subject,key):
     message['From']=config['from'];message['To']=config['to'];message['Subject']=subject
     message['Message-ID']='<'+hashlib.sha256(key.encode()).hexdigest()+'@raydenfinance.duckdns.org>'
     message.set_content(text)
+    if html:message.add_alternative(html,subtype='html')
     # A pending marker prevents duplicate mail after a crash with uncertain SMTP acceptance.
     pending=STATE/('sending-'+key+'.json')
     if pending.exists():raise RuntimeError('Prior send outcome uncertain; inspect SMTP before retry')
@@ -310,7 +313,8 @@ def send():
     if not report or age>3600:
         return deliver('The weekly and Friday–Sunday report could not be prepared with recent data. No spending totals are being presented. Check MoneyMatter at https://raydenfinance.duckdns.org/dashboard and review bank synchronization. This notice replaces this week\'s report; no duplicate report will be sent automatically.',
                        'MoneyMatter spending report unavailable — '+str(start),str(start))
-    return deliver(report_text(report),'MoneyMatter weekly and weekend spending — '+str(start),str(start))
+    from report_visuals import render_report
+    return deliver(report_text(report),'MoneyMatter weekly and weekend spending — '+str(start),str(start),html=render_report(report))
 
 def evaluate(api,start,end):
     rows=api.transactions();categories=api.request('/categories');names={c['id']:c['name'] for c in categories}

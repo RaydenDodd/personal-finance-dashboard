@@ -10,7 +10,7 @@ function toggle(id: string) {
 </script>
 <template>
   <div class="divide-border/50 divide-y">
-    <div v-for="row in rows" :key="row.id">
+    <div v-for="row in rows" :key="row.id" :style="{ borderLeft: row.color ? '2px solid ' + row.color : undefined }">
       <button
         v-if="row.children.length"
         type="button"

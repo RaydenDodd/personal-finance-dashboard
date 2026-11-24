@@ -942,9 +942,17 @@ const renderChart = () => {
     .attr('x2', '0%')
     .attr('y2', '100%');
 
-  gradient.append('stop').attr('offset', '0%').attr('stop-color', 'var(--primary)').attr('stop-opacity', 0.35);
+  gradient
+    .append('stop')
+    .attr('offset', '0%')
+    .attr('stop-color', 'var(--financial-net-worth)')
+    .attr('stop-opacity', 0.35);
 
-  gradient.append('stop').attr('offset', '100%').attr('stop-color', 'var(--primary)').attr('stop-opacity', 0);
+  gradient
+    .append('stop')
+    .attr('offset', '100%')
+    .attr('stop-color', 'var(--financial-net-worth)')
+    .attr('stop-opacity', 0);
 
   // Area generator
   const area = d3
@@ -969,7 +977,7 @@ const renderChart = () => {
     .datum(chartData.value)
     .attr('class', 'line')
     .attr('fill', 'none')
-    .attr('stroke', 'var(--primary)')
+    .attr('stroke', 'var(--financial-net-worth)')
     .attr('stroke-width', 2)
     .attr('d', line);
 
@@ -981,7 +989,7 @@ const renderChart = () => {
     .attr('cx', (p) => xScale(p.date))
     .attr('cy', (p) => yScale(p.value))
     .attr('r', 4)
-    .attr('fill', 'var(--primary)')
+    .attr('fill', 'var(--financial-net-worth)')
     .attr('stroke', 'var(--card)')
     .attr('stroke-width', 2);
   g.append('g')
@@ -1025,7 +1033,7 @@ const renderChart = () => {
     .append('circle')
     .attr('class', 'hover-dot')
     .attr('r', 5)
-    .attr('fill', 'var(--primary)')
+    .attr('fill', 'var(--financial-net-worth)')
     .attr('stroke', 'var(--card)')
     .attr('stroke-width', 2)
     .style('opacity', 0);
@@ -1034,7 +1042,7 @@ const renderChart = () => {
   const hoverLine = g
     .append('line')
     .attr('class', 'hover-line')
-    .attr('stroke', 'var(--primary)')
+    .attr('stroke', 'var(--financial-net-worth)')
     .attr('stroke-width', 1)
     .attr('stroke-dasharray', '4,4')
     .attr('y1', 0)
@@ -1178,7 +1186,7 @@ const renderChart = () => {
       .append('path')
       .datum(projection.value.points)
       .attr('fill', 'none')
-      .attr('stroke', 'var(--primary)')
+      .attr('stroke', 'var(--financial-net-worth)')
       .attr('stroke-width', 1.5)
       .attr('stroke-opacity', 0.85)
       .attr('stroke-dasharray', '5,4')
@@ -1193,7 +1201,7 @@ const renderChart = () => {
       .attr('cy', (d) => yScale(d.value))
       .attr('r', 3.5)
       .attr('fill', 'var(--card)')
-      .attr('stroke', 'var(--primary)')
+      .attr('stroke', 'var(--financial-net-worth)')
       .attr('stroke-width', 1.5)
       .append('title')
       .text((d) =>

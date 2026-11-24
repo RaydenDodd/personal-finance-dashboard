@@ -94,7 +94,6 @@
 <script setup lang="ts">
 import { getInvestmentContributions } from '@/api';
 import { QUERY_CACHE_STALE_TIME, VUE_QUERY_CACHE_KEYS } from '@/common/const';
-import { CATEGORICAL_SERIES_PALETTE } from '@/composable/charts/categorical-series-palette';
 import type { Period } from '@/composable/use-period-navigation';
 import {
   INVESTMENT_CONTRIBUTIONS_GRANULARITIES,
@@ -192,13 +191,10 @@ const previousQuery = useQuery({
 
 const EMPTY_RESPONSE: GetInvestmentContributionsResponse = { buckets: [], portfolios: [] };
 
-const model = computed(() =>
-  buildContributionsChartModel({ response: query.data.value ?? EMPTY_RESPONSE, palette: CATEGORICAL_SERIES_PALETTE }),
-);
+const model = computed(() => buildContributionsChartModel({ response: query.data.value ?? EMPTY_RESPONSE }));
 const previousModel = computed(() =>
   buildContributionsChartModel({
     response: previousQuery.data.value ?? EMPTY_RESPONSE,
-    palette: CATEGORICAL_SERIES_PALETTE,
   }),
 );
 

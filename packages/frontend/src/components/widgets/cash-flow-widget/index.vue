@@ -1,4 +1,5 @@
 <script lang="ts" setup>
+import { FINANCIAL_COLORS } from '@bt/shared/financial-colors';
 import { useFormatCurrency } from '@/composable/formatters';
 import { useAnimatedNumber } from '@/composable/use-animated-number';
 import { calculatePercentageDifference } from '@/js/helpers/math/calculate-percentage-difference';
@@ -297,7 +298,12 @@ const savingsLineLabel = computed(() => {
             <div class="text-muted-foreground mb-1 text-[11px] font-medium tracking-wider uppercase">
               {{ $t('dashboard.widgets.cashFlow.income') }}
             </div>
-            <FitAmount :value="animatedIncome" :target="income" class="text-app-income-color text-amount text-sm" />
+            <FitAmount
+              :value="animatedIncome"
+              :target="income"
+              class="text-amount text-sm"
+              :style="{ color: FINANCIAL_COLORS.income }"
+            />
           </div>
 
           <!-- Expenses -->
@@ -317,12 +323,7 @@ const savingsLineLabel = computed(() => {
             <div class="text-muted-foreground mb-1 text-[11px] font-medium tracking-wider uppercase">
               {{ $t('dashboard.widgets.cashFlow.saved') }}
             </div>
-            <div
-              class="text-amount text-sm"
-              :class="savingsRate >= 0 ? 'text-app-income-color' : 'text-app-expense-color'"
-            >
-              {{ savingsRate }}%
-            </div>
+            <div class="text-amount text-sm" :style="{ color: FINANCIAL_COLORS.savings }">{{ savingsRate }}%</div>
           </div>
         </div>
 

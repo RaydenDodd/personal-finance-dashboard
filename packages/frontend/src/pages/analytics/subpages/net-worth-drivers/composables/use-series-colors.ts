@@ -17,6 +17,6 @@ import { NET_WORTH_ASSET_KIND_COLORS } from '../../net-worth-history/composables
  */
 export const useSeriesColors = () =>
   computed(() => ({
-    saved: NET_WORTH_ASSET_KIND_COLORS.cash,
+    saved: NET_WORTH_ASSET_KIND_COLORS.savings,
     grown: NET_WORTH_ASSET_KIND_COLORS.investments,
   }));

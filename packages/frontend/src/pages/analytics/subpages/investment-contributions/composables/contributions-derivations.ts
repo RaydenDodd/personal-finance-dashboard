@@ -1,3 +1,4 @@
+import { investmentSeriesColor } from '@bt/shared/financial-colors';
 import type { GetInvestmentContributionsResponse } from '@bt/shared/types';
 
 /** Minimum bar count before an average is meaningful rather than noise. */
@@ -62,15 +63,14 @@ export const shouldShowMomChangeLabel = ({
 
 export const buildContributionsChartModel = ({
   response,
-  palette,
 }: {
   response: GetInvestmentContributionsResponse;
-  palette: string[];
+  palette?: string[];
 }): ContributionsChartModel => {
-  const legend = response.portfolios.map((portfolio, index) => ({
+  const legend = response.portfolios.map((portfolio) => ({
     portfolioId: portfolio.portfolioId,
     name: portfolio.name,
-    color: palette[index % palette.length]!,
+    color: investmentSeriesColor(portfolio.portfolioId, /ira|401|retire/i.test(portfolio.name)),
   }));
 
   const bars = response.buckets.map((bucket, index) => {

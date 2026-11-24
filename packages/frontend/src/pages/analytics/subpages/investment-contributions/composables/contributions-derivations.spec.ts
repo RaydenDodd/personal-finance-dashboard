@@ -1,3 +1,4 @@
+import { investmentSeriesColor } from '@bt/shared/financial-colors';
 import type {
   InvestmentContributionsBucket,
   InvestmentContributionsPortfolioMeta,
@@ -45,20 +46,20 @@ const buildResponse = ({
 
 describe('buildContributionsChartModel', () => {
   describe('legend color assignment', () => {
-    it('assigns colors by index into the palette', () => {
+    it('assigns colors by persistent portfolio identity', () => {
       const model = buildContributionsChartModel({
         response: buildResponse({ buckets: [], portfolios: [PORTFOLIO_A, PORTFOLIO_B, PORTFOLIO_C] }),
         palette: PALETTE,
       });
 
       expect(model.legend).toEqual([
-        { portfolioId: 'portfolio-a', name: 'Portfolio A', color: 'red' },
-        { portfolioId: 'portfolio-b', name: 'Portfolio B', color: 'green' },
-        { portfolioId: 'portfolio-c', name: 'Portfolio C', color: 'blue' },
+        { portfolioId: 'portfolio-a', name: 'Portfolio A', color: investmentSeriesColor('portfolio-a') },
+        { portfolioId: 'portfolio-b', name: 'Portfolio B', color: investmentSeriesColor('portfolio-b') },
+        { portfolioId: 'portfolio-c', name: 'Portfolio C', color: investmentSeriesColor('portfolio-c') },
       ]);
     });
 
-    it('cycles the palette with modulo when there are more portfolios than colors', () => {
+    it('keeps identity colors independent of the legacy palette', () => {
       const model = buildContributionsChartModel({
         response: buildResponse({
           buckets: [],
@@ -67,7 +68,9 @@ describe('buildContributionsChartModel', () => {
         palette: PALETTE,
       });
 
-      expect(model.legend.map((entry) => entry.color)).toEqual(['red', 'green', 'blue', 'red']);
+      expect(model.legend.map((entry) => entry.color)).toEqual(
+        ['portfolio-a', 'portfolio-b', 'portfolio-c', 'portfolio-d'].map((id) => investmentSeriesColor(id)),
+      );
     });
 
     it('returns an empty legend for no portfolios', () => {
@@ -97,8 +100,8 @@ describe('buildContributionsChartModel', () => {
       });
 
       expect(model.bars[0]!.segments).toEqual([
-        { portfolioId: 'portfolio-a', name: 'Portfolio A', color: 'red', amount: 0 },
-        { portfolioId: 'portfolio-b', name: 'Portfolio B', color: 'green', amount: 500 },
+        { portfolioId: 'portfolio-a', name: 'Portfolio A', color: investmentSeriesColor('portfolio-a'), amount: 0 },
+        { portfolioId: 'portfolio-b', name: 'Portfolio B', color: investmentSeriesColor('portfolio-b'), amount: 500 },
       ]);
     });
 
