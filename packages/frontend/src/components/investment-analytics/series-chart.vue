@@ -123,7 +123,7 @@ function render() {
         .axisBottom(x)
         .ticks(width < 450 ? 3 : 6)
         .tickValues(
-          props.bars
+          props.bars || dates.length === 1
             ? dates.filter((_, i) => i % Math.max(1, Math.ceil(dates.length / (width < 450 ? 3 : 6))) === 0)
             : x.ticks(width < 450 ? 3 : 6),
         )
