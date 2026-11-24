@@ -14,7 +14,7 @@ import { useInvestmentHistory } from '@/composable/data-queries/investment-histo
 import { usePortfolios } from '@/composable/data-queries/portfolios';
 import { ArrowUpRightIcon } from '@lucide/vue';
 import { ScrollArea } from '@/components/lib/ui/scroll-area';
-import { computed, inject, provide, ref, type Ref } from 'vue';
+import { computed, inject, provide, ref, unref, type Ref } from 'vue';
 import ErrorState from './components/error-state.vue';
 import LoadingState from './components/loading-state.vue';
 import WidgetWrapper from './components/widget-wrapper.vue';
@@ -30,9 +30,9 @@ const persist =
   );
 const kind = computed(() => investmentWidgetKind(widget.value.widgetId) ?? 'overview');
 const definition = computed(() => INVESTMENT_WIDGET_DEFINITIONS[widget.value.widgetId]);
-const defaultCurrentDay = inject('investment-default-current-day', false);
+const defaultCurrentDay = inject<Ref<boolean> | boolean>('investment-default-current-day', false);
 const optimisticSettings = ref<Record<string, unknown>>(
-  defaultCurrentDay && ['performance', 'heatmap'].includes(kind.value)
+  unref(defaultCurrentDay) && ['performance', 'heatmap'].includes(kind.value)
     ? { dateRange: '1D', from: payrollToday(), through: payrollToday(), colorBy: 'daily' }
     : {},
 );

@@ -119,7 +119,10 @@ const layoutPage = computed(
     )[props.page],
 );
 provide('investment-full-page', true);
-provide('investment-default-current-day', props.page === 'performance');
+provide(
+  'investment-default-current-day',
+  computed(() => props.page === 'performance'),
+);
 provide(
   'investment-page-settings',
   computed(() => ({ ...settings.value, portfolioIds: portfolioIds.value })),
