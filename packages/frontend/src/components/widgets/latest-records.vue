@@ -160,7 +160,7 @@ const isDataEmpty = computed(() => !isTxFetching.value && pastTransactions.value
 </script>
 
 <template>
-  <WidgetWrapper class="max-md:max-h-96" :is-fetching="isFetching">
+  <WidgetWrapper class="max-md:h-96" :is-fetching="isFetching">
     <template #title>
       {{ $t('dashboard.widgets.latestTransactions.title') }}
     </template>

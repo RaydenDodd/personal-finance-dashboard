@@ -238,7 +238,7 @@ function payPeriod({ subscription }: { subscription: SubscriptionListItem }) {
 </script>
 
 <template>
-  <WidgetWrapper class="max-md:max-h-96" :is-fetching="isFetching">
+  <WidgetWrapper class="max-md:h-96" :is-fetching="isFetching">
     <template #title> {{ widgetTitle }} </template>
     <template v-if="isOnDashboard" #action>
       <span
