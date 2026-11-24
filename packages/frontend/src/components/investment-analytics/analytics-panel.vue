@@ -437,7 +437,8 @@ const performanceSummary = computed(() => {
   const h = props.analytics.accountHistory;
   if (!h?.dates) return null;
   const i = h.dates.findLastIndex(
-    (date, i) => date >= range.value.from && date <= range.value.through && h.periodGains?.[i] != null,
+    (date, i) =>
+      date.slice(0, 10) >= range.value.from && date.slice(0, 10) <= range.value.through && h.periodGains?.[i] != null,
   );
   return i < 0 ? null : { gain: h.periodGains?.[i], percent: h.periodReturnPercent?.[i] };
 });
@@ -641,7 +642,7 @@ const chartPoints = computed<InvestmentChartPoint[]>(() => {
         ...series.flatMap((row) => row.points.map((point) => point.date)),
       ]),
     ]
-      .filter((date) => date >= range.value.from && date <= range.value.through)
+      .filter((date) => date.slice(0, 10) >= range.value.from && date.slice(0, 10) <= range.value.through)
       .sort();
     // Comparison starts only at an actual shared observation, with no forward-filled index values.
     const common = dates.find((date) => series.every((row) => row.points.some((point) => point.date === date)));
