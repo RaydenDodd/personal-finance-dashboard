@@ -1,9 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, nextTick } from 'vue';
-import { useMediaQuery } from '@vueuse/core';
 import type { IncomePlanInput, IncomePlanResult } from '@bt/shared/finance-income';
 import { Button } from '@/components/lib/ui/button';
-import WidgetHeaderControls from '@/components/widgets/components/widget-header-controls.vue';
 import WidgetWrapper from '@/components/widgets/components/widget-wrapper.vue';
 import ModuleBody from '@/components/widgets/components/module-body.vue';
 import { useModuleLayout } from '@/components/widgets/composables/use-module-layout';
@@ -24,7 +22,6 @@ const props = withDefaults(
   }>(),
   { part: 'all' },
 );
-const mobileHeader = useMediaQuery('(max-width: 639px)');
 const view = defineModel<'donut' | 'flow'>('view', { default: 'donut' });
 const expanded = ref<string[]>([]);
 const { bounded } = useModuleLayout();
@@ -56,14 +53,11 @@ function toggle(id: string) {
   <WidgetWrapper
     class="@container min-h-0 min-w-0 overflow-hidden"
     :compact-header="part !== 'breakdown'"
+    :content-class="part === 'chart' ? 'overflow-hidden' : undefined"
     :data-testid="part === 'breakdown' ? 'income-breakdown-card' : 'income-allocation'"
   >
     <template #title>{{ part === 'breakdown' ? 'Income breakdown' : 'Income allocation' }}</template>
-    <component
-      :is="mobileHeader ? WidgetHeaderControls : 'div'"
-      v-if="part !== 'breakdown'"
-      :class="mobileHeader ? '' : 'mb-2 flex justify-end'"
-    >
+    <template v-if="part !== 'breakdown'" #action>
       <div
         class="bg-muted/60 inline-flex shrink-0 gap-0.5 rounded-lg p-0.5"
         role="group"
@@ -89,8 +83,6 @@ function toggle(id: string) {
           ><WorkflowIcon class="size-3.5"
         /></Button>
       </div>
-    </component>
-    <template v-if="part !== 'breakdown'" #action>
       <slot name="action" /><Popover
         ><PopoverTrigger as-child
           ><Button variant="ghost" size="icon-sm" aria-label="Income allocation settings"

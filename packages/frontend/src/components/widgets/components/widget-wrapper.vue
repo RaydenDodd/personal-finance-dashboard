@@ -31,9 +31,12 @@
 
     <CardContent
       :class="
-        isDashboard
-          ? 'flex min-h-0 flex-1 touch-pan-y flex-col overflow-y-auto overscroll-y-contain'
-          : 'h-full overflow-y-auto'
+        cn(
+          isDashboard
+            ? 'flex min-h-0 flex-1 touch-pan-y flex-col overflow-y-auto overscroll-y-contain'
+            : 'h-full overflow-y-auto',
+          contentClass,
+        )
       "
     >
       <slot />
@@ -55,6 +58,7 @@ withDefaults(
   defineProps<{
     higher?: boolean;
     compactHeader?: boolean;
+    contentClass?: string;
     isFetching?: boolean;
   }>(),
   {
