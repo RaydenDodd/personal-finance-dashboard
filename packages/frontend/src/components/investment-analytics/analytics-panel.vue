@@ -5,7 +5,7 @@ import { computed, inject, ref, watch } from 'vue';
 import { Button } from '@/components/lib/ui/button';
 import { ScrollArea } from '@/components/lib/ui/scroll-area';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/lib/ui/popover';
-import { SettingsIcon } from '@lucide/vue';
+import { SettingsIcon, ChevronLeftIcon, ChevronRightIcon } from '@lucide/vue';
 import type {
   InvestmentAnalytics,
   InvestmentFundOverlap,
@@ -276,7 +276,7 @@ const payments = computed(() => withinRange(selectedIncome.value, range.value.fr
 const dividendDay = ref<string | null>(null);
 const calendarMonth = ref('');
 watch(
-  () => range.value.through,
+  () => dashboardRange.value?.from ?? range.value.through,
   (date) => {
     calendarMonth.value = date.slice(0, 7);
     dividendDay.value = null;
@@ -1480,13 +1480,25 @@ const health = computed(() =>
       </p></template
     >
     <template v-if="kind === 'dividend-calendar'"
-      ><DateRange v-model="range" :earliest="earliest" :compact="compact" subject="investment" />
-      <div class="flex items-center justify-between">
-        <Button variant="ghost" size="icon-sm" aria-label="Previous dividend month" @click="moveDividendMonth(-1)"
-          >?</Button
-        >
+      ><DateRange v-if="!dashboardRange" v-model="range" :earliest="earliest" :compact="compact" subject="investment" />
+      <div class="flex items-center gap-2" :class="dashboardRange ? 'justify-center' : 'justify-between'">
+        <Button
+          v-if="!dashboardRange"
+          variant="ghost"
+          size="icon-sm"
+          aria-label="Previous dividend month"
+          @click="moveDividendMonth(-1)"
+          ><ChevronLeftIcon class="size-4"
+        /></Button>
         <strong class="text-sm">{{ calendarMonth }}</strong>
-        <Button variant="ghost" size="icon-sm" aria-label="Next dividend month" @click="moveDividendMonth(1)">?</Button>
+        <Button
+          v-if="!dashboardRange"
+          variant="ghost"
+          size="icon-sm"
+          aria-label="Next dividend month"
+          @click="moveDividendMonth(1)"
+          ><ChevronRightIcon class="size-4"
+        /></Button>
       </div>
       <div class="grid grid-cols-7 gap-1 text-center text-xs" aria-label="Dividend calendar">
         <span
