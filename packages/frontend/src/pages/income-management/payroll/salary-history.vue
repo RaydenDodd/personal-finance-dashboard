@@ -36,7 +36,14 @@ const props = withDefaults(defineProps<{ data?: PayrollDashboard; settingsKey?: 
 const savedRange = useLocalStorage<PayrollRange>(props.settingsKey + ':range', payrollRange('all'));
 const localRange = ref(savedRange.value.preset === 'custom' ? savedRange.value : payrollRange(savedRange.value.preset));
 const range = computed({
-  get: () => dashboardRange.value ?? localRange.value,
+  get: (): PayrollRange =>
+    dashboardRange.value
+      ? {
+          preset: 'ytd',
+          from: dashboardRange.value.from.slice(0, 4) + '-01-01',
+          through: [dashboardRange.value.through, payrollToday()].sort()[0]!,
+        }
+      : localRange.value,
   set: (value: PayrollRange) => {
     if (!dashboardRange.value) localRange.value = value;
   },
