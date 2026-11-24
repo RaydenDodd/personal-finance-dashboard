@@ -51,21 +51,19 @@ async function replayIntradayAccountHistory(ids: string[], currencyCode: string,
     { ids: securityIds, from, through },
   );
   const allowed = prices.filter((p) => !p.priceAsOf || p.source !== 'yahoo' || usEquityObservationAllowed(p.priceAsOf));
-  const times = [
-    ...new Set(
-      allowed
-        .filter(
-          (p) =>
-            p.priceAsOf &&
-            investmentPriceDate(p.priceAsOf, false) >= from &&
-            investmentPriceDate(p.priceAsOf, false) <= through,
-        )
-        .map((p) => {
-          const time = +new Date(p.priceAsOf!);
-          return new Date(Math.floor(time / 300000) * 300000 + 299999).toISOString();
-        }),
-    ),
-  ].sort();
+  const buckets = new Map<number, number>();
+  for (const p of allowed) {
+    if (
+      !p.priceAsOf ||
+      investmentPriceDate(p.priceAsOf, false) < from ||
+      investmentPriceDate(p.priceAsOf, false) > through
+    )
+      continue;
+    const time = +new Date(p.priceAsOf),
+      bucket = Math.floor(time / 300000);
+    buckets.set(bucket, Math.max(time, buckets.get(bucket) ?? 0));
+  }
+  const times = [...buckets.values()].sort((a, b) => a - b).map((time) => new Date(time).toISOString());
   if (!times.length) return [];
   return buildHistory({
     ids,

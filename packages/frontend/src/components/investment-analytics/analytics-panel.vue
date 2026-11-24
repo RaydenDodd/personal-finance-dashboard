@@ -296,7 +296,9 @@ const calendarCells = computed(() => {
   ];
 });
 const selectedDividendPayments = computed(() =>
-  payments.value.filter((row) => !dividendDay.value || row.date.slice(0, 10) === dividendDay.value),
+  dividendDay.value
+    ? selectedIncome.value.filter((row) => row.date.slice(0, 10) === dividendDay.value)
+    : payments.value,
 );
 function moveDividendMonth(delta: number) {
   const date = new Date(calendarMonth.value + '-01T12:00:00Z');
