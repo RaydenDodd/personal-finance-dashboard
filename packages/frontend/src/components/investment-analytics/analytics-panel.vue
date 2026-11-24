@@ -592,19 +592,21 @@ const chartPoints = computed<InvestmentChartPoint[]>(() => {
       note: row.coverage < 100 ? row.source : undefined,
     }));
   if (props.kind === 'contributions') {
-    const points = aggregateInvestmentFlows(allHistory.value, String(props.settings.aggregation ?? 'monthly'));
-    return points.map((point, i) => {
-      const prior = points.slice(Math.max(0, i - 6), i);
-      const net = (p: InvestmentChartPoint) => (p.values.contributions ?? 0) + (p.values.withdrawals ?? 0);
-      return {
-        ...point,
-        values: {
-          ...point.values,
-          netContributions: net(point),
-          previousAverage: prior.length ? prior.reduce((sum, p) => sum + net(p), 0) / prior.length : null,
-        },
-      };
-    });
+    const points = aggregateInvestmentFlows(props.analytics.history, String(props.settings.aggregation ?? 'monthly'));
+    return points
+      .map((point, i) => {
+        const prior = points.slice(Math.max(0, i - 6), i);
+        const net = (p: InvestmentChartPoint) => (p.values.contributions ?? 0) + (p.values.withdrawals ?? 0);
+        return {
+          ...point,
+          values: {
+            ...point.values,
+            netContributions: net(point),
+            previousAverage: prior.length ? prior.reduce((sum, p) => sum + net(p), 0) / prior.length : null,
+          },
+        };
+      })
+      .filter((point) => point.date >= range.value.from.slice(0, 7) + '-01' && point.date <= range.value.through);
   }
   if (props.kind === 'dividends') {
     const buckets = new Map<string, InvestmentChartPoint>();

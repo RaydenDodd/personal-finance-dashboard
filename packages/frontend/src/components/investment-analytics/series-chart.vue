@@ -89,6 +89,10 @@ function render() {
           visibleSeries.value
             .filter((series) => !props.lineKeys.includes(series.key))
             .reduce((sum, series) => sum + Math.min(0, value(point, series.key) ?? 0), 0),
+          ...visibleSeries.value
+            .filter((series) => props.lineKeys.includes(series.key))
+            .map((series) => value(point, series.key))
+            .filter((v): v is number => v != null),
         ]
       : visibleSeries.value.map((series) => value(point, series.key)).filter((v): v is number => v != null),
   );
