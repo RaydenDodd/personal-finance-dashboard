@@ -1,6 +1,7 @@
 ﻿import type { InvestmentHistoryPoint } from '@bt/shared/types/investment-analytics';
 import {
   easternDate,
+  usEquityCloseInstant,
   investmentPriceDate,
   usEquitySession,
   previousUsEquitySession,
@@ -118,6 +119,8 @@ export function buildHistory({
   )
     dates.push(d.toISOString().slice(0, 10));
   if (sampleTimes) dates.splice(0, dates.length, ...sampleTimes);
+  const observationTime = (p: SecurityPriceRow) =>
+    p.priceAsOf ? +new Date(p.priceAsOf) : usEquityCloseInstant(investmentPriceDate(p.date));
   const intradayPrices = new Map<string, SecurityPriceRow[]>();
   if (sampleTimes)
     for (const price of prices) {
@@ -125,6 +128,7 @@ export function buildHistory({
       rows.push(price);
       intradayPrices.set(price.securityId, rows);
     }
+  for (const rows of intradayPrices.values()) rows.sort((a, b) => observationTime(a) - observationTime(b));
   const byBroker = new Map(brokers.map((b) => [b.portfolioId, b]));
   const byPortfolio = new Map<string, Map<string, string | null>>();
   const knownByPortfolio = new Map<string, Map<string, string | null>>();
@@ -193,12 +197,11 @@ export function buildHistory({
             high = observations.length;
           while (low < high) {
             const mid = (low + high) >>> 1;
-            if (+new Date(observations[mid]!.priceAsOf ?? observations[mid]!.date) <= target) low = mid + 1;
+            if (observationTime(observations[mid]!) <= target) low = mid + 1;
             else high = mid;
           }
           const observation = observations[low - 1];
-          if (!observation || Date.parse(date) - +new Date(observation.priceAsOf ?? observation.date) > 4 * 86400000)
-            return null;
+          if (!observation || Date.parse(date) - observationTime(observation) > 4 * 86400000) return null;
           return (
             Number(observation.unadjustedClose ?? observation.priceClose) /
             shareUnitFactor(securityId, date.slice(0, 10))
