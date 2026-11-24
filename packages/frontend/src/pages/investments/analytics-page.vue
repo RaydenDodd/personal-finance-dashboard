@@ -119,6 +119,7 @@ const layoutPage = computed(
     )[props.page],
 );
 provide('investment-full-page', true);
+provide('investment-default-current-day', props.page === 'performance');
 provide(
   'investment-page-settings',
   computed(() => ({ ...settings.value, portfolioIds: portfolioIds.value })),
@@ -164,7 +165,7 @@ async function refresh() {
 <template>
   <PageWrapper
     ><div class="mx-auto w-full max-w-7xl space-y-3" :data-testid="'investments-' + page + '-page'">
-      <header class="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-2">
+      <header class="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div class="min-w-0">
           <p class="text-muted-foreground text-xs">Investments</p>
           <h1 class="mt-0.5 text-2xl font-semibold">{{ titles[page] }}</h1>
@@ -184,7 +185,7 @@ async function refresh() {
             ><span v-if="query.data.value">{{ query.data.value.currencyCode }} reporting currency</span>
           </div>
         </div>
-        <div class="flex flex-wrap items-center gap-1">
+        <div class="flex max-w-full shrink-0 flex-wrap items-center gap-1">
           <Button v-if="page === 'allocation'" variant="outline" size="sm" @click="importOpen = true"
             ><FileInputIcon class="mr-1.5 size-3.5" />Import fund holdings</Button
           ><Button

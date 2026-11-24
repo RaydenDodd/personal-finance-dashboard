@@ -29,7 +29,7 @@ const emit = defineEmits<{
 const draft = ref<Record<string, unknown>>({});
 const customBenchmarks = ref('');
 const selectedPortfolios = computed(() => (draft.value.portfolioIds as string[]) ?? []);
-const hasUnit = computed(() => props.kind === 'performance');
+const hasUnit = computed(() => ['performance', 'portfolio-comparison'].includes(props.kind));
 const isDividend = computed(() => ['dividends', 'dividend-calendar'].includes(props.kind));
 const hasLimit = computed(() => ['exposure', 'performers', 'concentration', 'dividend-calendar'].includes(props.kind));
 

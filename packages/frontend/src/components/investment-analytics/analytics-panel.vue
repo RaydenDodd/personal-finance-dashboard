@@ -202,7 +202,7 @@ const showChart = computed(() =>
 const percent = computed(
   () =>
     props.kind === 'benchmark' ||
-    (props.kind === 'performance' && props.settings.unit === 'percent') ||
+    (['performance', 'portfolio-comparison'].includes(props.kind) && props.settings.unit === 'percent') ||
     props.kind === 'risk',
 );
 const defaultSeries = computed(() =>
@@ -430,7 +430,10 @@ const dividendGrowth = computed(() => {
   };
 });
 const gainView = computed(
-  () => props.kind === 'performance' && props.settings.unit !== 'dollars' && props.settings.unit !== undefined,
+  () =>
+    ['performance', 'portfolio-comparison'].includes(props.kind) &&
+    props.settings.unit !== 'dollars' &&
+    props.settings.unit !== undefined,
 );
 const gainLabel = computed(() => (percent.value ? 'Portfolio return' : 'Portfolio gain / loss'));
 const performanceSummary = computed(() => {
@@ -444,7 +447,7 @@ const performanceSummary = computed(() => {
 });
 const chartSeries = computed<InvestmentChartSeries[]>(() => {
   if (gainView.value)
-    return recordedAccountFallback.value
+    return recordedAccountFallback.value || props.kind === 'portfolio-comparison'
       ? props.analytics.portfolios.map((p, i) => ({
           key: p.id,
           label: p.name,
@@ -557,16 +560,17 @@ const chartPoints = computed<InvestmentChartPoint[]>(() => {
           : [
               {
                 date,
-                values: recordedAccountFallback.value
-                  ? Object.fromEntries(
-                      history.accounts.map((p) => [
-                        p.id,
-                        chartNumber((percent.value ? p.periodReturnPercent : p.periodGains)?.[i]),
-                      ]),
-                    )
-                  : {
-                      gain: chartNumber((percent.value ? history.periodReturnPercent : history.periodGains)?.[i]),
-                    },
+                values:
+                  recordedAccountFallback.value || props.kind === 'portfolio-comparison'
+                    ? Object.fromEntries(
+                        history.accounts.map((p) => [
+                          p.id,
+                          chartNumber((percent.value ? p.periodReturnPercent : p.periodGains)?.[i]),
+                        ]),
+                      )
+                    : {
+                        gain: chartNumber((percent.value ? history.periodReturnPercent : history.periodGains)?.[i]),
+                      },
                 note: percent.value
                   ? 'Estimated return weighted by dated external cash flows (Modified Dietz).'
                   : undefined,
@@ -965,7 +969,7 @@ const health = computed(() =>
       />
       <DateRange v-model="range" :earliest="earliest" :compact="compact" subject="investment">
         <template #actions
-          ><Popover v-if="kind === 'performance'"
+          ><Popover v-if="['performance', 'portfolio-comparison'].includes(kind)"
             ><PopoverTrigger as-child
               ><Button size="icon" variant="ghost" class="size-7" aria-label="Investment chart settings"
                 ><SettingsIcon class="size-3.5" /></Button></PopoverTrigger
@@ -1018,7 +1022,7 @@ const health = computed(() =>
           ></template
         >
       </DateRange>
-      <WidgetHeaderControls v-if="kind === 'performance' && performanceSummary"
+      <WidgetHeaderControls v-if="['performance', 'portfolio-comparison'].includes(kind) && performanceSummary"
         ><div
           data-testid="investment-performance-summary"
           class="flex items-baseline gap-2 text-sm whitespace-nowrap sm:gap-3 sm:text-base"
@@ -1134,7 +1138,7 @@ const health = computed(() =>
         :points="plottedPoints"
         :series="chartSeries"
         :compact="compact"
-        :percent="percent && kind !== 'portfolio-comparison'"
+        :percent="percent"
         :bars="kind === 'dividends' || kind === 'contributions'"
         :line-keys="kind === 'contributions' ? ['netContributions', 'previousAverage'] : []"
         :share-label="kind === 'contributions' ? 'absolute period flows' : 'period income'"
@@ -1278,7 +1282,7 @@ const health = computed(() =>
       </p>
     </template>
     <template v-if="['allocation', 'sector', 'geography'].includes(kind)">
-      <WidgetHeaderControls
+      <WidgetHeaderControls v-if="!dashboardRange"
         ><select
           :value="allocationMode"
           aria-label="Investment allocation mode"
@@ -1295,6 +1299,38 @@ const health = computed(() =>
           </option>
         </select></WidgetHeaderControls
       >
+      <div v-if="dashboardRange" class="mb-2 flex flex-wrap gap-1" role="group" aria-label="Investment allocation view">
+        <Button
+          v-for="[id, label] in [
+            ['holdings', 'Holdings'],
+            ['underlying', 'Companies'],
+            ['sector', 'Sector'],
+          ]"
+          :key="id"
+          size="sm"
+          :variant="allocationMode === id ? 'secondary' : 'ghost'"
+          :aria-pressed="allocationMode === id"
+          class="h-7 px-2 text-xs"
+          @click="
+            selectedCategory = null;
+            emit('settings-change', { allocationMode: id });
+          "
+          >{{ label }}</Button
+        >
+        <select
+          :value="allocationMode"
+          aria-label="More allocation views"
+          class="bg-background h-7 max-w-28 min-w-0 rounded-md border px-1 text-xs"
+          @change="
+            selectedCategory = null;
+            emit('settings-change', { allocationMode: ($event.target as HTMLSelectElement).value });
+          "
+        >
+          <option v-for="[id, label] in INVESTMENT_ALLOCATION_MODES" :key="id" :value="id">
+            {{ ['holdings', 'underlying', 'sector'].includes(id) ? 'More views' : label }}
+          </option>
+        </select>
+      </div>
       <DrilldownDonut
         :data="allocationTree"
         :total="allocation.reduce((sum, row) => sum + Number(row.value), 0)"

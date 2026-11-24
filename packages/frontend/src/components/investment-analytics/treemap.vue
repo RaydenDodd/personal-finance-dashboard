@@ -44,17 +44,27 @@ watch(
   () => [props.settings.grouping, props.settings.holdingsMode],
   () => {
     group.value = null;
+    drilldown.value = [];
     selected.value = null;
   },
 );
-const showSmall = ref(false);
-const visible = computed(() => {
-  const all = rows.value.filter((row) => row.size > 0 && (!group.value || row.group === group.value));
+const drilldown = ref<string[][]>([]);
+const smallRows = computed(() => {
+  const ids = drilldown.value.at(-1);
+  const all = rows.value
+    .filter((row) => row.size > 0 && (!group.value || row.group === group.value) && (!ids || ids.includes(row.id)))
+    .sort((a, b) => b.size - a.size);
   const total = all.reduce((sum, row) => sum + row.size, 0);
-  const small = all.filter((row) => row.size < total * 0.005);
-  if (showSmall.value) return small;
-  if (small.length < 2) return all;
+  const capacity = Math.max(4, Math.min(40, Math.floor((chartWidth.value * height.value) / 6500)));
+  const large = all.filter((row) => row.size >= total * 0.005).slice(0, capacity - 1);
+  const small = all.filter((row) => !large.includes(row));
+  return { all, small: small.length > 1 ? small : [], total };
+});
+const visible = computed(() => {
+  const { all, small, total } = smallRows.value;
+  if (!small.length) return all;
   const size = small.reduce((sum, row) => sum + row.size, 0);
+  const priced = small.filter((row) => row.change !== null);
   return [
     ...all.filter((row) => !small.includes(row)),
     {
@@ -64,15 +74,18 @@ const visible = computed(() => {
       name: small.length + ' small holdings',
       size,
       value: small.reduce((sum, row) => sum + (row.value ?? 0), 0),
-      change: small.every((row) => row.change !== null)
-        ? small.reduce((sum, row) => sum + row.change! * row.size, 0) / size
-        : null,
+      change: priced.length ? priced.reduce((sum, row) => sum + row.change!, 0) / priced.length : null,
       gain: small.every((row) => row.gain != null) ? small.reduce((sum, row) => sum + row.gain!, 0) : null,
-      description: 'Select to explore the smaller holdings.',
+      description: `Average return of ${priced.length}/${small.length} holdings with return data. Select to explore.`,
       weight: total ? (size / total) * 100 : null,
     },
   ];
 });
+function openOther() {
+  drilldown.value = [...drilldown.value, smallRows.value.small.map((row) => row.id)];
+  tooltip.visible = false;
+  selected.value = null;
+}
 const tooltip = reactive({ visible: false, x: 0, y: 0, row: null as (typeof rows.value)[number] | null });
 const { updateTooltipPosition, isChartScrolling } = useChartTooltipPosition({
   containerRef,
@@ -162,7 +175,7 @@ function render() {
     })
     .on('click', (_event, node) => {
       if (node.data.row!.id === '__other__') {
-        showSmall.value = true;
+        openOther();
         return;
       }
       if (grouped) group.value = node.data.row!.group;
@@ -171,7 +184,8 @@ function render() {
     .on('keydown', (event: KeyboardEvent, node) => {
       if (event.key === 'Enter' || event.key === ' ') {
         event.preventDefault();
-        if (grouped) group.value = node.data.row!.group;
+        if (node.data.row!.id === '__other__') openOther();
+        else if (grouped) group.value = node.data.row!.group;
         else selected.value = node.data.row!.id;
       }
     });
@@ -263,8 +277,13 @@ watch([visible, () => props.settings], () => nextTick(render), { deep: true });
         <span v-if="averages.count < visible.length"> · {{ averages.count }}/{{ visible.length }}</span></span
       >
     </div>
-    <button v-if="showSmall" type="button" class="text-primary-text mb-2 text-xs underline" @click="showSmall = false">
-      All holdings / Small holdings ?
+    <button
+      v-if="drilldown.length"
+      type="button"
+      class="text-primary-text mb-2 text-xs underline"
+      @click="drilldown = drilldown.slice(0, -1)"
+    >
+      Back to larger holdings
     </button>
     <button v-if="group" type="button" class="text-primary-text mb-2 text-xs underline" @click="group = null">
       All holdings / {{ group }} ×

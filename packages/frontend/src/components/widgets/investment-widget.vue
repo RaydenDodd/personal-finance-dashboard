@@ -30,7 +30,12 @@ const persist =
   );
 const kind = computed(() => investmentWidgetKind(widget.value.widgetId) ?? 'overview');
 const definition = computed(() => INVESTMENT_WIDGET_DEFINITIONS[widget.value.widgetId]);
-const optimisticSettings = ref<Record<string, unknown>>({});
+const defaultCurrentDay = inject('investment-default-current-day', false);
+const optimisticSettings = ref<Record<string, unknown>>(
+  defaultCurrentDay && ['performance', 'heatmap'].includes(kind.value)
+    ? { dateRange: '1D', from: payrollToday(), through: payrollToday(), colorBy: 'daily' }
+    : {},
+);
 const pageSettings = inject<Ref<Record<string, unknown>> | null>('investment-page-settings', null);
 const fullPage = inject('investment-full-page', false);
 const bodyRef = ref<InstanceType<typeof ScrollArea> | HTMLDivElement | null>(null);
@@ -75,9 +80,13 @@ const settings = computed(() =>
         }
       : {}),
     ...(dashboardRange.value &&
-    kind.value === 'performance' &&
-    (optimisticSettings.value.dashboardPeriod ?? widget.value.config?.dashboardPeriod) === 'today'
-      ? { dateRange: '1D', from: payrollToday(), through: payrollToday() }
+    ['performance', 'heatmap'].includes(kind.value) &&
+    ['today', 'month'].includes(
+      String(optimisticSettings.value.dashboardPeriod ?? widget.value.config?.dashboardPeriod),
+    )
+      ? (optimisticSettings.value.dashboardPeriod ?? widget.value.config?.dashboardPeriod) === 'month'
+        ? { dateRange: '1M', from: payrollToday().slice(0, 7) + '-01', through: payrollToday(), colorBy: 'custom' }
+        : { dateRange: '1D', from: payrollToday(), through: payrollToday(), colorBy: 'daily' }
       : {}),
     ...(kind.value === 'performance'
       ? {
@@ -114,7 +123,7 @@ const broad = useInvestmentAnalytics({
 const narrow = useInvestmentHistory({
   portfolioIds,
   enabled: () => focusedHistory.value || kind.value === 'benchmark',
-  includeCapital: () => ['performance', 'value-capital', 'benchmark'].includes(kind.value),
+  includeCapital: () => ['performance', 'portfolio-comparison', 'value-capital', 'benchmark'].includes(kind.value),
   gainFrom: () => investmentRange(settings.value, '1900-01-01').from,
   includeEvents: () => Boolean(settings.value.showEvents),
 });
@@ -246,6 +255,26 @@ const saveSettings = async (patch: Record<string, unknown>, close = false) => {
       viewport-class="pr-2 [&>div]:!block"
       :data-investment-instance="widget.instanceId ?? widget.widgetId"
     >
+      <div
+        v-if="dashboardRange && ['performance', 'heatmap'].includes(kind)"
+        class="mb-2 flex gap-1"
+        role="group"
+        aria-label="Widget period"
+      >
+        <Button
+          v-for="[value, label] in [
+            ['today', '1D'],
+            ['month', '1M'],
+            ['selected', 'Dashboard month'],
+          ]"
+          :key="value"
+          size="sm"
+          :variant="(settings.dashboardPeriod ?? 'selected') === value ? 'secondary' : 'ghost'"
+          :aria-pressed="(settings.dashboardPeriod ?? 'selected') === value"
+          @click="saveSettings({ dashboardPeriod: value })"
+          >{{ label }}</Button
+        >
+      </div>
       <LoadingState v-if="isPending" />
       <ErrorState v-else-if="error" message="Investment analytics could not be loaded." @retry="refetch()" />
       <AnalyticsPanel
