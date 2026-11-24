@@ -254,7 +254,7 @@ const comparablePortfolioPoints = computed(() =>
   props.kind === 'benchmark' && props.analytics.accountHistory
     ? props.analytics.accountHistory.dates.flatMap((date, i) => {
         const value = props.analytics.accountHistory!.periodReturnPercent?.[i];
-        return value == null || date < range.value.from || date > range.value.through
+        return value == null || date.slice(0, 10) < range.value.from || date.slice(0, 10) > range.value.through
           ? []
           : [{ date, returnPercent: value }];
       })
@@ -273,6 +273,38 @@ const selectedIncome = computed(() =>
   ),
 );
 const payments = computed(() => withinRange(selectedIncome.value, range.value.from, range.value.through));
+const dividendDay = ref<string | null>(null);
+const calendarMonth = ref('');
+watch(
+  () => range.value.through,
+  (date) => {
+    calendarMonth.value = date.slice(0, 7);
+    dividendDay.value = null;
+  },
+  { immediate: true },
+);
+const calendarCells = computed(() => {
+  const first = new Date(calendarMonth.value + '-01T12:00:00Z');
+  const count = new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth() + 1, 0)).getUTCDate();
+  return [
+    ...Array.from({ length: first.getUTCDay() }, () => null),
+    ...Array.from({ length: count }, (_, i) => {
+      const date = calendarMonth.value + '-' + String(i + 1).padStart(2, '0');
+      const rows = selectedIncome.value.filter((row) => row.date.slice(0, 10) === date && row.type === 'dividend');
+      return { date, day: i + 1, count: rows.length, amount: rows.reduce((sum, row) => sum + Number(row.amount), 0) };
+    }),
+  ];
+});
+const selectedDividendPayments = computed(() =>
+  payments.value.filter((row) => !dividendDay.value || row.date.slice(0, 10) === dividendDay.value),
+);
+function moveDividendMonth(delta: number) {
+  const date = new Date(calendarMonth.value + '-01T12:00:00Z');
+  date.setUTCMonth(date.getUTCMonth() + delta);
+  calendarMonth.value = date.toISOString().slice(0, 7);
+  dividendDay.value = null;
+}
+
 const distributionTotals = computed(() => {
   const now = props.analytics.generatedAt.slice(0, 10),
     year = now.slice(0, 4),
@@ -498,6 +530,13 @@ const chartSeries = computed<InvestmentChartSeries[]>(() => {
         color: colors[0]!,
       },
     ];
+  if (props.kind === 'contributions')
+    return [
+      { key: 'contributions', label: 'Contributions', color: colors[0]! },
+      { key: 'withdrawals', label: 'Withdrawals', color: colors[1]! },
+      { key: 'netContributions', label: 'Net invested', color: '#e6bf27' },
+      { key: 'previousAverage', label: 'Previous six periods average', color: '#a1a1aa' },
+    ];
   return activeSeries.value.map((key, index) => ({
     key,
     label: historyLabels[key] ?? key,
@@ -510,7 +549,7 @@ const chartPoints = computed<InvestmentChartPoint[]>(() => {
     const period = true;
     if (history)
       return history.dates.flatMap((date, i) =>
-        date < range.value.from || date > range.value.through
+        date.slice(0, 10) < range.value.from || date.slice(0, 10) > range.value.through
           ? []
           : [
               {
@@ -549,8 +588,21 @@ const chartPoints = computed<InvestmentChartPoint[]>(() => {
       },
       note: row.coverage < 100 ? row.source : undefined,
     }));
-  if (props.kind === 'contributions')
-    return aggregateInvestmentFlows(allHistory.value, String(props.settings.aggregation ?? 'monthly'));
+  if (props.kind === 'contributions') {
+    const points = aggregateInvestmentFlows(allHistory.value, String(props.settings.aggregation ?? 'monthly'));
+    return points.map((point, i) => {
+      const prior = points.slice(Math.max(0, i - 6), i);
+      const net = (p: InvestmentChartPoint) => (p.values.contributions ?? 0) + (p.values.withdrawals ?? 0);
+      return {
+        ...point,
+        values: {
+          ...point.values,
+          netContributions: net(point),
+          previousAverage: prior.length ? prior.reduce((sum, p) => sum + net(p), 0) / prior.length : null,
+        },
+      };
+    });
+  }
   if (props.kind === 'dividends') {
     const buckets = new Map<string, InvestmentChartPoint>();
     for (const payment of payments.value.filter((row) => row.status === 'recorded')) {
@@ -590,15 +642,9 @@ const chartPoints = computed<InvestmentChartPoint[]>(() => {
       .filter((date) => date >= range.value.from && date <= range.value.through)
       .sort();
     // Comparison starts only at an actual shared observation, with no forward-filled index values.
-    const common = dates.find(
-      (date) =>
-        (!comparablePortfolioPoints.value.length || comparablePortfolioPoints.value.some((row) => row.date === date)) &&
-        series.every((row) => row.points.some((point) => point.date === date)),
-    );
+    const common = dates.find((date) => series.every((row) => row.points.some((point) => point.date === date)));
     if (!common) return [];
-    const portfolioBase = chartNumber(
-      comparablePortfolioPoints.value.find((row) => row.date === common)?.returnPercent,
-    );
+    const portfolioBase = chartNumber(comparablePortfolioPoints.value.find((row) => row.date >= common)?.returnPercent);
     const bases = new Map(
       series.map((row) => [row.id, Number(row.points.find((point) => point.date === common)!.returnPercent)]),
     );
@@ -847,7 +893,9 @@ const health = computed(() =>
             aria-haspopup="dialog"
             @click="activeMetric = key"
             :class="
-              key.toLowerCase().includes('gain') || key === 'dailyChange' ? signed(displayedMetric(key).value) : ''
+              key.toLowerCase().includes('gain') || key === 'dailyChange' || kind === 'risk'
+                ? signed(displayedMetric(key).value)
+                : ''
             "
           >
             <span v-if="analytics.metrics[key]?.estimated" aria-label="Estimated">≈ </span>
@@ -1061,6 +1109,7 @@ const health = computed(() =>
         :compact="compact"
         :percent="percent && kind !== 'portfolio-comparison'"
         :bars="kind === 'dividends' || kind === 'contributions'"
+        :line-keys="kind === 'contributions' ? ['netContributions', 'previousAverage'] : []"
         :share-label="kind === 'contributions' ? 'absolute period flows' : 'period income'"
         :events="
           withinRange(analytics.events, range.from, range.through).map((row) => ({ date: row.date, label: row.label }))
@@ -1404,9 +1453,41 @@ const health = computed(() =>
       </p></template
     >
     <template v-if="kind === 'dividend-calendar'"
-      ><DateRange v-model="range" :earliest="earliest" :compact="compact" subject="investment" /><ModuleBody
+      ><DateRange v-model="range" :earliest="earliest" :compact="compact" subject="investment" />
+      <div class="flex items-center justify-between">
+        <Button variant="ghost" size="icon-sm" aria-label="Previous dividend month" @click="moveDividendMonth(-1)"
+          >?</Button
+        >
+        <strong class="text-sm">{{ calendarMonth }}</strong>
+        <Button variant="ghost" size="icon-sm" aria-label="Next dividend month" @click="moveDividendMonth(1)">?</Button>
+      </div>
+      <div class="grid grid-cols-7 gap-1 text-center text-xs" aria-label="Dividend calendar">
+        <span
+          v-for="day in ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']"
+          :key="day"
+          class="text-muted-foreground"
+          >{{ day }}</span
+        >
+        <template v-for="(cell, index) in calendarCells" :key="index">
+          <button
+            v-if="cell"
+            class="rounded-md border p-2 tabular-nums"
+            :class="
+              cell.count ? 'bg-app-income-color/25 text-app-income-color cursor-pointer' : 'text-muted-foreground'
+            "
+            :disabled="!cell.count"
+            :aria-pressed="dividendDay === cell.date"
+            :title="cell.count ? money(cell.amount) + ' ? ' + cell.count + ' payments' : 'No recorded dividends'"
+            @click="dividendDay = dividendDay === cell.date ? null : cell.date"
+          >
+            {{ cell.day }}<span v-if="cell.count" class="block text-[10px]">{{ money(cell.amount) }}</span>
+          </button>
+          <span v-else />
+        </template>
+      </div>
+      <ModuleBody
         ><div
-          v-for="row in payments"
+          v-for="row in selectedDividendPayments"
           :key="row.id"
           class="flex items-center justify-between gap-3 border-b py-3 text-xs last:border-0"
         >

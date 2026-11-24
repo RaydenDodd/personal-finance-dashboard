@@ -6,7 +6,6 @@ import { ScrollArea } from '@/components/lib/ui/scroll-area';
 import { useDashboardPeriod } from '@/components/widgets/composables/use-dashboard-period';
 import { ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon } from '@lucide/vue';
 import { computed, ref } from 'vue';
-import { latestUsEquitySessionDate } from '@bt/shared/types/investment-market';
 import {
   payrollRange,
   payrollToday,
@@ -37,11 +36,7 @@ const presets = computed<{ id: PayrollRangePreset; name: string }[]>(() => [
 ]);
 const forwardDisabled = computed(() => shiftPayrollRange(model.value, 1) === model.value);
 function choose(preset: PayrollRangePreset) {
-  model.value = payrollRange(
-    preset,
-    props.subject === 'investment' && preset === '1d' ? latestUsEquitySessionDate() : payrollToday(),
-    props.earliest,
-  );
+  model.value = payrollRange(preset, payrollToday(), props.earliest);
   open.value = false;
 }
 function apply() {

@@ -16,12 +16,13 @@ const props = withDefaults(
     events?: InvestmentChartEvent[];
     percent?: boolean;
     bars?: boolean;
+    lineKeys?: string[];
     compact?: boolean;
     label?: string;
     shareLabel?: string;
     currencyCode?: string;
   }>(),
-  { events: () => [], label: 'Investment history', shareLabel: 'period income' },
+  { lineKeys: () => [], events: () => [], label: 'Investment history', shareLabel: 'period income' },
 );
 const containerRef = ref<HTMLElement | null>(null);
 const chartHeight = inject<Ref<number> | null>('investment-chart-height', null);
@@ -55,6 +56,7 @@ const { updateTooltipPosition, isChartScrolling } = useChartTooltipPosition({
   containerRef,
   tooltipRef,
   tooltip,
+  strategy: 'fixed',
   onDismiss: () => clear(),
 });
 function render() {
@@ -81,8 +83,12 @@ function render() {
   const values = points.flatMap((point) =>
     props.bars
       ? [
-          visibleSeries.value.reduce((sum, series) => sum + Math.max(0, value(point, series.key) ?? 0), 0),
-          visibleSeries.value.reduce((sum, series) => sum + Math.min(0, value(point, series.key) ?? 0), 0),
+          visibleSeries.value
+            .filter((series) => !props.lineKeys.includes(series.key))
+            .reduce((sum, series) => sum + Math.max(0, value(point, series.key) ?? 0), 0),
+          visibleSeries.value
+            .filter((series) => !props.lineKeys.includes(series.key))
+            .reduce((sum, series) => sum + Math.min(0, value(point, series.key) ?? 0), 0),
         ]
       : visibleSeries.value.map((series) => value(point, series.key)).filter((v): v is number => v != null),
   );
@@ -138,6 +144,7 @@ function render() {
       let positive = 0,
         negative = 0;
       visibleSeries.value.forEach((series) => {
+        if (props.lineKeys.includes(series.key)) return;
         const v = value(point, series.key);
         if (v == null) return;
         const base = v >= 0 ? positive : negative;
@@ -156,8 +163,9 @@ function render() {
           .attr('opacity', 0.85);
       });
     });
-  } else {
-    for (const series of visibleSeries.value) {
+  }
+  {
+    for (const series of visibleSeries.value.filter((series) => !props.bars || props.lineKeys.includes(series.key))) {
       const line = d3
         .line<InvestmentChartPoint>()
         .defined((point) => value(point, series.key) != null)
@@ -169,6 +177,8 @@ function render() {
         .attr('fill', 'none')
         .attr('stroke', series.color)
         .attr('stroke-width', 2.5)
+        .attr('stroke-dasharray', series.key === 'previousAverage' ? '4,4' : null)
+        .attr('opacity', series.key === 'previousAverage' ? 0.45 : 1)
         .attr('data-series', series.key);
       const observations = points.filter((point) => value(point, series.key) != null);
       if (observations.length <= 62)
@@ -288,40 +298,42 @@ watch(
       :style="chartHeight ? { height: chartHeight + 'px' } : undefined"
     >
       <svg ref="svgRef" class="h-full w-full" role="img" :aria-label="label" />
-      <div
-        v-show="tooltip.visible"
-        ref="tooltipRef"
-        class="pointer-events-none absolute z-20 max-w-[min(22rem,90vw)]"
-        :style="{ left: tooltip.x + 'px', top: tooltip.y + 'px' }"
-        data-testid="investment-chart-tooltip"
-      >
-        <ChartTooltip
-          ><ChartTooltipHeader>{{ tooltip.point?.date }}</ChartTooltipHeader>
-          <ChartTooltipRow
-            v-for="series in tooltipSeries"
-            :key="series.key"
-            :color="series.color"
-            :label="series.label"
-            :value="formatValue(tooltip.point?.values[series.key])"
-            :value-class="tooltip.segment === series.key ? 'font-bold' : ''"
-          />
-          <p v-if="bars && tooltip.segment && tooltip.point" class="text-card-tooltip-muted mt-1 text-xs">
-            {{
-              (
-                (Math.abs(tooltip.point.values[tooltip.segment] ?? 0) /
-                  Math.max(
-                    1e-10,
-                    visibleSeries.reduce((sum, row) => sum + Math.abs(tooltip.point?.values[row.key] ?? 0), 0),
-                  )) *
-                100
-              ).toFixed(1)
-            }}% of {{ shareLabel }}
-          </p>
-          <p v-if="tooltip.point?.note" class="text-card-tooltip-muted mt-2 max-w-64 text-xs">
-            {{ tooltip.point.note }}
-          </p>
-        </ChartTooltip>
-      </div>
+      <Teleport to="body">
+        <div
+          v-show="tooltip.visible"
+          ref="tooltipRef"
+          class="pointer-events-none fixed z-[100] max-w-[min(22rem,90vw)]"
+          :style="{ left: tooltip.x + 'px', top: tooltip.y + 'px' }"
+          data-testid="investment-chart-tooltip"
+        >
+          <ChartTooltip
+            ><ChartTooltipHeader>{{ tooltip.point?.date }}</ChartTooltipHeader>
+            <ChartTooltipRow
+              v-for="series in tooltipSeries"
+              :key="series.key"
+              :color="series.color"
+              :label="series.label"
+              :value="formatValue(tooltip.point?.values[series.key])"
+              :value-class="tooltip.segment === series.key ? 'font-bold' : ''"
+            />
+            <p v-if="bars && tooltip.segment && tooltip.point" class="text-card-tooltip-muted mt-1 text-xs">
+              {{
+                (
+                  (Math.abs(tooltip.point.values[tooltip.segment] ?? 0) /
+                    Math.max(
+                      1e-10,
+                      visibleSeries.reduce((sum, row) => sum + Math.abs(tooltip.point?.values[row.key] ?? 0), 0),
+                    )) *
+                  100
+                ).toFixed(1)
+              }}% of {{ shareLabel }}
+            </p>
+            <p v-if="tooltip.point?.note" class="text-card-tooltip-muted mt-2 max-w-64 text-xs">
+              {{ tooltip.point.note }}
+            </p>
+          </ChartTooltip>
+        </div>
+      </Teleport>
       <p
         v-if="!hasObservations"
         class="text-muted-foreground absolute inset-0 flex items-center justify-center px-6 text-center text-sm"

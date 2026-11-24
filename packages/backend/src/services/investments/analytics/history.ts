@@ -44,7 +44,9 @@ export function buildHistory({
   onCoverage,
   onHoldingQuantity,
   onAnchorDifference,
+  sampleTimes,
 }: {
+  sampleTimes?: string[];
   ids: string[];
   currencyCode: string;
   brokers: BrokerPortfolioData[];
@@ -115,6 +117,14 @@ export function buildHistory({
     d.setUTCDate(d.getUTCDate() + 1)
   )
     dates.push(d.toISOString().slice(0, 10));
+  if (sampleTimes) dates.splice(0, dates.length, ...sampleTimes);
+  const intradayPrices = new Map<string, SecurityPriceRow[]>();
+  if (sampleTimes)
+    for (const price of prices) {
+      const rows = intradayPrices.get(price.securityId) ?? [];
+      rows.push(price);
+      intradayPrices.set(price.securityId, rows);
+    }
   const byBroker = new Map(brokers.map((b) => [b.portfolioId, b]));
   const byPortfolio = new Map<string, Map<string, string | null>>();
   const knownByPortfolio = new Map<string, Map<string, string | null>>();
@@ -176,6 +186,24 @@ export function buildHistory({
       transactionsByPortfolio: new Map([[id, txs]]),
       securitiesById: new Map(securities.map((s) => [s.id, s])),
       findPriceForDate: (securityId, date) => {
+        if (sampleTimes) {
+          const observations = intradayPrices.get(securityId) ?? [];
+          const target = Date.parse(date);
+          let low = 0,
+            high = observations.length;
+          while (low < high) {
+            const mid = (low + high) >>> 1;
+            if (+new Date(observations[mid]!.priceAsOf ?? observations[mid]!.date) <= target) low = mid + 1;
+            else high = mid;
+          }
+          const observation = observations[low - 1];
+          if (!observation || Date.parse(date) - +new Date(observation.priceAsOf ?? observation.date) > 4 * 86400000)
+            return null;
+          return (
+            Number(observation.unadjustedClose ?? observation.priceClose) /
+            shareUnitFactor(securityId, date.slice(0, 10))
+          );
+        }
         const security = securityById.get(securityId);
         const expected = security?.assetClass === 'crypto' ? date : stockPriceDay(date);
         // Today's account value retains a real prior close until a regular quote arrives.
@@ -208,7 +236,7 @@ export function buildHistory({
       onHoldingQuantity,
       onAnchorDifference,
       floorValues: false,
-      dateKey: investmentPriceDate,
+      dateKey: sampleTimes ? (date) => new Date(date).toISOString() : investmentPriceDate,
       shareUnitFactor,
       mergePositionAnchors: true,
       positionAnchorsByPortfolio: new Map([[id, anchors]]),

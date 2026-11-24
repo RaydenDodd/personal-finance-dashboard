@@ -1,6 +1,7 @@
 import { ASSET_CLASS, SECURITY_PROVIDER } from '@bt/shared/types';
 import { usEquityMarketOpen } from '@bt/shared/types/investment-market';
 import { logger } from '@js/utils';
+import { connection } from '@models/connection';
 import Holdings from '@models/investments/holdings.model';
 import Portfolios from '@models/investments/portfolios.model';
 import Securities from '@models/investments/securities.model';
@@ -475,7 +476,7 @@ export const securitiesPricesStocksIntradaySync = withLock(
       logger.info('[stocks-intraday] Market closed; retained latest valid prices');
       return { totalProcessed: 0, successfulUpdates: 0, failedUpdates: 0, errors: [], skipped: 'market-closed' };
     }
-    return securitiesPricesSyncImpl({
+    const result = await securitiesPricesSyncImpl({
       assetClassWhere: { assetClass: { [Op.notIn]: [ASSET_CLASS.crypto] } },
       forDate: new Date(),
       currentQuotes: true,
@@ -483,6 +484,17 @@ export const securitiesPricesStocksIntradaySync = withLock(
       prepareBars: (bars) => bars.map((bar) => ({ ...bar, date: bar.priceAsOf })),
       label: 'stocks-intraday',
     });
+    // Remove only old intraday observations whose canonical daily close is already preserved.
+    // One bounded chunk per tick; never discard the sole observation for a date.
+    await connection.sequelize.query(`WITH obsolete AS (
+      SELECT p.id FROM "SecurityPricings" p
+      WHERE p."priceAsOf" IS NOT NULL AND p.date < now()-INTERVAL '7 days'
+      AND p.date <> date_trunc('day',p.date AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'
+      AND EXISTS (SELECT 1 FROM "SecurityPricings" d WHERE d."securityId"=p."securityId"
+        AND d."priceAsOf" IS NULL AND d.date=date_trunc('day',p.date AT TIME ZONE 'America/New_York') AT TIME ZONE 'UTC')
+      ORDER BY p.date LIMIT 5000
+    ) DELETE FROM "SecurityPricings" WHERE id IN (SELECT id FROM obsolete)`);
+    return result;
   },
 );
 

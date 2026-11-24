@@ -153,7 +153,10 @@ export interface InvestmentHolding extends InvestmentClassification {
   quoteStatus?: 'delayed' | 'closing' | 'historical' | 'unavailable';
   /** Price-only changes from recorded historical prices, never account returns or current quotes copied backwards. */
   periodReturns?: Partial<
-    Record<'daily' | 'weekly' | 'monthly' | '3m' | '6m' | 'ytd' | '1y' | '2y' | '5y' | 'all', InvestmentDecimal>
+    Record<
+      'daily' | 'weekly' | 'monthly' | '3m' | '6m' | 'ytd' | '1y' | '2y' | '5y' | 'all' | 'custom',
+      InvestmentDecimal
+    >
   >;
   weight: InvestmentDecimal;
   portfolioCount: number;

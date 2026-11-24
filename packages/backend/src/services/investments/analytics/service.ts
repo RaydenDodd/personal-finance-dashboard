@@ -514,6 +514,22 @@ async function getAnalyticsImpl({
     h.periodReturns = recordedPriceReturns(
       series.map((p) => ({ date: new Date(p.date).toISOString(), price: decimal(p.priceClose) })),
     );
+    if (performanceFrom && performanceThrough) {
+      const opening = series.findLast((p) => investmentPriceDate(p.date) < performanceFrom);
+      const closing = series.findLast((p) => investmentPriceDate(p.date) <= performanceThrough);
+      if (
+        opening &&
+        closing &&
+        Number(opening.priceClose) > 0 &&
+        Date.parse(performanceFrom) - +new Date(opening.date) <= 4 * 86400000 &&
+        Date.parse(performanceThrough) - +new Date(closing.date) <= 4 * 86400000
+      )
+        h.periodReturns.custom = new Big(decimal(closing.priceClose))
+          .div(decimal(opening.priceClose))
+          .minus(1)
+          .times(100)
+          .toString();
+    }
     const latest = series.at(-1);
     let sessionDate = easternDate();
     while (!usEquitySession(sessionDate).tradingDay) {

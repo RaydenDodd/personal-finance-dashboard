@@ -70,11 +70,13 @@ export function investmentTreemapRows(
         g = chartNumber(gain);
       return b !== null && b > 0 && g !== null ? (g / b) * 100 : null;
     }
-    if (usesCustomPositionPeriod(settings, String(settings.colorBy))) return chartNumber(row.personalReturns?.custom);
+    if (usesCustomPositionPeriod(settings, String(settings.colorBy)))
+      return chartNumber(row.personalReturns?.custom ?? row.periodReturns?.custom);
     return chartNumber(
       settings.colorBy === 'daily'
         ? row.dailyChangePercent
         : (row.personalReturns?.[String(settings.colorBy) as keyof NonNullable<InvestmentHolding['personalReturns']>] ??
+            row.periodReturns?.[String(settings.colorBy) as keyof NonNullable<InvestmentHolding['periodReturns']>] ??
             null),
     );
   };
@@ -93,6 +95,13 @@ export function investmentTreemapRows(
           },
         ];
     return positions.map((position) => {
+      const periodKey = usesCustomPositionPeriod(settings, String(settings.colorBy))
+        ? 'custom'
+        : String(settings.colorBy);
+      const priceOnly =
+        row.personalReturns?.[periodKey as keyof NonNullable<InvestmentHolding['personalReturns']>] == null &&
+        row.periodReturns?.[periodKey as keyof NonNullable<InvestmentHolding['periodReturns']>] != null;
+
       const value = chartNumber(position.marketValue);
       const size =
         settings.sizeBy === 'costBasis'
@@ -123,7 +132,7 @@ export function investmentTreemapRows(
           ? portfolioGroup(position.portfolioId)
           : String((row as unknown as Record<string, unknown>)[String(settings.grouping)] ?? 'Unknown'),
         weight: split ? weight(value) : chartNumber(row.weight),
-        description: `${split ? position.portfolioName + ' · ' : ''}Direct holding · price ${money(chartNumber(row.price), row.currencyCode)} · average cost ${money(chartNumber(position.averageCost), row.currencyCode)}`,
+        description: `${priceOnly ? 'Price-only return (position history incomplete). ' : ''}${split ? position.portfolioName + ' · ' : ''}Direct holding · price ${money(chartNumber(row.price), row.currencyCode)} · average cost ${money(chartNumber(position.averageCost), row.currencyCode)}`,
         asOf: row.priceDate,
       };
     });

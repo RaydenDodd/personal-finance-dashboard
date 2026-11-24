@@ -9,6 +9,7 @@ import Big from 'big.js';
 
 import { accountGainSeries, accountPeriodSeries, sumGainSeries } from './account-history-gains';
 import { sqlRows, ACCOUNT_HISTORY_VERSION } from './daily-account-cache';
+import { intradayAccountHistory } from './intraday-account-history';
 
 const decimal = (v: string | null) => (v === null ? null : new Big(v).toString());
 export async function getAccountHistory({
@@ -87,7 +88,7 @@ export async function getAccountHistory({
     from: from ?? '0001-01-01',
     through: through && through < today ? through : today,
   };
-  const rows = coverageOnly
+  let rows = coverageOnly
     ? []
     : await sqlRows<{
         portfolioId: string;
@@ -106,7 +107,7 @@ export async function getAccountHistory({
     SELECT "portfolioId",date,value,"knownValue","netFunding",coverage FROM "InvestmentDailyAccountValues" WHERE "portfolioId" IN (:ids) AND "currencyCode"=:currency AND date BETWEEN CAST(:from AS date) AND CAST(:through AS date) ORDER BY date`,
         params,
       );
-  const totals = coverageOnly
+  let totals = coverageOnly
     ? []
     : await sqlRows<{
         date: string;
@@ -123,6 +124,40 @@ export async function getAccountHistory({
     WHERE "portfolioId" IN (:ids) AND "currencyCode"=:currency AND date BETWEEN CAST(:from AS date) AND CAST(:through AS date) GROUP BY date ORDER BY date`,
         params,
       );
+  const shortFrom = gainFrom ?? from;
+  if (!coverageOnly && shortFrom && Date.parse(today) - Date.parse(shortFrom) <= 7 * 86400000) {
+    const samples = await intradayAccountHistory(ids, currencyCode, shortFrom, params.through);
+    if (samples.length) {
+      const baseline = rows.filter((r) => r.date < shortFrom);
+      const sampleRows = samples.flatMap((point) =>
+        ids.map((id) => {
+          const daily = rows.find((r) => r.portfolioId === id && r.date === point.date.slice(0, 10));
+          return {
+            portfolioId: id,
+            date: point.date,
+            value: point.portfolios[id] ?? null,
+            knownValue: point.knownPortfolios?.[id] ?? null,
+            netFunding: daily?.netFunding ?? null,
+            coverage: daily?.coverage ?? {},
+          };
+        }),
+      );
+      rows = [...baseline, ...sampleRows];
+      totals = [
+        ...totals.filter((r) => r.date < shortFrom),
+        ...samples.map((point) => ({
+          date: point.date,
+          total: point.knownMarketValue ?? null,
+          known: String(Object.values(point.knownPortfolios ?? {}).filter((v) => v !== null).length),
+          full: String(Object.values(point.portfolios).filter((v) => v !== null).length),
+          funding: null,
+          priced: '0',
+          missing: '0',
+          unknown: '0',
+        })),
+      ];
+    }
+  }
   result.dates = totals.map((r) => r.date);
   result.total = totals.map((r) => decimal(r.total));
   result.accountsKnown = totals.map((r) => Number(r.known));
@@ -137,6 +172,23 @@ export async function getAccountHistory({
     map.set(r.date, r);
     byAccount.set(r.portfolioId, map);
   }
+  // When historical cash is unavailable, measure the evidenced invested holdings
+  // against net trade capital. A deposit waiting in unknown cash is not a market loss.
+  const tradeCapital = includeCapital
+    ? await sqlRows<{ portfolioId: string; date: string; capital: string }>(
+        `
+    SELECT "portfolioId", date::date::text AS date,
+      SUM(SUM(CASE WHEN category='buy' THEN "refAmount" WHEN category='sell' THEN -"refAmount" ELSE 0 END))
+      OVER (PARTITION BY "portfolioId" ORDER BY date::date) AS capital
+    FROM "InvestmentTransactions" WHERE "portfolioId" IN (:ids) AND category IN ('buy','sell')
+    GROUP BY "portfolioId",date::date ORDER BY "portfolioId",date::date`,
+        { ids },
+      )
+    : [];
+  const returnFunding = (id: string, date: string, row: (typeof rows)[number] | undefined) =>
+    row?.coverage.cash
+      ? row.netFunding
+      : (tradeCapital.findLast((t) => t.portfolioId === id && t.date <= date.slice(0, 10))?.capital ?? null);
   const periodCapitals: (string | null)[][] = [];
   result.accounts = scope.map((p) => {
     const m = meta.find((r) => r.id === p.id),
@@ -156,7 +208,7 @@ export async function getAccountHistory({
           result.dates.map((date) => ({
             date,
             value: map?.get(date)?.knownValue ?? null,
-            funding: map?.get(date)?.netFunding ?? null,
+            funding: returnFunding(p.id, date, map?.get(date)),
           })),
           gainFrom,
         )

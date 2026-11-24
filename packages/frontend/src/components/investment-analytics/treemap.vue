@@ -19,8 +19,8 @@ const money = (value: number | null, currency = props.analytics.currencyCode) =>
   value == null ? 'Unavailable' : new Intl.NumberFormat(undefined, { style: 'currency', currency }).format(value);
 const rows = computed(() => investmentTreemapRows(props.analytics, props.settings));
 const chartWidth = ref(0);
-const height = computed(() =>
-  Math.max(props.compact ? 300 : 380, Math.min(900, chartWidth.value * 0.8, chartHeight?.value ?? 900)),
+const height = computed(
+  () => chartHeight?.value ?? Math.max(props.compact ? 300 : 380, Math.min(900, chartWidth.value * 0.8)),
 );
 const averages = computed(() => {
   const eligible = visible.value.filter((row) => row.change !== null);
@@ -47,7 +47,32 @@ watch(
     selected.value = null;
   },
 );
-const visible = computed(() => rows.value.filter((row) => row.size > 0 && (!group.value || row.group === group.value)));
+const showSmall = ref(false);
+const visible = computed(() => {
+  const all = rows.value.filter((row) => row.size > 0 && (!group.value || row.group === group.value));
+  const total = all.reduce((sum, row) => sum + row.size, 0);
+  const small = all.filter((row) => row.size < total * 0.005);
+  if (showSmall.value) return small;
+  if (small.length < 2) return all;
+  const size = small.reduce((sum, row) => sum + row.size, 0);
+  return [
+    ...all.filter((row) => !small.includes(row)),
+    {
+      ...small[0]!,
+      id: '__other__',
+      symbol: 'Other',
+      name: small.length + ' small holdings',
+      size,
+      value: small.reduce((sum, row) => sum + (row.value ?? 0), 0),
+      change: small.every((row) => row.change !== null)
+        ? small.reduce((sum, row) => sum + row.change! * row.size, 0) / size
+        : null,
+      gain: small.every((row) => row.gain != null) ? small.reduce((sum, row) => sum + row.gain!, 0) : null,
+      description: 'Select to explore the smaller holdings.',
+      weight: total ? (size / total) * 100 : null,
+    },
+  ];
+});
 const tooltip = reactive({ visible: false, x: 0, y: 0, row: null as (typeof rows.value)[number] | null });
 const { updateTooltipPosition, isChartScrolling } = useChartTooltipPosition({
   containerRef,
@@ -136,6 +161,10 @@ function render() {
       if (event.pointerType !== 'touch') tooltip.visible = false;
     })
     .on('click', (_event, node) => {
+      if (node.data.row!.id === '__other__') {
+        showSmall.value = true;
+        return;
+      }
       if (grouped) group.value = node.data.row!.group;
       else selected.value = node.data.row!.id;
     })
@@ -234,6 +263,9 @@ watch([visible, () => props.settings], () => nextTick(render), { deep: true });
         <span v-if="averages.count < visible.length"> · {{ averages.count }}/{{ visible.length }}</span></span
       >
     </div>
+    <button v-if="showSmall" type="button" class="text-primary-text mb-2 text-xs underline" @click="showSmall = false">
+      All holdings / Small holdings ?
+    </button>
     <button v-if="group" type="button" class="text-primary-text mb-2 text-xs underline" @click="group = null">
       All holdings / {{ group }} ×
     </button>
