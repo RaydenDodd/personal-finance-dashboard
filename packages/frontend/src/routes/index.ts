@@ -1,4 +1,5 @@
 import { i18nChunkGuard } from '@/i18n/route-guard';
+import { shouldOpenDashboardAtLaunch } from '@/lib/pwa-start-route';
 import { RESET_PASSWORD_PATH } from '@/lib/reset-password-token';
 import { useUserStore } from '@/stores/user';
 import type { RouteRecordRaw } from 'vue-router';
@@ -725,6 +726,24 @@ export const router = createRouter({
   // @ts-ignore dunno why but TS is stupidly angry here for now reason, after
   // adding nested routes for settings
   routes,
+});
+
+// Honor Dashboard even for Home Screen installations that kept the old start URL.
+router.beforeEach((to, from) => {
+  const standalone =
+    window.matchMedia('(display-mode: standalone)').matches ||
+    Boolean((navigator as Navigator & { standalone?: boolean }).standalone);
+  const initialNavigation = from.matched.length === 0;
+  if (shouldOpenDashboardAtLaunch({ initialNavigation, standalone, path: to.path, query: to.query }))
+    return { name: ROUTES_NAMES.home, replace: true };
+  if (
+    initialNavigation &&
+    standalone &&
+    to.path === '/sign-in' &&
+    to.query.redirect === '/personal-finance' &&
+    !to.query.client_id
+  )
+    return { path: '/sign-in', query: { ...to.query, redirect: '/dashboard' }, replace: true };
 });
 
 // Register global i18n chunk loading guard

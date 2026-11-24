@@ -14,16 +14,19 @@ import {
   type PayrollRangePreset,
 } from './date-range';
 const model = defineModel<PayrollRange>({ required: true });
-const props = withDefaults(defineProps<{ earliest?: string; compact?: boolean; subject?: string }>(), {
-  earliest: '1900-01-01',
-  subject: 'payroll',
-});
+const props = withDefaults(
+  defineProps<{ earliest?: string; compact?: boolean; subject?: string; includeDay?: boolean }>(),
+  {
+    earliest: '1900-01-01',
+    subject: 'payroll',
+  },
+);
 const { dashboardRange } = useDashboardPeriod();
 const open = ref(false),
   customFrom = ref(''),
   customThrough = ref('');
 const presets = computed<{ id: PayrollRangePreset; name: string }[]>(() => [
-  ...(props.subject === 'investment' ? [{ id: '1d' as const, name: '1D' }] : []),
+  ...(props.subject === 'investment' || props.includeDay ? [{ id: '1d' as const, name: '1D' }] : []),
   { id: '1w', name: '1W' },
   { id: '1m', name: '1M' },
   { id: '3m', name: '3M' },

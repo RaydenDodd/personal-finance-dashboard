@@ -30,6 +30,7 @@ import { ROUTES_NAMES } from '@/routes/constants';
 import {
   ArrowDownUpIcon,
   ChartLineIcon,
+  LayoutDashboardIcon,
   CheckIcon,
   DownloadIcon,
   PlusIcon,
@@ -50,6 +51,9 @@ import { accountManagementLabel, recordedPrincipal, valuationSourceLabel } from 
 import SheetsSyncPanel from './sheets-sync-panel.vue';
 import PrincipalReviewPanel from './principal-review-panel.vue';
 import AccountSummaryCard from './account-summary-card.vue';
+import DashboardEditToolbar from '@/pages/dashboard/components/dashboard-edit-toolbar.vue';
+import DateRange from '@/pages/income-management/payroll/date-range.vue';
+import { payrollRange, payrollToday, type PayrollRange } from '@/pages/income-management/payroll/date-range';
 import DashboardPageLayout from '@/pages/dashboard/components/dashboard-page-layout.vue';
 import { pageBlock, defaultPageLayout } from '@/pages/dashboard/composables/page-blocks';
 const pageLayout = ref<InstanceType<typeof DashboardPageLayout> | null>(null);
@@ -80,11 +84,13 @@ const connectionError = ref(false);
 const busy = ref(false);
 const error = ref('');
 const notice = ref('');
-const period = ref('all');
+const dateSelection = ref<PayrollRange>(payrollRange('all'));
+const earliestRecordedDate = ref('1900-01-01');
+const customizeTarget = ref<HTMLElement | null>(null);
 const sourceView = ref<'all' | 'personal'>('all');
 const throughDate = ref('');
 const granularity = ref<'daily' | 'monthly'>('monthly');
-const chart = ref('total');
+const chart = ref('categories');
 const categoryFilter = ref('all');
 const categoryDisplay = ref<'stacked' | 'overlay'>('stacked');
 const showTotalComparison = ref(false);
@@ -119,7 +125,17 @@ watch(activePanel, async (value) => {
 });
 const nativeAccounts = ref<Array<{ id: string; name: string; currencyCode: string }>>([]);
 const today = () => format(new Date(), 'yyyy-MM-dd');
-const periodAnchor = () => (throughDate.value ? new Date(`${throughDate.value}T12:00:00`) : new Date());
+const chartRange = computed<PayrollRange>({
+  get: () => ({
+    ...dateSelection.value,
+    from: dateSelection.value.preset === 'all' ? earliestRecordedDate.value : dateSelection.value.from,
+    through: throughDate.value || payrollToday(),
+  }),
+  set: (value) => {
+    dateSelection.value = value;
+    throughDate.value = value.through === payrollToday() ? '' : value.through;
+  },
+});
 const newFlowKey = () => `manual:${Date.now().toString(36)}:${Math.random().toString(36).slice(2)}`;
 const accountForm = reactive({
   id: '',
@@ -305,10 +321,9 @@ const chartModel = computed(
         const prior = buckets.get(key);
         if (!prior || s.date > prior.date) buckets.set(key, s);
       });
-      const from =
-        period.value === 'all' ? null : format(subMonths(periodAnchor(), Number(period.value)), 'yyyy-MM-dd');
+      const from = dateSelection.value.preset === 'all' ? null : chartRange.value.from;
       const accountRows: ChartRow[] = [...buckets.values()]
-        .filter((s) => !from || s.date >= from)
+        .filter((s) => (!from || s.date >= from) && s.date <= chartRange.value.through)
         .sort((a, b) => a.date.localeCompare(b.date))
         .map((p) => {
           const principal = recordedPrincipal(selectedAccount.value, flows, p.date);
@@ -467,12 +482,13 @@ async function reload() {
       mode: sourceView.value,
       granularity: granularity.value,
       ...(throughDate.value ? { to: throughDate.value } : {}),
-      ...(period.value === 'all'
-        ? {}
-        : { from: format(subMonths(periodAnchor(), Number(period.value)), 'yyyy-MM-dd') }),
+      ...(dateSelection.value.preset === 'all' ? {} : { from: chartRange.value.from }),
     });
     if (id !== requestId) return;
     data.value = result;
+    const firstDate = result.history[0]?.date;
+    if (firstDate && (earliestRecordedDate.value === '1900-01-01' || firstDate < earliestRecordedDate.value))
+      earliestRecordedDate.value = firstDate;
     connectionError.value = false;
     categoryDraft.value = result.categories.map((c) => ({ ...c }));
     if (!selectedAccount.value || !result.accounts.some((a) => a.id === selectedAccount.value))
@@ -712,7 +728,7 @@ function downloadTemplate() {
   link.click();
   URL.revokeObjectURL(url);
 }
-watch([period, granularity, sourceView, throughDate], reload);
+watch([dateSelection, granularity, sourceView, throughDate], reload);
 watch(importMapping, () => {
   preview.value = null;
   previewPayload.value = null;
@@ -746,26 +762,60 @@ const inputClass =
 
 <template>
   <PageWrapper class="space-y-6">
-    <div class="flex flex-wrap items-start justify-between gap-4">
+    <div
+      class="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"
+      data-testid="personal-finance-header"
+    >
       <div>
         <h1 class="text-2xl font-semibold tracking-tight">Personal net worth</h1>
-        <p class="text-muted-foreground mt-1 text-sm">
+        <p class="text-muted-foreground sr-only mt-1 text-sm sm:not-sr-only">
           Your recorded account history, contributed principal and manual backup. Bank updates stay optional.
         </p>
       </div>
-      <div class="flex flex-wrap gap-2">
-        <Button as-child variant="outline" size="sm"
-          ><RouterLink :to="{ name: ROUTES_NAMES.dashboard }">Bank dashboard</RouterLink></Button
+      <div class="flex shrink-0 flex-wrap items-center gap-1 sm:gap-2" data-chart-controls>
+        <Button
+          as-child
+          variant="outline"
+          size="sm"
+          class="max-sm:size-8 max-sm:p-0"
+          aria-label="Bank dashboard"
+          title="Bank dashboard"
+          ><RouterLink :to="{ name: ROUTES_NAMES.home }"
+            ><LayoutDashboardIcon class="size-4 sm:hidden" /><span class="hidden sm:inline"
+              >Bank dashboard</span
+            ></RouterLink
+          ></Button
         >
-        <Button variant="outline" size="sm" :disabled="loading || busy" @click="reload"
-          ><RefreshCwIcon class="size-4" />Refresh</Button
+        <Button
+          variant="outline"
+          size="sm"
+          class="max-sm:size-8 max-sm:p-0"
+          aria-label="Refresh"
+          title="Refresh"
+          :disabled="loading || busy"
+          @click="reload"
+          ><RefreshCwIcon class="size-4" /><span class="hidden sm:inline">Refresh</span></Button
         >
-        <Button variant="outline" size="sm" :disabled="loading || busy || !data" @click="openPanel('import')"
-          ><UploadIcon class="size-4" />Import history</Button
+        <Button
+          variant="outline"
+          size="sm"
+          class="max-sm:size-8 max-sm:p-0"
+          aria-label="Import history"
+          title="Import history"
+          :disabled="loading || busy || !data"
+          @click="openPanel('import')"
+          ><UploadIcon class="size-4" /><span class="hidden sm:inline">Import history</span></Button
         >
-        <Button size="sm" :disabled="loading || busy || !data" @click="openPanel('snapshot')"
-          ><PlusIcon class="size-4" />Record balance</Button
+        <Button
+          size="sm"
+          class="max-sm:size-8 max-sm:p-0"
+          aria-label="Record balance"
+          title="Record balance"
+          :disabled="loading || busy || !data"
+          @click="openPanel('snapshot')"
+          ><PlusIcon class="size-4" /><span class="hidden sm:inline">Record balance</span></Button
         >
+        <span ref="customizeTarget" class="inline-flex" />
       </div>
     </div>
     <Callout
@@ -793,6 +843,16 @@ const inputClass =
         :default-layout="defaultLayout"
         :columns="4"
       >
+        <template #toolbar="{ grid }"
+          ><Teleport v-if="customizeTarget" :to="customizeTarget"
+            ><DashboardEditToolbar
+              compact-on-mobile
+              :is-edit-mode="grid?.isEditMode ?? false"
+              :is-saving="grid?.isSaving"
+              @enter="grid?.enterEditMode()"
+              @save="grid?.saveLayout()"
+              @cancel="grid?.cancelEdit()" /></Teleport
+        ></template>
         <template #summary>
           <Card
             as="button"
@@ -864,7 +924,7 @@ const inputClass =
           </Card>
         </template>
         <template #history>
-          <Card class="@container min-w-0 p-4 sm:p-5">
+          <Card class="@container flex min-w-0 flex-col p-4 sm:p-5">
             <div class="mb-4 space-y-4" data-testid="finance-chart-controls">
               <div class="flex items-center justify-between gap-3">
                 <h2 class="flex items-center gap-2 text-base font-semibold">
@@ -916,47 +976,22 @@ const inputClass =
                   </PopoverContent>
                 </Popover>
               </div>
-              <div class="flex flex-col gap-3 @lg:flex-row @lg:flex-wrap @lg:items-center">
+              <div class="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 @lg:flex @lg:flex-wrap">
                 <label class="sr-only" for="finance-chart">Chart</label>
                 <select id="finance-chart" v-model="chart" :class="[inputClass, '@lg:max-w-72']">
                   <option v-for="option in chartOptions" :key="option[0]" :value="option[0]">{{ option[1] }}</option>
                 </select>
+                <DateRange v-model="chartRange" :earliest="earliestRecordedDate" subject="balance" include-day />
                 <select
                   v-if="accountIsRequired"
                   v-model="selectedAccount"
-                  :class="[inputClass, '@lg:max-w-64']"
+                  :class="[inputClass, 'col-span-2 @lg:max-w-64']"
                   aria-label="Chart account"
                 >
                   <option v-for="account in filteredAccounts" :key="account.id" :value="account.id">
                     {{ account.name }}
                   </option>
                 </select>
-                <div
-                  class="bg-muted grid w-full grid-cols-6 rounded-lg p-1 @2xl:ml-auto @2xl:w-auto"
-                  role="group"
-                  aria-label="Chart date range"
-                >
-                  <button
-                    v-for="option in [
-                      ['1', '1M'],
-                      ['3', '3M'],
-                      ['6', '6M'],
-                      ['12', '1Y'],
-                      ['60', '5Y'],
-                      ['all', 'All'],
-                    ]"
-                    :key="option[0]"
-                    type="button"
-                    :class="[
-                      'min-h-11 min-w-0 rounded-md px-2 text-xs sm:min-h-9 sm:min-w-10',
-                      period === option[0] ? 'bg-background font-medium shadow-sm' : 'text-muted-foreground',
-                    ]"
-                    :aria-pressed="period === option[0]"
-                    @click="period = option[0]!"
-                  >
-                    {{ option[1] }}
-                  </button>
-                </div>
               </div>
             </div>
             <div :class="{ 'opacity-50': loading }">
@@ -970,34 +1005,41 @@ const inputClass =
                 :mode="chartModel.mode"
                 :percentage="chartModel.percentage"
                 :currency="chartCurrency"
+                responsive-height
                 @select="selectChartPoint"
               />
             </div>
-            <details class="text-muted-foreground mt-3 text-xs">
-              <summary class="cursor-pointer py-2">How to read this chart</summary>
-              <p class="mt-2 leading-relaxed">
-                {{
-                  chart === 'principal' || chart === 'gains'
-                    ? 'Gain = current value − net contributed principal. This is a contribution-based gain, not annualized performance. No gain is shown without a known opening basis.'
-                    : chart === 'allocation'
-                      ? 'Allocation shows positive included asset balances. Liabilities remain included in total net worth.'
-                      : 'Every recorded date is shown, including partial subtotals (open dots and dashed lines). Missing accounts stay missing. Lines join recorded observations; no balances are inferred between them. Drag horizontally to inspect values, scroll vertically, or tap a date for details.'
-                }}
-              </p>
-            </details>
           </Card>
         </template>
         <template #accounts
           ><section class="@container min-w-0 space-y-4">
-            <div class="flex flex-wrap items-center justify-between gap-3">
-              <h2 class="text-lg font-semibold">Accounts & contribution basis</h2>
-              <div class="flex flex-wrap gap-2">
-                <Button variant="ghost" size="sm" @click="openPanel('categories')"
-                  ><Settings2Icon class="size-4" />Categories</Button
-                ><Button variant="outline" size="sm" @click="recordCashFlow()"
-                  ><ArrowDownUpIcon class="size-4" />Record cash flow</Button
-                ><Button variant="outline" size="sm" @click="editAccount()"
-                  ><PlusIcon class="size-4" />Add account</Button
+            <div class="flex items-center justify-between gap-2">
+              <h2 class="min-w-0 text-base font-semibold sm:text-lg">Accounts & contribution basis</h2>
+              <div class="flex shrink-0 gap-1 sm:gap-2" data-chart-controls>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  aria-label="Categories"
+                  title="Categories"
+                  class="max-sm:size-8 max-sm:p-0"
+                  @click="openPanel('categories')"
+                  ><Settings2Icon class="size-4" /><span class="hidden sm:inline">Categories</span></Button
+                ><Button
+                  variant="outline"
+                  size="sm"
+                  aria-label="Record cash flow"
+                  title="Record cash flow"
+                  class="max-sm:size-8 max-sm:p-0"
+                  @click="recordCashFlow()"
+                  ><ArrowDownUpIcon class="size-4" /><span class="hidden sm:inline">Record cash flow</span></Button
+                ><Button
+                  variant="outline"
+                  size="sm"
+                  aria-label="Add account"
+                  title="Add account"
+                  class="max-sm:size-8 max-sm:p-0"
+                  @click="editAccount()"
+                  ><PlusIcon class="size-4" /><span class="hidden sm:inline">Add account</span></Button
                 >
               </div>
             </div>
@@ -1010,13 +1052,7 @@ const inputClass =
               </p>
               <Button class="mt-5" @click="editAccount()">Add your first account</Button></Card
             >
-            <ScrollArea
-              v-else
-              class="max-h-96 @3xl:hidden"
-              viewport-class="max-h-96 md:overscroll-contain-if-scrollable"
-              aria-label="Account balances"
-              data-testid="finance-mobile-accounts"
-            >
+            <div v-else class="@3xl:hidden" aria-label="Account balances" data-testid="finance-mobile-accounts">
               <div class="grid gap-3">
                 <AccountSummaryCard
                   v-for="account in filteredAccounts"
@@ -1032,16 +1068,12 @@ const inputClass =
                   No accounts in this category.
                 </p>
               </div>
-            </ScrollArea>
+            </div>
             <Card
               v-if="data.accounts.length"
               class="hidden overflow-hidden @3xl:block"
               data-testid="finance-desktop-accounts"
-              ><ScrollArea
-                class="max-h-96"
-                viewport-class="max-h-96 md:overscroll-contain-if-scrollable"
-                with-horizontal-scrollbar
-              >
+              ><div class="overflow-x-auto">
                 <table class="w-full text-left text-sm">
                   <thead class="bg-muted/50 text-muted-foreground text-xs">
                     <tr>
@@ -1192,7 +1224,7 @@ const inputClass =
                     </tr>
                   </tbody>
                 </table>
-              </ScrollArea></Card
+              </div></Card
             >
           </section></template
         >

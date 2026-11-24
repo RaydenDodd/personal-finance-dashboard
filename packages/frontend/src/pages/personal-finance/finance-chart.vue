@@ -29,6 +29,7 @@ const props = withDefaults(
     currency?: string;
     donutLabel?: string;
     donutDetails?: boolean;
+    responsiveHeight?: boolean;
   }>(),
   { mode: 'line', percentage: false, currency: 'USD' },
 );
@@ -37,7 +38,9 @@ const container = ref<HTMLDivElement | null>(null);
 const svg = ref<SVGSVGElement | null>(null);
 const tooltipElement = ref<HTMLDivElement | null>(null);
 const width = ref(700);
-const plotHeight = computed(() => (width.value < 420 ? 220 : 300));
+const plotHeight = computed(() =>
+  props.responsiveHeight ? Math.max(240, Math.min(520, width.value * 0.48)) : width.value < 420 ? 220 : 300,
+);
 const gradientNamespace = useId().replace(/:/g, '');
 const hiddenSeries = ref<string[]>([]);
 const selectedPie = ref<string | null>(null);
