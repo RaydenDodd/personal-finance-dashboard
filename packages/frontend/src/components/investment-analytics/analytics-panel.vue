@@ -1106,6 +1106,28 @@ const health = computed(() =>
           <option value="yearly">Yearly</option>
         </select></label
       >
+      <div v-if="kind === 'contributions'" class="grid grid-cols-3 gap-2 border-b pb-3 text-xs">
+        <div>
+          <span class="text-muted-foreground">Contributed</span
+          ><strong class="text-app-income-color mt-1 block text-lg">{{
+            money(allHistory.reduce((sum, row) => sum + Number(row.contributions ?? 0), 0))
+          }}</strong>
+        </div>
+        <div>
+          <span class="text-muted-foreground">Withdrawn</span
+          ><strong class="text-app-expense-color mt-1 block text-lg">{{
+            money(allHistory.reduce((sum, row) => sum + Number(row.withdrawals ?? 0), 0))
+          }}</strong>
+        </div>
+        <div>
+          <span class="text-muted-foreground">Net invested</span
+          ><strong class="mt-1 block text-lg text-yellow-500">{{
+            money(
+              allHistory.reduce((sum, row) => sum + Number(row.contributions ?? 0) - Number(row.withdrawals ?? 0), 0),
+            )
+          }}</strong>
+        </div>
+      </div>
       <SeriesChart
         :points="plottedPoints"
         :series="chartSeries"
