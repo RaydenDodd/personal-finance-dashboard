@@ -1365,7 +1365,23 @@ async function getAnalyticsImpl({
   return compact ? compactAnalytics(result) : result;
 }
 
-const deduplicatedAnalytics = withDeduplication(getAnalyticsImpl, {
+// A dashboard may request several different ranges simultaneously. Serialize the
+// heavy native replay so those requests cannot multiply the Pi's peak memory.
+let analyticsTail: Promise<void> = Promise.resolve();
+const boundedAnalytics = async (args: Parameters<typeof getAnalyticsImpl>[0]) => {
+  const previous = analyticsTail;
+  let release!: () => void;
+  analyticsTail = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await previous;
+  try {
+    return await getAnalyticsImpl(args);
+  } finally {
+    release();
+  }
+};
+const deduplicatedAnalytics = withDeduplication(boundedAnalytics, {
   keyGenerator: ({
     userId,
     portfolioIds,
