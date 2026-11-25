@@ -63,17 +63,16 @@ defineEmits<{ edit: [] }>();
       >
     </div>
     <ModuleBody
-      class="divide-border/60 border-border/60 mt-3 grid grid-cols-2 gap-x-3 divide-y border-t @4xl:grid-cols-4"
+      class="border-border/60 mt-3 grid grid-cols-1 gap-x-3 gap-y-1 border-t @xs:grid-cols-2 @4xl:grid-cols-5"
     >
-      <div v-for="item in allocation?.groups" :key="item.id" class="min-w-0 py-3 pr-2 @4xl:px-4 @4xl:first:pl-0">
+      <div v-for="item in allocation?.groups" :key="item.id" class="min-w-0 py-3">
         <p class="text-muted-foreground flex items-center gap-2 text-xs font-semibold tracking-wide uppercase">
-          <span class="size-2 rounded-sm" :style="{ background: item.color }" />{{ item.name }}
+          <span class="size-2 shrink-0 rounded-sm" :style="{ background: item.color }" />{{ item.name }}
         </p>
         <p
-          class="mt-2 flex flex-wrap items-baseline gap-x-2 text-[clamp(.875rem,5cqi,1.25rem)] font-semibold tabular-nums"
+          class="mt-2 flex min-w-0 flex-nowrap items-baseline gap-x-1.5 whitespace-nowrap text-[clamp(.875rem,3.5cqi,1.125rem)] font-semibold tabular-nums @4xl:text-[clamp(.875rem,1.65cqi,1.125rem)]"
         >
-          {{ money(item.amount)
-          }}<span v-if="allocation?.flow.income" class="text-muted-foreground text-xs font-medium"
+          <span>{{ money(item.amount) }}</span><span v-if="allocation?.flow.income" class="text-muted-foreground shrink-0 text-[.6875rem] font-medium @5xl:text-xs"
             >{{ ((item.amount / allocation.flow.income) * 100).toFixed(1) }}%</span
           >
         </p>
