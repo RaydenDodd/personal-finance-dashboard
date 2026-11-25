@@ -37,10 +37,7 @@ import {
 import { getHoldingValues } from '@services/investments/holdings/get-holding-values.service';
 import { getPortfolioSummary } from '@services/investments/portfolios/get-portfolio-summary.service';
 import { usesUsEquitySession } from '@services/investments/securities-price/regular-session';
-import {
-  createShareUnitFactor,
-  type SecurityPriceRow,
-} from '@services/stats/get-combined-balance-history/security-price-lookup';
+import type { SecurityPriceRow } from '@services/stats/get-combined-balance-history/security-price-lookup';
 import type { TransactionRow } from '@services/stats/get-combined-balance-history/types';
 import Big from 'big.js';
 import { logger } from '@js/utils/logger';
@@ -52,8 +49,9 @@ import { reconcileAccountGains } from './account-gains';
 import { compactAnalytics } from './compact-response';
 import { dailyPositionChange } from './daily-performance';
 import { getFundSnapshots, latestFundSnapshots } from './fund-snapshots';
-import { buildHistory } from './history';
-import { createPriceDateResolver, InvestmentPriceWindowCache } from './price-window-cache';
+import { buildHistory, HistoryPriceIndexCache } from './history';
+import { createPriceDateResolver, InvestmentSecurityPriceCache } from './price-window-cache';
+import { sqlRows } from './daily-account-cache';
 import {
   allocation,
   fundOverlap,
@@ -75,7 +73,8 @@ const decimal = (m: Money | string | number): string => (Money.isMoney(m) ? m.to
 const dateString = (d: Date | string | null | undefined) => (d ? new Date(d).toISOString() : null);
 type AnalyticsPrice = SecurityPriceRow & Pick<SecurityPricing, 'previousClose'>;
 // One bounded dataset in the worker; no user financial data is retained here.
-const priceWindow = new InvestmentPriceWindowCache<AnalyticsPrice>();
+const priceWindow = new InvestmentSecurityPriceCache<AnalyticsPrice>();
+const preparedPrices = new HistoryPriceIndexCache();
 
 export const assertOwnedSelection = (requested: string[] | undefined, owned: string[]): string[] => {
   if (!requested?.length) return owned;
@@ -178,9 +177,9 @@ async function getAnalyticsImpl({
   });
   const priceIds = [...new Set([...securityIds, ...benchmarksSecurities.map((item) => item.id)])].sort();
   const priceNow = Date.now();
-  const loadPriceRows = async (from: number, through: number): Promise<AnalyticsPrice[]> => (await SecurityPricing.findAll({
+  const loadPriceRows = async (requestedIds: string[], from: number, through: number): Promise<AnalyticsPrice[]> => requestedIds.length ? (await SecurityPricing.findAll({
     where: {
-      securityId: { [Op.in]: priceIds },
+      securityId: { [Op.in]: requestedIds },
       date: { [Op.lte]: new Date(through) },
       // Account analytics replay daily values. Keep daily bars and recent real
       // quotes; individual security charts still load the complete native history.
@@ -193,20 +192,41 @@ async function getAnalyticsImpl({
     order: [['date', 'ASC']],
     attributes: ['securityId', 'date', 'priceClose', 'unadjustedClose', 'source', 'priceAsOf', 'previousClose'],
     raw: true,
-  })) as unknown as AnalyticsPrice[];
-  const priceCacheKey = priceRevision && process.env.INVESTMENT_WORKER_ROLE === 'true'
-    ? JSON.stringify([priceRevision, priceIds]) : undefined;
-  const { rows: loadedPrices, hit: priceCacheHit } = await priceWindow.read(priceCacheKey, priceNow, loadPriceRows);
+  })) as unknown as AnalyticsPrice[] : [];
+  const canReusePrices = priceRevision && process.env.INVESTMENT_WORKER_ROLE === 'true' && priceIds.length > 0;
+  let revisions = new Map<string, string>();
+  if (canReusePrices) {
+    const changed = await sqlRows<{ securityId: string; revision: string }>(
+      'SELECT "securityId",revision::text AS revision FROM "InvestmentSecurityPriceRevisions" WHERE "securityId" IN (:ids)',
+      { ids: ['*', ...priceIds] },
+    );
+    const byId = new Map(changed.map((row) => [row.securityId, row.revision]));
+    // Missing security entries represent unchanged pre-migration rows.
+    revisions = new Map(priceIds.map((id) => [String(id), (byId.get('*') ?? '0') + ':' + (byId.get(id) ?? '0')]));
+  }
+  const { rows: loadedPrices, hit: priceCacheHit, loadedSecurities, reusedSecurities } = canReusePrices
+    ? await priceWindow.read(revisions, priceNow, loadPriceRows)
+    : { rows: await loadPriceRows(priceIds, priceNow - 7 * 86400000, priceNow), hit: false, loadedSecurities: priceIds.length, reusedSecurities: 0 };
   const usSessionIds = new Set(
     [...securities, ...benchmarksSecurities].filter(usesUsEquitySession).map((s) => String(s.id)),
   );
+  const observationEligibility = new Map<number, boolean>();
+  const allowedObservation = (instant: Date | string) => {
+    const timestamp = +new Date(instant);
+    let allowed = observationEligibility.get(timestamp);
+    if (allowed === undefined) {
+      allowed = usEquityObservationAllowed(instant);
+      observationEligibility.set(timestamp, allowed);
+    }
+    return allowed;
+  };
   const prices = loadedPrices.filter(
     (p) =>
       p.source !== 'yahoo' ||
       !p.priceAsOf ||
       !!p.previousClose ||
       !usSessionIds.has(p.securityId) ||
-      usEquityObservationAllowed(p.priceAsOf),
+      allowedObservation(p.priceAsOf),
   );
   const pricesBySecurity = new Map<string, (typeof prices)[number][]>(Map.groupBy(prices, (p) => p.securityId));
   const baseHoldings = reuseBase ? new Map(rangeBase!.holdings.map((h) => [h.id, h])) : undefined;
@@ -750,7 +770,10 @@ async function getAnalyticsImpl({
   if (performanceThrough) baselineDays.add(performanceThrough);
   const positionBaselines = new Map<string, string>();
   const positionQuantities = new Map<string, string | null>();
-  const shareUnitFactor = createShareUnitFactor(prices, priceDate);
+  const { index: preparedPriceIndex, reused: reusedPriceIndexes } = preparedPrices.prepare(pricesBySecurity, priceDate, Boolean(canReusePrices));
+  const reusePriceIndex = reusedPriceIndexes === pricesBySecurity.size && pricesBySecurity.size > 0;
+  const shareUnitFactor = preparedPriceIndex.shareUnitFactor;
+  phase('priceIndexMs');
   const nativeRows = transactions.map((t) => ({
     portfolioId: t.portfolioId,
     securityId: t.securityId,
@@ -779,7 +802,7 @@ async function getAnalyticsImpl({
   ].sort((a, b) => +a.date - +b.date);
   phase('positionEvidenceMs');
   const history = buildHistory({
-    sharedUnitFactor: shareUnitFactor,
+    preparedPriceIndex,
     priceDate,
     positionDates: reuseBase ? [...baselineDays] : undefined,
     onHoldingQuantity: (row) => {
@@ -932,6 +955,10 @@ async function getAnalyticsImpl({
         transactions: transactions.length,
         priceRows: prices.length,
         priceCacheHit,
+        loadedSecurities,
+        reusedSecurities,
+        priceIndexHit: reusePriceIndex,
+        reusedPriceIndexes,
         valuationDays: baselineDays.size,
         customRange: true,
         reusedBase: true,
@@ -1456,6 +1483,10 @@ async function getAnalyticsImpl({
       transactions: transactions.length,
       priceRows: prices.length,
       priceCacheHit,
+      loadedSecurities,
+      reusedSecurities,
+      priceIndexHit: reusePriceIndex,
+      reusedPriceIndexes,
       historyDays: history.length,
       customRange: Boolean(performanceFrom && performanceThrough),
     });

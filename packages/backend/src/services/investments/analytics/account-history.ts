@@ -12,6 +12,58 @@ import { sqlRows, ACCOUNT_HISTORY_VERSION } from './daily-account-cache';
 import { intradayAccountHistory } from './intraday-account-history';
 
 const decimal = (v: string | null) => (v === null ? null : new Big(v).toString());
+const historyFlights = new Map<string, Promise<InvestmentAccountHistoryResponse>>();
+const historyCache = new Map<string, { value: InvestmentAccountHistoryResponse; expires: number; bytes: number }>();
+const HISTORY_CACHE_BYTES = 4 * 1024 * 1024;
+let historyCacheBytes = 0;
+function removeHistoryCache(key: string) {
+  const old = historyCache.get(key);
+  if (old) { historyCacheBytes -= old.bytes; historyCache.delete(key); }
+}
+async function readDailyRows(params: { ids: string[]; currency: string; from: string; through: string }) {
+  const rows = await sqlRows<{
+          portfolioId: string;
+          date: string;
+          value: string | null;
+          knownValue: string | null;
+          netFunding: string | null;
+          coverage: {
+            priced?: number;
+            missing?: number;
+            unknown?: number;
+            cash?: boolean;
+          };
+        }>(
+          `
+      SELECT "portfolioId",date,value,"knownValue","netFunding",coverage FROM "InvestmentDailyAccountValues" WHERE "portfolioId" IN (:ids) AND "currencyCode"=:currency AND date BETWEEN CAST(:from AS date) AND CAST(:through AS date) ORDER BY date`,
+          params,
+        );
+  const totals = await sqlRows<{
+          date: string;
+          total: string | null;
+          known: string;
+          full: string;
+          funding?: string | null;
+          priced: string;
+          missing: string;
+          unknown: string;
+        }>(
+          `
+      SELECT date,SUM("knownValue") AS total,COUNT("knownValue") AS known,COUNT(value) AS full,SUM(COALESCE((coverage->>'priced')::int,0)) AS priced,SUM(COALESCE((coverage->>'missing')::int,0)) AS missing,SUM(COALESCE((coverage->>'unknown')::int,0)) AS unknown,SUM("netFunding") AS funding FROM "InvestmentDailyAccountValues"
+      WHERE "portfolioId" IN (:ids) AND "currencyCode"=:currency AND date BETWEEN CAST(:from AS date) AND CAST(:through AS date) GROUP BY date ORDER BY date`,
+          params,
+        );
+  return { rows, totals };
+}
+const dailyRowFlights = new Map<string, ReturnType<typeof readDailyRows>>();
+async function sharedDailyRows(key: string, params: Parameters<typeof readDailyRows>[0]) {
+  const existing = dailyRowFlights.get(key);
+  if (existing) return existing;
+  const work = readDailyRows(params);
+  dailyRowFlights.set(key, work);
+  try { return await work; } finally { if (dailyRowFlights.get(key) === work) dailyRowFlights.delete(key); }
+}
+
 export async function getAccountHistory({
   userId,
   portfolioIds,
@@ -88,219 +140,218 @@ export async function getAccountHistory({
     from: from ?? '0001-01-01',
     through: through && through < today ? through : today,
   };
-  let rows = coverageOnly
-    ? []
-    : await sqlRows<{
-        portfolioId: string;
-        date: string;
-        value: string | null;
-        knownValue: string | null;
-        netFunding: string | null;
-        coverage: {
-          priced?: number;
-          missing?: number;
-          unknown?: number;
-          cash?: boolean;
-        };
-      }>(
-        `
-    SELECT "portfolioId",date,value,"knownValue","netFunding",coverage FROM "InvestmentDailyAccountValues" WHERE "portfolioId" IN (:ids) AND "currencyCode"=:currency AND date BETWEEN CAST(:from AS date) AND CAST(:through AS date) ORDER BY date`,
-        params,
-      );
-  let totals = coverageOnly
-    ? []
-    : await sqlRows<{
-        date: string;
-        total: string | null;
-        known: string;
-        full: string;
-        funding?: string | null;
-        priced: string;
-        missing: string;
-        unknown: string;
-      }>(
-        `
-    SELECT date,SUM("knownValue") AS total,COUNT("knownValue") AS known,COUNT(value) AS full,SUM(COALESCE((coverage->>'priced')::int,0)) AS priced,SUM(COALESCE((coverage->>'missing')::int,0)) AS missing,SUM(COALESCE((coverage->>'unknown')::int,0)) AS unknown${includeCapital ? ',SUM("netFunding") AS funding' : ''} FROM "InvestmentDailyAccountValues"
-    WHERE "portfolioId" IN (:ids) AND "currencyCode"=:currency AND date BETWEEN CAST(:from AS date) AND CAST(:through AS date) GROUP BY date ORDER BY date`,
-        params,
-      );
-  const shortFrom = gainFrom ?? from;
-  if (!coverageOnly && shortFrom && Date.parse(today) - Date.parse(shortFrom) <= 7 * 86400000) {
-    const samples = await intradayAccountHistory(ids, currencyCode, shortFrom, params.through);
-    if (samples.length) {
-      const baseline = rows.filter((r) => r.date < shortFrom);
-      const dailyByAccountDate = new Map(rows.map((r) => [r.portfolioId + ':' + r.date, r]));
-      const sampleRows = samples.flatMap((point) =>
-        ids.map((id) => {
-          const daily = dailyByAccountDate.get(id + ':' + point.date.slice(0, 10));
-          return {
-            portfolioId: id,
+  const [source] = await sqlRows<{ revision: string }>(`SELECT COALESCE(string_agg(source || ':' || revision::text, ',' ORDER BY source), '') AS revision FROM "InvestmentAnalyticsSourceRevisions"`);
+  const key = JSON.stringify([userId, currencyCode, today, params.from, params.through, gainFrom, includeCapital, includeEvents, audit, coverageOnly,
+    scope.map((p) => [p.id, p.name, p.portfolioType, p.isEnabled]), meta.toSorted((x, y) => x.id.localeCompare(y.id)), source?.revision]);
+  const now = Date.now();
+  for (const [cachedKey, entry] of historyCache) if (entry.expires <= now) removeHistoryCache(cachedKey);
+  const cached = historyCache.get(key);
+  if (cached) return cached.value;
+  const existing = historyFlights.get(key);
+  if (existing) return existing;
+  const work = (async () => {
+    const rawKey = JSON.stringify([userId, params, meta.toSorted((x, y) => x.id.localeCompare(y.id)), source?.revision]);
+    let { rows, totals } = coverageOnly ? { rows: [], totals: [] } : await sharedDailyRows(rawKey, params);
+    const shortFrom = gainFrom ?? from;
+    if (!coverageOnly && shortFrom && Date.parse(today) - Date.parse(shortFrom) <= 7 * 86400000) {
+      const samples = await intradayAccountHistory(ids, currencyCode, shortFrom, params.through, source?.revision);
+      if (samples.length) {
+        const baseline = rows.filter((r) => r.date < shortFrom);
+        const dailyByAccountDate = new Map(rows.map((r) => [r.portfolioId + ':' + r.date, r]));
+        const sampleRows = samples.flatMap((point) =>
+          ids.map((id) => {
+            const daily = dailyByAccountDate.get(id + ':' + point.date.slice(0, 10));
+            return {
+              portfolioId: id,
+              date: point.date,
+              value: point.portfolios[id] ?? null,
+              knownValue: point.knownPortfolios?.[id] ?? null,
+              netFunding: daily?.netFunding ?? null,
+              coverage: daily?.coverage ?? {},
+            };
+          }),
+        );
+        rows = [...baseline, ...sampleRows];
+        totals = [
+          ...totals.filter((r) => r.date < shortFrom),
+          ...samples.map((point) => ({
             date: point.date,
-            value: point.portfolios[id] ?? null,
-            knownValue: point.knownPortfolios?.[id] ?? null,
-            netFunding: daily?.netFunding ?? null,
-            coverage: daily?.coverage ?? {},
-          };
-        }),
-      );
-      rows = [...baseline, ...sampleRows];
-      totals = [
-        ...totals.filter((r) => r.date < shortFrom),
-        ...samples.map((point) => ({
-          date: point.date,
-          total: point.knownMarketValue ?? null,
-          known: String(Object.values(point.knownPortfolios ?? {}).filter((v) => v !== null).length),
-          full: String(Object.values(point.portfolios).filter((v) => v !== null).length),
-          funding: null,
-          priced: '0',
-          missing: '0',
-          unknown: '0',
-        })),
-      ];
+            total: point.knownMarketValue ?? null,
+            known: String(Object.values(point.knownPortfolios ?? {}).filter((v) => v !== null).length),
+            full: String(Object.values(point.portfolios).filter((v) => v !== null).length),
+            funding: null,
+            priced: '0',
+            missing: '0',
+            unknown: '0',
+          })),
+        ];
+      }
     }
-  }
-  result.dates = totals.map((r) => r.date);
-  result.total = totals.map((r) => decimal(r.total));
-  result.accountsKnown = totals.map((r) => Number(r.known));
-  result.accountsFull = totals.map((r) => Number(r.full));
-  result.positionsPriced = totals.map((r) => Number(r.priced));
-  result.positionsMissing = totals.map((r) => Number(r.missing));
-  result.quantitiesUnknown = totals.map((r) => Number(r.unknown));
-  if (includeCapital) result.netFunding = totals.map((r) => decimal(r.funding ?? null));
-  const byAccount = new Map<string, Map<string, (typeof rows)[number]>>();
-  for (const r of rows) {
-    const map = byAccount.get(r.portfolioId) ?? new Map();
-    map.set(r.date, r);
-    byAccount.set(r.portfolioId, map);
-  }
-  // When historical cash is unavailable, measure the evidenced invested holdings
-  // against net trade capital. A deposit waiting in unknown cash is not a market loss.
-  const tradeCapital = includeCapital
-    ? await sqlRows<{ portfolioId: string; date: string; capital: string }>(
-        `
-    SELECT "portfolioId", date::date::text AS date,
-      SUM(SUM(CASE WHEN category='buy' THEN "refAmount" WHEN category='sell' THEN -"refAmount" ELSE 0 END))
-      OVER (PARTITION BY "portfolioId" ORDER BY date::date) AS capital
-    FROM "InvestmentTransactions" WHERE "portfolioId" IN (:ids) AND category IN ('buy','sell')
-    GROUP BY "portfolioId",date::date ORDER BY "portfolioId",date::date`,
-        { ids },
-      )
-    : [];
-  const capitalByAccount = new Map<string, typeof tradeCapital>();
-  for (const row of tradeCapital) {
-    const list = capitalByAccount.get(row.portfolioId);
-    if (list) list.push(row);
-    else capitalByAccount.set(row.portfolioId, [row]);
-  }
-  const returnFunding = (id: string, date: string, row: (typeof rows)[number] | undefined) =>
-    row?.coverage.cash
-      ? row.netFunding
-      : (capitalByAccount.get(id)?.findLast((t) => t.date <= date.slice(0, 10))?.capital ?? null);
-  const periodCapitals: (string | null)[][] = [];
-  result.accounts = scope.map((p) => {
-    const m = meta.find((r) => r.id === p.id),
-      map = byAccount.get(p.id);
-    const gainSeries = includeCapital
-      ? accountGainSeries(
-          result.dates.map((date) => ({
-            date,
-            value: map?.get(date)?.knownValue ?? null,
-            funding: map?.get(date)?.netFunding ?? null,
-          })),
-          gainFrom,
+    result.dates = totals.map((r) => r.date);
+    result.total = totals.map((r) => decimal(r.total));
+    result.accountsKnown = totals.map((r) => Number(r.known));
+    result.accountsFull = totals.map((r) => Number(r.full));
+    result.positionsPriced = totals.map((r) => Number(r.priced));
+    result.positionsMissing = totals.map((r) => Number(r.missing));
+    result.quantitiesUnknown = totals.map((r) => Number(r.unknown));
+    if (includeCapital) result.netFunding = totals.map((r) => decimal(r.funding ?? null));
+    const byAccount = new Map<string, Map<string, (typeof rows)[number]>>();
+    for (const r of rows) {
+      const map = byAccount.get(r.portfolioId) ?? new Map();
+      map.set(r.date, r);
+      byAccount.set(r.portfolioId, map);
+    }
+    // When historical cash is unavailable, measure the evidenced invested holdings
+    // against net trade capital. A deposit waiting in unknown cash is not a market loss.
+    const tradeCapital = includeCapital
+      ? await sqlRows<{ portfolioId: string; date: string; capital: string }>(
+          `
+      SELECT "portfolioId", date::date::text AS date,
+        SUM(SUM(CASE WHEN category='buy' THEN "refAmount" WHEN category='sell' THEN -"refAmount" ELSE 0 END))
+        OVER (PARTITION BY "portfolioId" ORDER BY date::date) AS capital
+      FROM "InvestmentTransactions" WHERE "portfolioId" IN (:ids) AND category IN ('buy','sell')
+      GROUP BY "portfolioId",date::date ORDER BY "portfolioId",date::date`,
+          { ids },
         )
-      : undefined;
-    const period = includeCapital
-      ? accountPeriodSeries(
-          result.dates.map((date) => ({
-            date,
-            value: map?.get(date)?.knownValue ?? null,
-            funding: returnFunding(p.id, date, map?.get(date)),
-          })),
-          gainFrom,
-        )
-      : undefined;
-    if (period) periodCapitals.push(period.periodCapital);
-    return {
-      ...(gainSeries && {
-        gains: gainSeries.gains,
-        periodGains: period!.periodGains,
-        periodReturnPercent: period!.periodReturnPercent,
-      }),
-      id: p.id,
-      name: p.name,
-      broker: m?.broker ?? 'Other',
-      accountType: /\broth\b/i.test(p.name)
-        ? 'Roth'
-        : /\b(traditional|rollover)\b/i.test(p.name)
-          ? 'Traditional retirement'
-          : p.portfolioType,
-      isEnabled: p.isEnabled,
-      firstPurchase: (m?.audit?.firstPurchase as string | null) ?? null,
-      firstDate: m?.firstDate ?? null,
-      lastDate: m?.lastDate ?? null,
-      builtAt: m?.builtAt ?? null,
-      pending: m?.pending ?? true,
-      values: result.dates.map((d) => decimal(map?.get(d)?.knownValue ?? null)),
-      full: result.dates.map((d) => map?.get(d)?.value != null),
-      coverage: result.dates.map((d) => {
-        const c = map?.get(d)?.coverage;
-        return [c?.priced ?? 0, c?.missing ?? 0, c?.unknown ?? 0, c?.cash ?? false];
-      }),
-      ...(audit && {
-        audit: m?.audit ?? { needs: ['History reconstruction is queued.'] },
-      }),
+      : [];
+    const capitalByAccount = new Map<string, typeof tradeCapital>();
+    for (const row of tradeCapital) {
+      const list = capitalByAccount.get(row.portfolioId);
+      if (list) list.push(row);
+      else capitalByAccount.set(row.portfolioId, [row]);
+    }
+    const returnFunding = (id: string, date: string, row: (typeof rows)[number] | undefined) => {
+      if (row?.coverage.cash) return row.netFunding;
+      const trades = capitalByAccount.get(id) ?? [];
+      const day = date.slice(0, 10);
+      let low = 0, high = trades.length;
+      while (low < high) {
+        const mid = (low + high) >>> 1;
+        if (trades[mid]!.date <= day) low = mid + 1;
+        else high = mid;
+      }
+      return trades[low - 1]?.capital ?? null;
     };
-  });
-  if (includeCapital) {
-    result.gains = sumGainSeries(
-      result.accounts.map((a) => a.gains ?? []),
-      result.dates.length,
-    );
-    result.periodGains = sumGainSeries(
-      result.accounts.map((a) => a.periodGains ?? []),
-      result.dates.length,
-    );
-    const capitals = sumGainSeries(periodCapitals, result.dates.length);
-    const comparableGains = sumGainSeries(
-      result.accounts.map((account, a) =>
-        (account.periodGains ?? []).map((gain, i) => (periodCapitals[a]?.[i] != null ? gain : null)),
-      ),
-      result.dates.length,
-    );
-    result.periodReturnPercent = comparableGains.map((gain, i) =>
-      gain != null && capitals[i] != null && new Big(capitals[i]!).gt(0)
-        ? new Big(gain).div(capitals[i]!).times(100).toString()
-        : null,
-    );
-    result.gainFrom = gainFrom;
-  }
-  result.pending = result.accounts.some((p) => p.pending);
-  // The dedicated worker drains the durable dirty-history queue. Polling GETs
-  // must not launch competing calculations in the HTTP process.
-  if (result.pending && process.env.INVESTMENT_WORKER_EXTERNAL !== 'true') {
-    void investmentHistoryCron.triggerManualSync({ userId }).catch(() => undefined);
-  }
-  if (includeEvents) {
-    const events = await sqlRows<{
-      id: string;
-      date: string;
-      category: string;
-      refAmount: string;
-      portfolioId: string;
-      symbol: string | null;
-    }>(
-      `SELECT t.id,t.date,t.category,t."refAmount",t."portfolioId",s.symbol FROM "InvestmentTransactions" t LEFT JOIN "Securities" s ON s.id=t."securityId" WHERE t."portfolioId" IN (:ids) AND t.date>=CAST(:from AS date) AND t.date<CAST(:through AS date)+INTERVAL '1 day' ORDER BY t.date`,
-      params,
-    );
-    result.events = events.map((e) => ({
-      id: e.id,
-      date: investmentPriceDate(e.date),
-      type: e.category,
-      label: [e.symbol, e.category].filter(Boolean).join(' '),
-      amount: decimal(e.refAmount)!,
-      portfolioId: e.portfolioId,
-    }));
-  }
-  return result;
+    const periodCapitals: (string | null)[][] = [];
+    result.accounts = scope.map((p) => {
+      const m = meta.find((r) => r.id === p.id),
+        map = byAccount.get(p.id);
+      const gainSeries = includeCapital
+        ? accountGainSeries(
+            result.dates.map((date) => ({
+              date,
+              value: map?.get(date)?.knownValue ?? null,
+              funding: map?.get(date)?.netFunding ?? null,
+            })),
+            gainFrom,
+          )
+        : undefined;
+      const period = includeCapital
+        ? accountPeriodSeries(
+            result.dates.map((date) => ({
+              date,
+              value: map?.get(date)?.knownValue ?? null,
+              funding: returnFunding(p.id, date, map?.get(date)),
+            })),
+            gainFrom,
+          )
+        : undefined;
+      if (period) periodCapitals.push(period.periodCapital);
+      return {
+        ...(gainSeries && {
+          gains: gainSeries.gains,
+          periodGains: period!.periodGains,
+          periodReturnPercent: period!.periodReturnPercent,
+        }),
+        id: p.id,
+        name: p.name,
+        broker: m?.broker ?? 'Other',
+        accountType: /\broth\b/i.test(p.name)
+          ? 'Roth'
+          : /\b(traditional|rollover)\b/i.test(p.name)
+            ? 'Traditional retirement'
+            : p.portfolioType,
+        isEnabled: p.isEnabled,
+        firstPurchase: (m?.audit?.firstPurchase as string | null) ?? null,
+        firstDate: m?.firstDate ?? null,
+        lastDate: m?.lastDate ?? null,
+        builtAt: m?.builtAt ?? null,
+        pending: m?.pending ?? true,
+        values: result.dates.map((d) => decimal(map?.get(d)?.knownValue ?? null)),
+        full: result.dates.map((d) => map?.get(d)?.value != null),
+        coverage: result.dates.map((d) => {
+          const c = map?.get(d)?.coverage;
+          return [c?.priced ?? 0, c?.missing ?? 0, c?.unknown ?? 0, c?.cash ?? false];
+        }),
+        ...(audit && {
+          audit: m?.audit ?? { needs: ['History reconstruction is queued.'] },
+        }),
+      };
+    });
+    if (includeCapital) {
+      result.gains = sumGainSeries(
+        result.accounts.map((a) => a.gains ?? []),
+        result.dates.length,
+      );
+      result.periodGains = sumGainSeries(
+        result.accounts.map((a) => a.periodGains ?? []),
+        result.dates.length,
+      );
+      const capitals = sumGainSeries(periodCapitals, result.dates.length);
+      const comparableGains = sumGainSeries(
+        result.accounts.map((account, a) =>
+          (account.periodGains ?? []).map((gain, i) => (periodCapitals[a]?.[i] != null ? gain : null)),
+        ),
+        result.dates.length,
+      );
+      result.periodReturnPercent = comparableGains.map((gain, i) =>
+        gain != null && capitals[i] != null && new Big(capitals[i]!).gt(0)
+          ? new Big(gain).div(capitals[i]!).times(100).toString()
+          : null,
+      );
+      result.gainFrom = gainFrom;
+    }
+    result.pending = result.accounts.some((p) => p.pending);
+    // The dedicated worker drains the durable dirty-history queue. Polling GETs
+    // must not launch competing calculations in the HTTP process.
+    if (result.pending && process.env.INVESTMENT_WORKER_EXTERNAL !== 'true') {
+      void investmentHistoryCron.triggerManualSync({ userId }).catch(() => undefined);
+    }
+    if (includeEvents) {
+      const events = await sqlRows<{
+        id: string;
+        date: string;
+        category: string;
+        refAmount: string;
+        portfolioId: string;
+        symbol: string | null;
+      }>(
+        `SELECT t.id,t.date,t.category,t."refAmount",t."portfolioId",s.symbol FROM "InvestmentTransactions" t LEFT JOIN "Securities" s ON s.id=t."securityId" WHERE t."portfolioId" IN (:ids) AND t.date>=CAST(:from AS date) AND t.date<CAST(:through AS date)+INTERVAL '1 day' ORDER BY t.date`,
+        params,
+      );
+      result.events = events.map((e) => ({
+        id: e.id,
+        date: investmentPriceDate(e.date),
+        type: e.category,
+        label: [e.symbol, e.category].filter(Boolean).join(' '),
+        amount: decimal(e.refAmount)!,
+        portfolioId: e.portfolioId,
+      }));
+    }
+    return result;
+  })();
+  historyFlights.set(key, work);
+  try {
+    const value = await work;
+    if (!value.pending && !audit) {
+      const bytes = Buffer.byteLength(JSON.stringify(value));
+      if (bytes <= HISTORY_CACHE_BYTES) {
+        while (historyCache.size && (historyCache.size >= 4 || historyCacheBytes + bytes > HISTORY_CACHE_BYTES))
+          removeHistoryCache(historyCache.keys().next().value!);
+        historyCache.set(key, { value, bytes, expires: Date.now() + 60000 });
+        historyCacheBytes += bytes;
+      }
+    }
+    return value;
+  } finally { if (historyFlights.get(key) === work) historyFlights.delete(key); }
 }

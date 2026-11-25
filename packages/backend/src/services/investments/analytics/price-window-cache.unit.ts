@@ -1,5 +1,5 @@
 import { investmentPriceDate } from '@bt/shared/types/investment-market';
-import { InvestmentPriceWindowCache, createPriceDateResolver } from './price-window-cache';
+import { InvestmentPriceWindowCache, InvestmentSecurityPriceCache, createPriceDateResolver } from './price-window-cache';
 
 describe('investment price window cache', () => {
   it('reuses only matching revision and selection, respects upper and lower time bounds', async () => {
@@ -27,4 +27,21 @@ describe('investment price window cache', () => {
       expect(resolve(value.toISOString(), mode)).toBe(investmentPriceDate(value, mode));
     }
   });
+});
+
+
+it('reloads only changed securities, including deleted prices and a truncate epoch', async () => {
+  const now = Date.parse('2026-11-25T20:00:00Z');
+  const rows = [{ securityId: 'a', date: new Date('2026-11-24'), priceAsOf: null }, { securityId: 'b', date: new Date('2026-11-24'), priceAsOf: null }];
+  const load = jest.fn(async (ids: string[], _from: number, _through: number) => rows.filter((row) => ids.includes(row.securityId)));
+  const cache = new InvestmentSecurityPriceCache<(typeof rows)[number]>();
+  expect((await cache.read(new Map([['a','0:0'],['b','0:0']]), now, load)).loadedSecurities).toBe(2);
+  const warm = await cache.read(new Map([['a','0:0'],['b','0:0']]), now + 1000, load);
+  expect(warm.hit).toBe(true);
+  rows.splice(0, 1);
+  const changed = await cache.read(new Map([['a','0:1'],['b','0:0']]), now + 2000, load);
+  expect(changed.rows).toEqual(rows);
+  expect(changed.loadedSecurities).toBe(1);
+  expect(load.mock.calls[1]?.[0]).toEqual(['a']);
+  expect((await cache.read(new Map([['a','1:1'],['b','1:0']]), now + 3000, load)).loadedSecurities).toBe(2);
 });

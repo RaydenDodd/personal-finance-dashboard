@@ -81,14 +81,15 @@ async function replayIntradayAccountHistory(ids: string[], currencyCode: string,
 }
 
 const cache = new Map<string, { expires: number; value: ReturnType<typeof replayIntradayAccountHistory> }>();
-export function intradayAccountHistory(ids: string[], currency: string, from: string, through: string) {
-  const key = JSON.stringify([ids.toSorted(), currency, from, through]);
+export function intradayAccountHistory(ids: string[], currency: string, from: string, through: string, revision?: string) {
+  const key = JSON.stringify([ids.toSorted(), currency, from, through, revision]);
   const old = cache.get(key);
   if (old && old.expires > Date.now()) return old.value;
   const value = replayIntradayAccountHistory(ids, currency, from, through).catch((error) => {
     cache.delete(key);
     throw error;
   });
+  while (cache.size >= 4) cache.delete(cache.keys().next().value!);
   cache.set(key, { expires: Date.now() + 60000, value });
   for (const [k, entry] of cache) if (entry.expires < Date.now()) cache.delete(k);
   return value;

@@ -29,6 +29,43 @@ import { nativeExternalFlow } from './native-transfer';
 import { positionEvidence } from './position-evidence';
 import { sourceQuantityEvidence } from './source-quantity-evidence';
 
+export function prepareHistoryPriceIndex(prices: SecurityPriceRow[], priceDate: typeof investmentPriceDate, sharedUnitFactor?: ReturnType<typeof createShareUnitFactor>) {
+  const shareUnitFactor = sharedUnitFactor ?? createShareUnitFactor(prices, priceDate);
+  const findPrice = createFindPriceForDate(buildPriceLookup(prices, priceDate, true, shareUnitFactor));
+  const observed = new Set(prices.map((p) => {
+    const canonicalDaily = new Date(p.date).toISOString().endsWith('T00:00:00.000Z');
+    return `${p.securityId}:${canonicalDaily ? priceDate(p.date) : priceDate(p.priceAsOf ?? p.date, false)}`;
+  }));
+  return { shareUnitFactor, findPrice, hasObserved: (securityId: string, date: string) => observed.has(`${securityId}:${date}`) };
+}
+
+/** Prepared indexes are independent by security: preserve all input observations,
+ * date order and split handling while rebuilding only changed row sequences. */
+export class HistoryPriceIndexCache {
+  private entries = new Map<string, { rows: SecurityPriceRow[]; index: ReturnType<typeof prepareHistoryPriceIndex> }>();
+
+  prepare(groups: ReadonlyMap<string, SecurityPriceRow[]>, dateKey: typeof investmentPriceDate, retain: boolean) {
+    const active = new Map<string, { rows: SecurityPriceRow[]; index: ReturnType<typeof prepareHistoryPriceIndex> }>();
+    let reused = 0, totalRows = 0;
+    for (const [id, rows] of groups) {
+      totalRows += rows.length;
+      const old = retain ? this.entries.get(id) : undefined;
+      const same = old && old.rows.length === rows.length && rows.every((row, i) => row === old.rows[i]);
+      if (same) { active.set(id, old); reused++; }
+      else active.set(id, { rows, index: prepareHistoryPriceIndex(rows, dateKey) });
+    }
+    this.entries = retain && totalRows <= 200000 ? active : new Map();
+    return {
+      reused,
+      index: {
+        shareUnitFactor: (id: string, day: string) => active.get(id)?.index.shareUnitFactor(id, day) ?? 1,
+        findPrice: (id: string, day: string) => active.get(id)?.index.findPrice(id, day) ?? null,
+        hasObserved: (id: string, day: string) => active.get(id)?.index.hasObserved(id, day) ?? false,
+      },
+    };
+  }
+}
+
 /** Read adapter over the native history replay; no parallel transaction or lot accounting. */
 export function buildHistory({
   ids,
@@ -49,7 +86,9 @@ export function buildHistory({
   positionDates,
   sharedUnitFactor,
   priceDate = investmentPriceDate,
+  preparedPriceIndex,
 }: {
+  preparedPriceIndex?: ReturnType<typeof prepareHistoryPriceIndex>;
   priceDate?: typeof investmentPriceDate;
   /** Optional identical price-row factor supplied by the current analytics calculation. */
   sharedUnitFactor?: ReturnType<typeof createShareUnitFactor>;
@@ -151,14 +190,7 @@ export function buildHistory({
   const byBroker = new Map(brokers.map((b) => [b.portfolioId, b]));
   const byPortfolio = new Map<string, Map<string, string | null>>();
   const knownByPortfolio = new Map<string, Map<string, string | null>>();
-  const shareUnitFactor = sharedUnitFactor ?? createShareUnitFactor(prices, priceDate);
-  const findPrice = createFindPriceForDate(buildPriceLookup(prices, priceDate, true, shareUnitFactor));
-  const observed = new Set(
-    prices.map((p) => {
-      const canonicalDaily = new Date(p.date).toISOString().endsWith('T00:00:00.000Z');
-      return `${p.securityId}:${canonicalDaily ? priceDate(p.date) : priceDate(p.priceAsOf ?? p.date, false)}`;
-    }),
-  );
+  const { shareUnitFactor, findPrice, hasObserved } = preparedPriceIndex ?? prepareHistoryPriceIndex(prices, priceDate, sharedUnitFactor);
   const securityById = new Map<string, Securities>(securities.map((s) => [s.id, s]));
   const sessionPriceDates = new Map<string, string>();
   const stockPriceDay = (date: string) => {
@@ -233,9 +265,9 @@ export function buildHistory({
         // Today's account value retains a real prior close until a regular quote arrives.
         // This is a valuation fallback, never a new price observation or a historical gap fill.
         const prior = livePriorClose;
-        const price = observed.has(`${securityId}:${expected}`)
+        const price = hasObserved(securityId, expected)
           ? findPrice(securityId, date)
-          : date === liveDay && security?.assetClass !== 'crypto' && observed.has(`${securityId}:${prior}`)
+          : date === liveDay && security?.assetClass !== 'crypto' && hasObserved(securityId, prior)
             ? findPrice(securityId, prior)
             : null;
         if (price !== null) return price;

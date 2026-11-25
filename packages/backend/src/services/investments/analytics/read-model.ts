@@ -125,7 +125,12 @@ export async function readInvestmentAnalytics({
   const key = selectionKey(selection);
   // Serialize admission per owner using the Users row. Prevent unbounded date-range variants.
   // The single SQL statement uses an owner-specific advisory transaction lock.
-  const [row] = await sqlRows<StoredRow>(`
+  const [recent] = await sqlRows<StoredRow>(`
+    SELECT "userId", "selectionKey", "builtAt", failures, "sourceRevision", NULL::jsonb AS payload
+    FROM "InvestmentAnalyticsReadModels" WHERE "userId"=:userId AND "selectionKey"=:key
+      AND "requestedAt" >= now() - interval '30 seconds'
+  `, { userId, key });
+  const row = recent ?? (await sqlRows<StoredRow>(`
     WITH gate AS MATERIALIZED (SELECT pg_advisory_xact_lock(17428819, :userId)),
     admitted AS (
       INSERT INTO "InvestmentAnalyticsReadModels" ("userId", "selectionKey", selection)
@@ -135,7 +140,7 @@ export async function readInvestmentAnalytics({
       ON CONFLICT ("userId", "selectionKey") DO UPDATE SET "requestedAt"=now()
       RETURNING "userId", "selectionKey", "builtAt", failures, "sourceRevision", NULL::jsonb AS payload
     ) SELECT * FROM admitted
-  `, { userId, key, selection: JSON.stringify(selection), maxSelections: MAX_SELECTIONS });
+  `, { userId, key, selection: JSON.stringify(selection), maxSelections: MAX_SELECTIONS }))[0];
   if (!row) throw new ValidationError({ message: 'Too many investment analytics selections. Reuse an existing range or try again after cleanup.' });
   const revision = await sourceRevision();
   const status = readStatus(row, Date.now(), revision);
@@ -178,13 +183,13 @@ export async function readInvestmentAnalytics({
 
 /** Called by the scheduler, never the request handler. One selection per run. */
 export async function refreshNextInvestmentReadModel(): Promise<boolean> {
-  await sqlRows(`
-    DELETE FROM "InvestmentAnalyticsReadModels"
-    WHERE "requestedAt" < now() - make_interval(days => :days)
-       OR NOT (selection ? 'currencyCode')
-    RETURNING "selectionKey"
-  `, { days: RETENTION_DAYS });
   if (Date.now() - lastSnapshotCleanup >= 10 * 60 * 1000) {
+    await sqlRows(`
+      DELETE FROM "InvestmentAnalyticsReadModels"
+      WHERE "requestedAt" < now() - make_interval(days => :days)
+         OR NOT (selection ? 'currencyCode')
+      RETURNING "selectionKey"
+    `, { days: RETENTION_DAYS });
     await sqlRows(`
       DELETE FROM "InvestmentAnalyticsRangeBases" b
       WHERE NOT EXISTS (SELECT 1 FROM "InvestmentAnalyticsReadModels" m
@@ -218,11 +223,12 @@ export async function refreshNextInvestmentReadModel(): Promise<boolean> {
     if (before.performanceFrom && before.performanceThrough) {
       const baseKey = selectionKey({ ...before, performanceFrom: undefined, performanceThrough: undefined });
       const [base] = await sqlRows<{ payload: InvestmentAnalytics | null; exactBuiltAt: string }>(`
-        SELECT payload, "builtAt"::text AS "exactBuiltAt" FROM "InvestmentAnalyticsReadModels"
+        SELECT payload - ARRAY['history','events','dividends','exposure','allocations','fundSnapshots','overlap','benchmarks','priceRisk','accountHistory']::text[] AS payload,
+          "builtAt"::text AS "exactBuiltAt" FROM "InvestmentAnalyticsReadModels"
         WHERE "userId"=:userId AND "selectionKey"=:baseKey AND "sourceRevision"=:revision
           AND "builtAt" IS NOT NULL AND failures=0 AND payload IS NOT NULL
       `, { userId: row.userId, baseKey, revision });
-      rangeBase = base?.payload ?? undefined;
+      rangeBase = base?.payload ? projectInvestmentAnalytics(base.payload, 'holdings') : undefined;
       if (rangeBase && base) rangeReference = { key: baseKey, builtAt: base.exactBuiltAt };
     }
     const result = await getInvestmentAnalytics({

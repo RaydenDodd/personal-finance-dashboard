@@ -23,8 +23,12 @@ export function accountGainSeries(
 /** Missing accounts contribute no invented zero gain. The UI labels this recorded subtotal as partial. */
 export function sumGainSeries(series: (string | null)[][], length: number) {
   return Array.from({ length }, (_, i) => {
-    const known = series.map((s) => s[i]).filter((v): v is string => v != null);
-    return known.length ? known.reduce((total, v) => total.plus(v), new Big(0)).toString() : null;
+    let total: Big | null = null;
+    for (const values of series) {
+      const value = values[i];
+      if (value != null) total = (total ?? new Big(0)).plus(value);
+    }
+    return total?.toString() ?? null;
   });
 }
 

@@ -50,3 +50,43 @@ export class InvestmentPriceWindowCache<T extends PriceWindowRow> {
     };
   }
 }
+
+/** Revision-keyed per-security cache. The caller supplies a revision for every
+ * requested ID, including the truncate epoch. A bounded active set prevents
+ * unbounded retention of old portfolio selections. */
+export class InvestmentSecurityPriceCache<T extends PriceWindowRow & { securityId: string }> {
+  private entries = new Map<string, { revision: string; from: number; through: number; rows: T[] }>();
+
+  async read(revisions: ReadonlyMap<string, string>, now: number, load: (ids: string[], from: number, through: number) => Promise<T[]>) {
+    const from = now - WINDOW_MS;
+    const horizon = now + 10 * 60000;
+    const missing: string[] = [];
+    for (const id of this.entries.keys()) if (!revisions.has(id)) this.entries.delete(id);
+    for (const [id, revision] of revisions) {
+      const old = this.entries.get(id);
+      if (!old || old.revision !== revision || old.from > from || old.through < now) {
+        this.entries.delete(id);
+        missing.push(id);
+      }
+    }
+    if (missing.length) {
+      const rows = await load(missing, from, horizon);
+      const groups = Map.groupBy(rows, (row) => String(row.securityId));
+      for (const id of missing) this.entries.set(id, { revision: revisions.get(id)!, from, through: horizon, rows: groups.get(id) ?? [] });
+    }
+    const rows: T[] = [];
+    let retainedRows = 0;
+    for (const entry of this.entries.values()) {
+      retainedRows += entry.rows.length;
+      for (const row of entry.rows) {
+        const timestamp = +new Date(row.date);
+        if (timestamp <= now && (!row.priceAsOf || timestamp % DAY_MS === 0 || timestamp >= from)) rows.push(row);
+      }
+    }
+    // Preserve the existing global chronological order; same-timestamp rows
+    // belong to distinct securities (unique security/date constraint).
+    rows.sort((x, y) => +new Date(x.date) - +new Date(y.date));
+    if (retainedRows > MAX_ROWS) this.entries.clear();
+    return { rows, hit: missing.length === 0, loadedSecurities: missing.length, reusedSecurities: revisions.size - missing.length };
+  }
+}

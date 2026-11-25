@@ -1,7 +1,9 @@
 import type BrokerPortfolioData from '@models/investments/broker-portfolio-data.model';
 import type SecurityPricing from '@models/investments/security-pricing.model';
 
-import { buildHistory } from './history';
+import { buildHistory, HistoryPriceIndexCache, prepareHistoryPriceIndex } from './history';
+import { investmentPriceDate } from '@bt/shared/types/investment-market';
+import type { SecurityPriceRow } from '@services/stats/get-combined-balance-history/security-price-lookup';
 
 describe('native historical valuation adapter', () => {
   it('uses a real aggregate account observation without resetting the earlier security quantity anchor', () => {
@@ -179,4 +181,22 @@ describe('sparse position-date replay', () => {
     expect(sparse).toEqual(full);
     expect(sparse).toHaveLength(4);
   });
+});
+
+
+it('reuses unchanged security indexes and matches a full rebuild after a price update', () => {
+  const a = { securityId: 'a', date: new Date('2026-11-18'), priceClose: '100', unadjustedClose: '200', source: 'yahoo' } as unknown as SecurityPriceRow;
+  const b = { securityId: 'b', date: new Date('2026-11-18'), priceClose: '50' } as unknown as SecurityPriceRow;
+  const cache = new HistoryPriceIndexCache();
+  const first = cache.prepare(new Map([['a', [a]], ['b', [b]]]), investmentPriceDate, true);
+  expect(first.reused).toBe(0);
+  const updated = { ...a, priceClose: '125' };
+  const next = cache.prepare(new Map([['a', [updated]], ['b', [b]]]), investmentPriceDate, true);
+  expect(next.reused).toBe(1);
+  const full = prepareHistoryPriceIndex([updated, b], investmentPriceDate);
+  for (const id of ['a', 'b', 'missing']) for (const day of ['2026-11-17', '2026-11-18', '2026-11-19']) {
+    expect(next.index.findPrice(id, day)).toBe(full.findPrice(id, day));
+    expect(next.index.shareUnitFactor(id, day)).toBe(full.shareUnitFactor(id, day));
+    expect(next.index.hasObserved(id, day)).toBe(full.hasObserved(id, day));
+  }
 });
