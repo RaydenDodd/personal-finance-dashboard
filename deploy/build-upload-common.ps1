@@ -67,8 +67,10 @@ function Invoke-PrebuiltUpload {
             if ($FullTests) { Invoke-Checked npm.cmd $argsForTests }
             elseif ($TestPattern) { Invoke-Checked npm.cmd ($argsForTests + @("--testPathPattern=$TestPattern")) }
             elseif ($testFiles.Count -gt 0) {
-                $pattern = ($testFiles | ForEach-Object { [regex]::Escape(($_ -split '/')[-1]) + '$' }) -join '|'
-                Invoke-Checked npm.cmd ($argsForTests + @("--testPathPattern=$pattern"))
+                # npm.cmd runs through cmd.exe on Windows. Regex alternation pipes
+                # can be interpreted as shell operators instead of Jest arguments.
+                # Exact workspace-relative paths also avoid basename collisions.
+                Invoke-Checked npm.cmd ($argsForTests + @('--runTestsByPath') + $testFiles)
             } elseif ($runTests) { Write-Host 'No changed backend unit tests; typecheck still ran.' -ForegroundColor Yellow }
             else { Write-Host 'Fast mode: unit and lint-rule tests skipped.' -ForegroundColor Yellow }
         } else {
