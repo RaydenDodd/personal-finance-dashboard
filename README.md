@@ -1,4 +1,37 @@
-> **Personal Finance Dashboard fork:** preserves MoneyMatter's original interface and features, adding custom net-worth reporting categories, dated balance history imports, and contribution tracking. See [customizations and historical import](docs/PERSONAL-FINANCE.md) and [Raspberry Pi deployment](deploy/README.md). Upstream documentation follows below. Licensed under AGPL-3.0-only.
+> **Personal Finance Dashboard — customized MoneyMatter fork.** Built on the upstream AGPL-3.0-only project, retaining its native finance ledger, accounts, authentication, interface and provider infrastructure. This fork adds personal reporting, income and tax planning, payroll history, consolidated investment analytics and Raspberry Pi operations. The upstream project README follows the fork-specific overview.
+
+## This fork: custom features
+
+The following describes capabilities implemented in the repository, not a guarantee that every provider is connected, every historical record is complete, or the latest commit is deployed.
+
+| Area | Custom additions | Detailed documentation |
+| --- | --- | --- |
+| Personal net worth | Dated manual/CSV/worksheet balance history, custom asset/liability reporting groups, linked account aggregation, historical corrections, principal and contribution provenance, source-aware charts, manual-only fallback | [Personal finance](docs/PERSONAL-FINANCE.md), [Google Sheets sync](docs/GOOGLE-SHEETS-SYNC.md) |
+| Income | Separate Actual and Projected Income, multiple employments, versioned pay statements and salary events, annualized salary, gross/net/total compensation, bonuses, employee and employer retirement contributions, deductions, actual pay charts, management/import controls | [Payroll implementation](docs/PAYROLL-IMPLEMENTATION.md) |
+| Taxes and take-home pay | Shared year-specific wage tax calculation, federal/state/local inputs and supported deductions, FICA, retirement limits, matching, income allocation, savings and spendable income, projected breakdowns and income/tax reporting; estimates stay separate from actual payroll | [Tax rules and limitations](docs/INCOME-TAX-RULES.md) |
+| ADP and payroll imports | Manual/file imports, revised statement deduplication, annual YTD evidence, owner-operated Windows ADP companion using official sign-in and MFA; not an unattended payroll API | [ADP companion](docs/PAYROLL-ADP-EXPORT.md), [Integration review](docs/PAYROLL-INTEGRATIONS.md) |
+| Investments | Consolidated portfolio views, performance, value versus invested capital, benchmark comparisons, realized/unrealized gains, cash and holdings, dividends, allocation, treemap, concentration, fund overlap, company/sector/geography exposure, contribution reconciliation | [Analytics architecture](docs/INVESTMENT-ANALYTICS-ARCHITECTURE.md), [Account gains](docs/INVESTMENT-ACCOUNT-GAINS.md) |
+| Investment history and market data | Incremental persisted daily account valuation, dirty-range rebuilds, source-aware historical prices, scheduled quote updates, dated fund constituent disclosures and coverage reporting | [History](docs/INVESTMENT-HISTORY-ARCHITECTURE.md), [Market data](docs/INVESTMENT-MARKET-DATA.md), [Fund composition](docs/INVESTMENT-COMPOSITION-COMPLETION.md) |
+| Brokerage records | Broker CSV/statement normalization, immutable position and tax evidence, stable import identities, hidden mirrors independent of net-worth inclusion, read-only Public API sync and crypto quote fallback | [Broker imports](docs/BROKER-PORTFOLIO-IMPORTS.md), [Portfolio providers](docs/PORTFOLIO-PROVIDERS.md) |
+| Dashboards and presentation | Twenty optional investment widgets with independent saved settings, shared analytics/chart components, income widgets and responsive chart controls, shared financial color registry and updated spending/savings pace charts | [Investment widgets](docs/INVESTMENT-WIDGETS.md), [Financial colors](docs/FINANCIAL-COLORS.md), [Payroll implementation](docs/PAYROLL-IMPLEMENTATION.md) |
+| Bank sync and spending | SimpleFIN overlap, budgeted requests, late-posting recovery, historical transaction reconciliation, MCC enrichment, local deterministic categorization and scheduled spending reports | [SimpleFIN](docs/SIMPLEFIN-SYNC.md), [Historical transactions](docs/HISTORICAL-TRANSACTION-IMPORT.md), [Categorization and reports](docs/LOCAL-CATEGORIZATION-REPORTS.md) |
+| MCP | Native scoped tools plus personal net worth and investment reads/writes; stable broker row IDs for individual and bulk trade import, existing-bank-transaction contribution linking, OAuth ownership checks | [MCP deployment and discovery](deploy/README.md#authenticated-mcp) |
+| Self-hosting | Raspberry Pi ARM64 Docker stack, prebuilt Windows deployment scripts, health checks, database backups, SSH/VPN access and separately protected HTTPS/PWA access | [Deployment](docs/HOW-TO-DEPLOY.md), [Pi setup](deploy/README.md), [iPhone security](docs/IPHONE-SECURITY.md) |
+
+### Developer quick links
+
+- [How to work on this fork](Howtowork.md) — local setup, code layout and development workflow.
+- [How to deploy](docs/HOW-TO-DEPLOY.md) — four scripts, manual frontend/backend builds, verification and rollback.
+- [How to view the database](docs/HOW-TO-VIEW-DATABASE.md) — PostgreSQL CLI and Windows DBeaver via SSH.
+- [Agent instructions](AGENTS.md) — fork-specific context and guardrails; [CLAUDE.md](CLAUDE.md) contains upstream code conventions.
+- [Deployment verification history](docs/DEPLOYMENT-VERIFICATION.md) — dated evidence, not a live health check.
+- [Stable upstream integration notes](docs/UPSTREAM-STABLE-UPDATE-2026-11-20.md).
+
+**Normal deployment:** build on Windows, upload compiled artifacts, then deploy only the affected service on the Pi. Never compile the full application on the Pi as a routine update. Do not commit production credentials, statements, financial exports, database dumps or deployment logs.
+
+**Known boundaries:** historical snapshots are not trades or deposits; missing evidence remains unavailable; provider price updates do not prove brokerage quantities are current; payroll tax projections are not tax-return preparation; the ADP companion requires user interaction; ChatGPT MCP discovery may require a fresh scoped authorization and has not yet been verified for the latest investment additions.
+
+---
 
 <div align="center">
 

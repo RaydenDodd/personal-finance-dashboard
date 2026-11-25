@@ -1,5 +1,7 @@
 # Raspberry Pi deployment and recovery
 
+For the current routine Windows/Pi workflow, see [How to deploy](../docs/HOW-TO-DEPLOY.md). For read-only inspection, see [How to view the database](../docs/HOW-TO-VIEW-DATABASE.md). This document retains the initial setup, infrastructure and recovery details; older localhost-only MCP examples are historical and must not replace an existing protected HTTPS/OAuth configuration.
+
 The custom stack uses MoneyMatter's existing frontend, backend, PostgreSQL,
 Redis, currency service, authentication, SimpleFIN and MCP server. It builds
 the fork's source with the upstream Dockerfiles. All images support 64-bit
