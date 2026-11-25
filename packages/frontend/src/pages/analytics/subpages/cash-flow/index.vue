@@ -295,7 +295,7 @@ const summaryRows = computed<SummaryRowItem[]>(() => {
       change: trends.value.income,
       comparisonPeriodLabel: label,
       color: colors.value.appIncome,
-      valueClass: 'text-[var(--financial-income)]',
+      valueClass: 'text-app-income-color',
     },
     {
       label: t('analytics.cashFlow.expenses'),
@@ -311,7 +311,7 @@ const summaryRows = computed<SummaryRowItem[]>(() => {
       change: trends.value.netFlow,
       comparisonPeriodLabel: label,
       color: colors.value.appSavings,
-      valueClass: 'text-[var(--financial-savings)]',
+      valueClass: 'text-[var(--app-savings-color)]',
     },
     {
       label: t('analytics.cashFlow.savingsRate'),
@@ -319,7 +319,7 @@ const summaryRows = computed<SummaryRowItem[]>(() => {
       change: trends.value.savingsRate,
       comparisonPeriodLabel: label,
       color: totals.savingsRate >= 0 ? colors.value.appIncome : colors.value.appExpense,
-      valueClass: totals.savingsRate >= 0 ? 'text-[var(--financial-income)]' : 'text-app-expense-color',
+      valueClass: totals.savingsRate >= 0 ? 'text-app-income-color' : 'text-app-expense-color',
     },
   ];
 });
