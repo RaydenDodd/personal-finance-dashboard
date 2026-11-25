@@ -10,6 +10,8 @@ import { payrollToday } from '@/pages/income-management/payroll/date-range';
 import { usesCustomPositionPeriod } from '@/components/investment-analytics/performers-model';
 import { investmentRange } from '@/components/investment-analytics/date-range';
 import AnalyticsPanel from '@/components/investment-analytics/analytics-panel.vue';
+import PerformanceSummary from '@/components/investment-analytics/performance-summary.vue';
+import { selectedPerformanceSummary } from '@/components/investment-analytics/performance-summary';
 import { investmentSectionForWidget } from '@bt/shared/types/investment-analytics-read';
 import { useInvestmentAnalytics } from '@/composable/data-queries/investment-analytics';
 import { useInvestmentHistory } from '@/composable/data-queries/investment-history';
@@ -36,6 +38,12 @@ const kind = computed(() => investmentWidgetKind(widget.value.widgetId) ?? 'over
 const hasPeriodControls = computed(
   () => Boolean(dashboardRange.value) && ['performance', 'portfolio-comparison', 'heatmap'].includes(kind.value),
 );
+const inlinePerformanceHeader = computed(() => hasPeriodControls.value && kind.value === 'performance');
+const chartModes = [
+  { value: 'dollars', label: '$', title: 'Account value' },
+  { value: 'gains', label: '+/-', title: 'Dollar gain / loss' },
+  { value: 'percent', label: '%', title: 'Percentage return' },
+] as const;
 const definition = computed(() => INVESTMENT_WIDGET_DEFINITIONS[widget.value.widgetId]);
 const defaultCurrentDay = inject<Ref<boolean> | boolean>('investment-default-current-day', false);
 const optimisticSettings = ref<Record<string, unknown>>(
@@ -62,7 +70,7 @@ provide(
       return Math.max(
         140,
         availableHeight.value -
-          (kind.value === 'risk' || kind.value === 'contributions' ? 160 : kind.value === 'performance' ? 48 : 46),
+          (kind.value === 'risk' || kind.value === 'contributions' ? 160 : kind.value === 'performance' ? (inlinePerformanceHeader.value ? 24 : 48) : 46),
       );
     const base = kind.value === 'heatmap' ? (fullPage ? 380 : 340) : fullPage ? 288 : 208;
     return base + Math.max(0, (fullPage || bounded.value ? (widget.value.rowSpan ?? 1) : 1) - 1) * 180;
@@ -114,7 +122,7 @@ const settings = computed(() =>
       ? {
           portfolioIds: [],
           breakdown: 'combined',
-          ...(dashboardRange.value ? { unit: 'dollars', series: undefined } : {}),
+          ...(dashboardRange.value ? { series: undefined } : {}),
         }
       : {}),
   }),
@@ -174,6 +182,10 @@ const data = computed(() =>
         }
       : broad.data.value,
 );
+const summary = computed(() => selectedPerformanceSummary(
+  data.value?.accountHistory,
+  investmentRange(settings.value, data.value?.coverage?.historyStart ?? '1900-01-01'),
+));
 const isPending = computed(() => (focusedHistory.value ? narrow.isPending.value : broad.isPending.value));
 const isFetching = computed(() => (focusedHistory.value ? narrow.isFetching.value : broad.isFetching.value));
 const error = computed(() => (focusedHistory.value ? narrow.error.value : broad.error.value));
@@ -252,7 +264,7 @@ const saveSettings = async (patch: Record<string, unknown>, close = false) => {
   <WidgetWrapper
     :is-fetching="isFetching || isPending"
     :data-investment-widget="kind"
-    :compact-header="hasPeriodControls && mobileHeader"
+    :compact-header="hasPeriodControls && mobileHeader && !inlinePerformanceHeader"
   >
     <template #title
       >{{ definition?.name ?? 'Investment analytics'
@@ -278,6 +290,25 @@ const saveSettings = async (patch: Record<string, unknown>, close = false) => {
       ></template
     >
     <template #action>
+      <div
+        v-if="inlinePerformanceHeader"
+        class="bg-muted/60 inline-flex shrink-0 gap-0.5 rounded-lg p-0.5"
+        role="group"
+        aria-label="Portfolio performance chart mode"
+        data-chart-controls
+      >
+        <Button
+          v-for="mode in chartModes"
+          :key="mode.value"
+          size="icon-sm"
+          class="font-semibold tabular-nums"
+          :aria-label="mode.title"
+          :title="mode.title"
+          :variant="settings.unit === mode.value ? 'secondary' : 'ghost'"
+          :aria-pressed="settings.unit === mode.value"
+          @click="saveSettings({ unit: mode.value, series: undefined })"
+        >{{ mode.label }}</Button>
+      </div>
       <Button as-child variant="ghost" size="icon-sm" aria-label="Open Investments page"
         ><router-link :to="`/finances/investments/${page}`"
           ><ArrowUpRightIcon class="text-muted-foreground size-4" /></router-link
@@ -292,7 +323,10 @@ const saveSettings = async (patch: Record<string, unknown>, close = false) => {
         @save="saveSettings($event, true)"
       />
     </template>
-    <component :is="mobileHeader ? WidgetHeaderControls : 'div'" :class="mobileHeader ? '' : 'mb-2'">
+    <component
+      :is="mobileHeader && !inlinePerformanceHeader ? WidgetHeaderControls : 'div'"
+      :class="inlinePerformanceHeader ? 'mb-2 flex min-w-0 items-center gap-x-3' : mobileHeader ? '' : 'mb-2'"
+    >
       <div
         v-if="hasPeriodControls"
         class="bg-muted/60 inline-flex shrink-0 gap-0.5 rounded-lg p-0.5"
@@ -314,6 +348,12 @@ const saveSettings = async (patch: Record<string, unknown>, close = false) => {
           >{{ label }}</Button
         >
       </div>
+      <PerformanceSummary
+        v-if="inlinePerformanceHeader"
+        :summary="summary"
+        :currency="data?.currencyCode ?? 'USD'"
+        :loading="isFetching || isPending"
+      />
     </component>
     <component
       ref="bodyRef"
@@ -330,6 +370,7 @@ const saveSettings = async (patch: Record<string, unknown>, close = false) => {
         :kind="kind"
         :settings="settings"
         :compact="!fullPage"
+        :inline-performance-header="inlinePerformanceHeader"
         @settings-change="saveSettings($event)"
       />
       <p v-else class="text-muted-foreground p-4 text-sm">

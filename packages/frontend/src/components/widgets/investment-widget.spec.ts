@@ -35,7 +35,7 @@ vi.mock('@/composable/data-queries/portfolios', () => ({
 vi.mock('@/components/investment-analytics/analytics-panel.vue', () => ({
   default: {
     name: 'AnalyticsPanel',
-    props: { analytics: Object, kind: String, settings: Object, compact: Boolean },
+    props: { analytics: Object, kind: String, settings: Object, compact: Boolean, inlinePerformanceHeader: Boolean },
     emits: ['settings-change'],
     template: '<div data-testid="shared-investment-panel">{{ kind }}</div>',
   },
@@ -231,7 +231,7 @@ it('follows the Dashboard month without persisting it into each widget configura
     dateRange: 'custom',
     from: '2026-10-01',
     through: '2026-10-31',
-    unit: 'dollars',
+    unit: 'percent',
     breakdown: 'combined',
     portfolioIds: [],
   });
@@ -284,4 +284,29 @@ it('shares the report selection across Dashboard tile kinds instead of fetching 
   expect(a.performanceThrough?.value).toBe(b.performanceThrough?.value);
   first.unmount();
   second.unmount();
+});
+
+
+it('puts signed period returns beside the period toggle and persists the header chart mode', async () => {
+  const period = ref({ from: new Date(2026, 9, 1), to: new Date(2026, 9, 31) });
+  analytics.value = { currencyCode: 'USD', accountHistory: { gainFrom: '2026-10-01', dates: ['2026-10-31'], accounts: [], periodGains: ['247.82'], periodReturnPercent: ['0.83'] } };
+  const widget = ref<DashboardWidgetConfig>({ widgetId: 'investment-performance', instanceId: 'performance-header', colSpan: 2, config: { unit: 'dollars' } });
+  const persist = vi.fn(async ({ config }) => { widget.value.config = { ...widget.value.config, ...config }; });
+  const wrapper = mount(InvestmentWidget, {
+    global: { provide: { 'dashboard-widget-config': widget, 'dashboard-save-widget-config': persist, 'dashboard-period': period },
+      stubs: { 'router-link': { template: '<a><slot/></a>' } } },
+  });
+  const summary = wrapper.get('[data-testid="investment-performance-summary"]');
+  expect(summary.text()).toContain('+$247.82');
+  expect(summary.text()).toContain('+0.83%');
+  expect(summary.element.previousElementSibling?.getAttribute('aria-label')).toBe('Widget period');
+  const modes = wrapper.get('[aria-label="Portfolio performance chart mode"]');
+  expect(modes.findAll('button').map((button) => button.text())).toEqual(['$', '+/-', '%']);
+  expect(modes.element.nextElementSibling).toBe(wrapper.get('[aria-label="Open Investments page"]').element);
+  expect(wrapper.findComponent({ name: 'AnalyticsPanel' }).props('inlinePerformanceHeader')).toBe(true);
+  await modes.get('[aria-label="Dollar gain / loss"]').trigger('click');
+  expect(persist).toHaveBeenCalledWith({ widgetId: 'performance-header', config: { unit: 'gains', series: undefined } });
+  expect(wrapper.findComponent({ name: 'AnalyticsPanel' }).props('settings').unit).toBe('gains');
+  expect(summary.text()).toContain('+$247.82');
+  wrapper.unmount();
 });
