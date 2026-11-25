@@ -183,7 +183,7 @@ export function incomeBreakdown(result: IncomePlanResult, input: IncomePlanInput
     group(
       'pre',
       'Before-tax deductions',
-      financial.deductions,
+      financial.retirement,
       a.traditional401k + a.otherPreTaxDeductions + payrollHsa,
       [
         row('traditional401k', 'Traditional 401(k)', a.traditional401k),
@@ -194,7 +194,7 @@ export function incomeBreakdown(result: IncomePlanResult, input: IncomePlanInput
     group(
       'post',
       'After-tax contributions and deductions',
-      financial.deductions,
+      financial.retirement,
       a.roth401k + a.traditionalIra + a.rothIra + a.otherPostTaxDeductions + a.hsa - payrollHsa,
       [
         row('roth401k', 'Roth 401(k)', a.roth401k),

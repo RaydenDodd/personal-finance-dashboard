@@ -14,7 +14,8 @@ import type {
 import DrilldownDonut from '@/components/common/charts/drilldown-donut.vue';
 import { allocationDrilldown } from './allocation-drilldown';
 import ModuleBody from '@/components/widgets/components/module-body.vue';
-import { FINANCIAL_COLORS as financial, investmentSeriesColor } from '@bt/shared/financial-colors';
+import { FINANCIAL_COLORS as financial } from '@bt/shared/financial-colors';
+import { CATEGORICAL_SERIES_PALETTE as colors } from '@/composable/charts/categorical-series-palette';
 import DateRange from '@/pages/income-management/payroll/date-range.vue';
 import { type PayrollRange } from '@/pages/income-management/payroll/date-range';
 import { INVESTMENT_ALLOCATION_MODES } from '@/components/widgets/investment-widgets';
@@ -456,10 +457,10 @@ const performanceSummary = computed(() => {
 const chartSeries = computed<InvestmentChartSeries[]>(() => {
   if (gainView.value)
     return recordedAccountFallback.value || props.kind === 'portfolio-comparison'
-      ? props.analytics.portfolios.map((p) => ({
+      ? props.analytics.portfolios.map((p, i) => ({
           key: p.id,
           label: p.name,
-          color: investmentSeriesColor(p.id, /ira|retire|401/i.test(p.accountType + p.name)),
+          color: colors[i % colors.length]!,
         }))
       : [{ key: 'gain', label: gainLabel.value, color: financial.investments }];
   if (
@@ -478,35 +479,35 @@ const chartSeries = computed<InvestmentChartSeries[]>(() => {
             {
               key: 'knownNetInvested',
               label: 'Recorded net funding',
-              color: financial.investments,
+              color: colors[3]!,
             },
           ]
         : []),
     ];
   if (props.kind === 'dividends')
     return [
-      { key: 'cash', label: 'Cash dividends', color: financial.cash },
-      { key: 'reinvested', label: 'Reinvested dividends', color: financial.investments },
+      { key: 'cash', label: 'Cash dividends', color: financial.savings },
+      { key: 'reinvested', label: 'Reinvested dividends', color: financial.highYieldSavings },
       {
         key: 'unknown',
         label: 'Distribution treatment unknown',
-        color: financial.deductions,
+        color: financial.emergencyFund,
       },
       { key: 'interest', label: 'Interest', color: financial.highYieldSavings },
     ];
   if (props.kind === 'portfolio-comparison' || recordedAccountFallback.value)
     return [
-      ...recordedPortfolios.value.map((row) => ({
+      ...recordedPortfolios.value.map((row, index) => ({
         key: row.id,
         label: row.name,
-        color: investmentSeriesColor(row.id),
+        color: colors[index % colors.length]!,
       })),
       ...(props.kind === 'value-capital' && allHistory.value.some((p) => p.knownNetInvested != null)
         ? [
             {
               key: 'knownNetInvested',
               label: historyLabels.knownNetInvested!,
-              color: financial.investments,
+              color: colors[3]!,
             },
           ]
         : []),
@@ -520,12 +521,12 @@ const chartSeries = computed<InvestmentChartSeries[]>(() => {
           : priceRiskFallback.value
             ? 'Current holdings · price only'
             : 'Selected portfolio · cash-flow adjusted',
-        color: financial.investments,
+        color: colors[0]!,
       },
-      ...props.analytics.benchmarks.map((row) => ({
+      ...props.analytics.benchmarks.map((row, index) => ({
         key: row.id,
         label: `${row.symbol} · ${row.returnType}`,
-        color: investmentSeriesColor(row.id),
+        color: colors[(index + 1) % colors.length]!,
       })),
     ];
   if (props.kind === 'risk')
@@ -548,28 +549,17 @@ const chartSeries = computed<InvestmentChartSeries[]>(() => {
     return [
       { key: 'contributions', label: 'Contributions', color: financial.investments },
       { key: 'withdrawals', label: 'Withdrawals', color: financial.cash },
-      { key: 'netContributions', label: 'Net invested', color: financial.investments },
+      { key: 'netContributions', label: 'Net invested', color: financial.savings },
       {
         key: 'previousAverage',
         label: 'Previous six periods average',
         color: financial.deductions,
       },
     ];
-  return activeSeries.value.map((key) => ({
+  return activeSeries.value.map((key, index) => ({
     key,
     label: historyLabels[key] ?? key,
-    color:
-      (
-        {
-          cash: financial.cash,
-          contributions: financial.investments,
-          withdrawals: financial.cash,
-          netInvested: financial.investments,
-          knownNetInvested: financial.investments,
-          marketValue: financial.investments,
-          dividends: financial.investments,
-        } as Record<string, string>
-      )[key] ?? financial.investments,
+    color: colors[index % colors.length]!,
   }));
 });
 const chartPoints = computed<InvestmentChartPoint[]>(() => {
@@ -801,7 +791,7 @@ const overlapStrength = (left: string, right: string) => {
     )?.weightedOverlap ?? 0,
   );
   return {
-    backgroundColor: `color-mix(in srgb, var(--financial-investments) ${Math.min(32, Math.max(0, value) * 0.32)}%, transparent)`,
+    backgroundColor: `color-mix(in srgb, var(--financial-savings) ${Math.min(32, Math.max(0, value) * 0.32)}%, transparent)`,
   };
 };
 const compositionDates = computed(
@@ -1066,13 +1056,18 @@ const health = computed(() =>
           >
         </div></component
       >
-      <strong v-if="kind === 'dividends' && compact" class="text-2xl font-semibold tabular-nums">{{
-        money(
-          payments
-            .filter((p) => p.type === 'dividend' && p.status === 'recorded')
-            .reduce((sum, p) => sum + Number(p.amount), 0),
-        )
-      }}</strong>
+      <strong
+        v-if="kind === 'dividends' && compact"
+        class="text-2xl font-semibold tabular-nums"
+        :style="{ color: financial.savings }"
+        >{{
+          money(
+            payments
+              .filter((p) => p.type === 'dividend' && p.status === 'recorded')
+              .reduce((sum, p) => sum + Number(p.amount), 0),
+          )
+        }}</strong
+      >
       <template v-if="kind === 'dividends' && !compact"
         ><div class="grid grid-cols-2 gap-3 @3xl:grid-cols-4">
           <div

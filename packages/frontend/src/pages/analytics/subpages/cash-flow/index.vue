@@ -45,24 +45,28 @@
       <SummaryCard
         :title="t('analytics.cashFlow.income')"
         :value="cashFlowData.totals.income"
+        :value-color="colors.appIncome"
         :change="trends.income"
         :comparison-period-label="comparisonPeriodLabel"
       />
       <SummaryCard
         :title="t('analytics.cashFlow.expenses')"
         :value="cashFlowData.totals.expenses"
+        :value-color="colors.appExpense"
         :change="trends.expenses"
         :comparison-period-label="comparisonPeriodLabel"
       />
       <SummaryCard
         :title="t('analytics.cashFlow.netSavings')"
         :value="cashFlowData.totals.netFlow"
+        :value-color="colors.appSavings"
         :change="trends.netFlow"
         :comparison-period-label="comparisonPeriodLabel"
       />
       <SummaryCard
         :title="t('analytics.cashFlow.savingsRate')"
         :value="Math.round(cashFlowData.totals.savingsRate)"
+        :value-color="cashFlowData.totals.savingsRate >= 0 ? colors.appIncome : colors.appExpense"
         suffix="%"
         :change="trends.savingsRate"
         :comparison-period-label="comparisonPeriodLabel"
@@ -291,6 +295,7 @@ const summaryRows = computed<SummaryRowItem[]>(() => {
       change: trends.value.income,
       comparisonPeriodLabel: label,
       color: colors.value.appIncome,
+      valueClass: 'text-[var(--financial-income)]',
     },
     {
       label: t('analytics.cashFlow.expenses'),
@@ -298,6 +303,7 @@ const summaryRows = computed<SummaryRowItem[]>(() => {
       change: trends.value.expenses,
       comparisonPeriodLabel: label,
       color: colors.value.appExpense,
+      valueClass: 'text-app-expense-color',
     },
     {
       label: t('analytics.cashFlow.netSavings'),
@@ -305,13 +311,15 @@ const summaryRows = computed<SummaryRowItem[]>(() => {
       change: trends.value.netFlow,
       comparisonPeriodLabel: label,
       color: colors.value.appSavings,
+      valueClass: 'text-[var(--financial-savings)]',
     },
     {
       label: t('analytics.cashFlow.savingsRate'),
       value: `${Math.round(totals.savingsRate)}%`,
       change: trends.value.savingsRate,
       comparisonPeriodLabel: label,
-      color: colors.value.appSavings,
+      color: totals.savingsRate >= 0 ? colors.value.appIncome : colors.value.appExpense,
+      valueClass: totals.savingsRate >= 0 ? 'text-[var(--financial-income)]' : 'text-app-expense-color',
     },
   ];
 });

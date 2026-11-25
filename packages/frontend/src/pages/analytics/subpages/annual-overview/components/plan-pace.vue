@@ -102,6 +102,7 @@ const detailsOpen = ref(false);
         />
         <SummaryCard
           title="Income plan - selected period"
+          value-color="var(--muted-foreground)"
           :value="plan.at(-1) ?? 0"
           :value-label="money(plan.at(-1))"
           :style="{ color: seriesColor }"

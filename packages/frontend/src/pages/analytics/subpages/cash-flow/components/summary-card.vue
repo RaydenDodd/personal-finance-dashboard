@@ -9,7 +9,7 @@
         :comparison-period-label="comparisonPeriodLabel"
       />
     </div>
-    <div class="text-lg font-semibold sm:text-2xl">
+    <div class="text-lg font-semibold sm:text-2xl" :style="{ color: valueColor }">
       {{ formattedValue }}
     </div>
   </div>
@@ -23,6 +23,7 @@ import SummaryChangeBadge from './summary-change-badge.vue';
 
 const props = defineProps<{
   title: string;
+  valueColor?: string;
   value: number;
   change?: number;
   suffix?: string;
