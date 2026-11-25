@@ -126,10 +126,11 @@ On the Pi:
 cd ~/personal-finance-dashboard
 git pull --ff-only origin dev
 sh deploy/deploy-frontend.sh
+git pull --ff-only origin dev
 sh deploy/deploy-backend.sh
 ```
 
-Run only the component you changed. These scripts serialize deploys, require the uploaded commit to match `origin/dev`, retain the running image as `:previous`, and restart only the selected service. Backend deployments also require a successful database backup and reload nginx. Existing runtime lockfile checks still apply. If dependencies changed, follow the matching-runtime guide below. Failed health checks stop the script; inspect logs before rollback. An image rollback cannot reverse database migrations.
+Run only the component you changed. These scripts serialize deploys, require the uploaded commit to match `origin/dev`, retain the running image as `:previous`, and restart only the selected component (backend deployments restart the shared-image investment worker too). Backend deployments also require a successful database backup and reload nginx. Existing runtime lockfile checks still apply. If dependencies changed, follow the matching-runtime guide below. Failed health checks stop the script; inspect logs before rollback. An image rollback cannot reverse database migrations.
 
 ## Updates and rollback
 

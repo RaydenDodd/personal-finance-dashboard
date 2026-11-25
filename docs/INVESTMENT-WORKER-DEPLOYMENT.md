@@ -20,3 +20,6 @@ Compare HTTP runtime performance event-loop metrics, cached request latency, his
 Per-security incremental calculation, source-specific invalidation, narrow historical queries, and equivalent income/spending/net-worth/tax profiling. This split is not a promise of lower total CPU time or instantaneous cold analytics.
 
 For a deployment that already installed the new backend but omitted the worker, start it directly with `docker compose --env-file .env.pi.local -f docker-compose.pi.yml up -d --no-deps --no-build --wait --wait-timeout 300 investment-worker`. A healthy HTTP backend by itself does not establish worker health.
+
+## Lock recovery
+Both investment jobs now use PostgreSQL transaction-scoped advisory locks instead of the old Redis keys. PostgreSQL releases the locks when the owning transaction/session ends. Old Redis analytics keys may expire naturally and are no longer consulted. Do not flush Redis. For the one-time transition, stop all old investment job executors before starting the new worker; the Pi backend deployment script does this by stopping the worker and recreating the HTTP backend. Avoid mixed-version replicas during rollout. Each job holds one extra pooled connection for the lock. The unit tests mock the managed transaction; verify crash recovery against real PostgreSQL during runtime validation.

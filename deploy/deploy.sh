@@ -22,6 +22,11 @@ if [ "${SKIP_BUILD:-false}" != true ]; then
   compose build backend
   compose build frontend
 fi
+# Never run an old analytics worker across backend schema migrations.
+if [ -n "$(compose ps -a -q investment-worker)" ]; then
+  compose stop investment-worker
+fi
 compose up -d --wait --wait-timeout 300
+test -n "$(compose ps -q investment-worker)" || { echo 'Investment worker is not running.' >&2; exit 1; }
 compose ps
 echo 'MoneyMatter is running. See deploy/README.md for local/VPN access and recovery.'

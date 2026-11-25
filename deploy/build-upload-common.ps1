@@ -90,8 +90,10 @@ function Invoke-PrebuiltUpload {
         if (Test-Path -LiteralPath $artifact) { Remove-Item -LiteralPath $artifact -Recurse -Force }
         $dist = Join-Path $artifact "$Component-dist"
         New-Item -ItemType Directory -Path $dist -Force | Out-Null
-        $required = if ($Component -eq 'backend') { 'app.js' } else { 'index.html' }
-        if (-not (Test-Path -LiteralPath "packages/$Component/dist/$required")) { throw "Build output missing $required." }
+        $required = if ($Component -eq 'backend') { @('app.js', 'investment-worker.js') } else { @('index.html') }
+        foreach ($file in $required) {
+            if (-not (Test-Path -LiteralPath "packages/$Component/dist/$file" -PathType Leaf)) { throw "Build output missing $file." }
+        }
         Copy-Item "packages/$Component/dist/*" $dist -Recurse -Force
         if ($Component -eq 'backend') {
             $migrations = Join-Path $artifact 'migrations'
@@ -129,7 +131,8 @@ function Invoke-PrebuiltUpload {
             Write-Host "PASS: $Component selected checks and build succeeded. Local package only; upload before deploying." -ForegroundColor Green
         } else {
             Write-Host "PASS: $Component selected checks, build and upload succeeded. Ready to deploy on the Pi." -ForegroundColor Green
-            Write-Host "On the Pi: sh deploy/deploy-$Component.sh"
+            Write-Host "On the Pi: git pull --ff-only origin dev"
+            Write-Host "Then: sh deploy/deploy-$Component.sh"
         }
     } catch {
         Set-PSDebug -Off

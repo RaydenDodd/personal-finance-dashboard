@@ -12,7 +12,7 @@ if [ "${1:-}" != "--logged" ]; then
   bash "deploy/deploy-backend.sh" --logged 2>&1 | tee "$log"
   statuses=("${PIPESTATUS[@]}")
   if [ "${statuses[0]}" -eq 0 ] && [ "${statuses[1]}" -eq 0 ]; then
-    printf '\033[32mPASS: backend deployed and healthy.\033[0m\n' | tee -a "$log"
+    printf '\033[32mPASS: backend and investment worker deployed and healthy.\033[0m\n' | tee -a "$log"
     printf 'Log: %s\n' "$log"
     exit 0
   fi
@@ -53,11 +53,12 @@ test -n "$container" || { echo "No running $service container; use the initial d
 previous=$(docker inspect --format '{{.Image}}' "$container")
 docker tag "$previous" "$image:previous"
 time compose run --rm --no-deps backup once
-# Stop old worker before changing the shared backend image or running migrations.
+# Build and validate the replacement image before interrupting the existing worker.
+time sh deploy/build-prebuilt-backend.sh "$artifact"
+# Stop old worker before recreating the backend or running migrations.
 if [ -n "$(compose ps -a -q investment-worker)" ]; then
   compose stop investment-worker
 fi
-time sh deploy/build-prebuilt-backend.sh "$artifact"
 if ! time compose up -d --no-deps --no-build --wait --wait-timeout 300 "$service"; then
   echo "Deployment failed. Previous image retained as $image:previous." >&2
   echo 'Inspect logs before rollback; an image rollback cannot reverse database migrations.' >&2
@@ -70,4 +71,4 @@ fi
 test -n "$(compose ps -q investment-worker)" || { echo 'Investment worker is not running.' >&2; exit 1; }
 compose exec -T frontend nginx -s reload
 compose ps
-echo "Deployed $service from $commit; previous image retained as $image:previous."
+echo "Deployed backend and investment-worker from $commit; previous image retained as $image:previous."

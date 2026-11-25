@@ -3,7 +3,7 @@ set -eu
 project_directory=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 artifact_directory=${1:?Usage: sh deploy/build-prebuilt-backend.sh /path/to/artifact-context}
 artifact_directory=$(CDPATH= cd -- "$artifact_directory" && pwd)
-for required in backend-dist/app.js package-lock.json; do
+for required in backend-dist/app.js backend-dist/investment-worker.js package-lock.json; do
   test -f "$artifact_directory/$required" || { echo "Missing artifact: $required" >&2; exit 1; }
 done
 test -d "$artifact_directory/migrations" || { echo 'Missing migrations artifact directory' >&2; exit 1; }
