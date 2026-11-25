@@ -46,7 +46,10 @@ export function buildHistory({
   onHoldingQuantity,
   onAnchorDifference,
   sampleTimes,
+  positionDates,
 }: {
+  /** Only replay requested dates for position callbacks; no account-history series is returned. */
+  positionDates?: readonly string[];
   sampleTimes?: string[];
   ids: string[];
   currencyCode: string;
@@ -120,6 +123,7 @@ export function buildHistory({
   )
     dates.push(d.toISOString().slice(0, 10));
   if (sampleTimes) dates.splice(0, dates.length, ...sampleTimes);
+  if (positionDates) dates.splice(0, dates.length, ...[...new Set(positionDates)].filter((d) => d >= starts[0]! && d <= today).sort());
   const dateSet = new Set(dates);
   const transactionsByPortfolio = Map.groupBy(transactions, (t) => String(t.portfolioId));
   const transfersByDay = Map.groupBy(transfers, (t) => t.date);
@@ -255,6 +259,7 @@ export function buildHistory({
       positionAnchorsByPortfolio: new Map([[id, anchors]]),
       onHoldingValue: (row) => {
         if (!Number.isFinite(row.value)) return;
+        if (positionDates) { onHoldingValue?.(row); return; }
         const old = priced.get(row.date) ?? { value: new Big(0), count: 0 };
         old.value = old.value.plus(row.value);
         old.count++;
@@ -262,6 +267,7 @@ export function buildHistory({
         onHoldingValue?.(row);
       },
     });
+    if (positionDates) continue;
     if (!broker && balances.some((b) => b.portfolioId === id)) {
       const cash = computePortfolioCashByDate({
         uniqueDates: dates,
@@ -320,6 +326,7 @@ export function buildHistory({
     for (const [date, value] of values) if (value !== null) known.set(date, value);
     knownByPortfolio.set(id, known);
   }
+  if (positionDates) return [];
   const selected = new Set(ids);
   const complete = ids.every((id) => byBroker.get(id)?.data.historyComplete !== false);
   let contributions = new Big(0);

@@ -174,6 +174,16 @@ export async function refreshNextInvestmentReadModel(): Promise<boolean> {
       await sqlRows('DELETE FROM "InvestmentAnalyticsReadModels" WHERE "userId"=:userId AND "selectionKey"=:key RETURNING "selectionKey"', { userId: row.userId, key: row.selectionKey });
       return true;
     }
+    let rangeBase: InvestmentAnalytics | undefined;
+    if (before.performanceFrom && before.performanceThrough) {
+      const baseKey = selectionKey({ ...before, performanceFrom: undefined, performanceThrough: undefined });
+      const [base] = await sqlRows<{ payload: InvestmentAnalytics | null }>(`
+        SELECT payload FROM "InvestmentAnalyticsReadModels"
+        WHERE "userId"=:userId AND "selectionKey"=:baseKey AND "sourceRevision"=:revision
+          AND "builtAt" IS NOT NULL AND failures=0 AND payload IS NOT NULL
+      `, { userId: row.userId, baseKey, revision });
+      rangeBase = base?.payload ?? undefined;
+    }
     const result = await getInvestmentAnalytics({
       userId: row.userId,
       portfolioIds: before.portfolioIds,
@@ -181,9 +191,12 @@ export async function refreshNextInvestmentReadModel(): Promise<boolean> {
       performanceFrom: before.performanceFrom,
       performanceThrough: before.performanceThrough,
       compact: true,
+      rangeBase,
     });
     const after = await resolveSelection(row.userId, row.selection);
     if (selectionKey(after) !== row.selectionKey) return true;
+    // Never publish a range overlay assembled across two source revisions.
+    if (rangeBase && await sourceRevision() !== revision) return true;
     const serializeStart = Date.now();
     const payload = JSON.stringify(result);
     const serializationMs = Date.now() - serializeStart;
@@ -197,6 +210,7 @@ export async function refreshNextInvestmentReadModel(): Promise<boolean> {
       payloadBytes: Buffer.byteLength(payload),
       serializationMs,
       persistenceMs: Date.now() - persistStart,
+      reusedBase: Boolean(rangeBase),
       customRange: Boolean(before.performanceFrom && before.performanceThrough),
     });
     return true;

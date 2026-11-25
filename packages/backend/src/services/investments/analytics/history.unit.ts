@@ -154,3 +154,29 @@ describe('native historical valuation adapter', () => {
     expect(points.at(-1)?.netInvested).toBeNull();
   });
 });
+
+
+describe('sparse position-date replay', () => {
+  it('matches full-replay position values and quantities at selected dates', () => {
+    const input: Parameters<typeof buildHistory>[0] = {
+      ids: ['a'], currencyCode: 'USD', brokers: [], transfers: [], balances: [],
+      securities: [{ id: 's', currencyCode: 'USD', assetClass: 'stocks' }] as never,
+      transactions: [
+        { portfolioId: 'a', securityId: 's', date: new Date('2026-11-16'), category: 'buy', quantity: '5', refAmount: '500', currencyCode: 'USD' },
+        { portfolioId: 'a', securityId: 's', date: new Date('2026-11-18'), category: 'sell', quantity: '2', refAmount: '220', currencyCode: 'USD' },
+      ] as never,
+      prices: [
+        { securityId: 's', date: new Date('2026-11-17'), priceClose: '105' },
+        { securityId: 's', date: new Date('2026-11-19'), priceClose: '115' },
+      ] as never,
+      through: '2026-11-19',
+    };
+    const dates = ['2026-11-17', '2026-11-19'];
+    const full: unknown[] = [], sparse: unknown[] = [];
+    buildHistory({ ...input, onHoldingValue: (row) => { if (dates.includes(row.date)) full.push(row); }, onHoldingQuantity: (row) => { if (dates.includes(row.date)) full.push(row); } });
+    const result = buildHistory({ ...input, positionDates: dates, onHoldingValue: (row) => sparse.push(row), onHoldingQuantity: (row) => sparse.push(row) });
+    expect(result).toEqual([]);
+    expect(sparse).toEqual(full);
+    expect(sparse).toHaveLength(4);
+  });
+});
