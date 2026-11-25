@@ -12,6 +12,7 @@ const queryCalls: {
   portfolioIds: { value: string[] };
   benchmarks: { value: string[] };
   performanceThrough?: { value: string | undefined };
+  section?: () => string;
 }[] = [];
 const refetch = vi.fn();
 vi.mock('@/composable/data-queries/investment-analytics', () => ({
@@ -112,6 +113,18 @@ describe('investment widget adapters use shared live analytics', () => {
       portfolioIds: kind === 'performance' ? [] : ['b', 'c'],
       dateRange: '3M',
     });
+    wrapper.unmount();
+  });
+
+  it('routes the dedicated underlying allocation widget to the existing exposure section on the Dashboard', () => {
+    const period = ref({ from: new Date(2026, 9, 1), to: new Date(2026, 9, 31) });
+    const { wrapper } = create('allocation-underlying', { portfolioIds: ['a'], allocationMode: 'holdings' }, period);
+    const panel = wrapper.findComponent({ name: 'AnalyticsPanel' });
+    expect(wrapper.text()).toContain('Investment Allocation – Underlying Companies');
+    expect(queryCalls[0]!.section?.()).toBe('exposure');
+    expect(queryCalls[0]!.portfolioIds.value).toEqual(['a']);
+    expect(panel.props('kind')).toBe('allocation-underlying');
+    expect(panel.props('settings').allocationMode).toBe('underlying');
     wrapper.unmount();
   });
 

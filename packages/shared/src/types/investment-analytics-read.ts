@@ -53,7 +53,7 @@ export function investmentSectionForWidget(kind: string): InvestmentAnalyticsSec
   switch (kind) {
     case 'overview': case 'gains': return 'overview';
     case 'holdings': case 'heatmap': case 'performers': return 'holdings';
-    case 'allocation': case 'sector': case 'geography': case 'exposure': case 'concentration': return 'exposure';
+    case 'allocation': case 'allocation-underlying': case 'sector': case 'geography': case 'exposure': case 'concentration': return 'exposure';
     case 'dividends': case 'dividend-calendar': return 'dividends';
     case 'benchmark': return 'benchmarks';
     case 'contributions': return 'contributions';

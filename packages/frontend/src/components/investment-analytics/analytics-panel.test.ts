@@ -2,6 +2,7 @@ import type { InvestmentAnalytics, InvestmentDividend } from '@bt/shared/types/i
 // @vitest-environment jsdom
 import { mount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
+import { ref } from 'vue';
 
 import AnalyticsPanel from './analytics-panel.vue';
 
@@ -60,6 +61,32 @@ const panel = (kind: string, analytics = base(), settings: Record<string, unknow
   });
 
 describe('shared investment panels', () => {
+  it('draws underlying company values rather than direct fund values on the dashboard', () => {
+    const analytics = base();
+    analytics.allocations = {
+      holdings: [{ key: 'fund', label: 'ETF', value: '100', percent: '100', securityIds: ['fund'] }],
+      underlying: [
+        { key: 'company', label: 'Company', value: '80', percent: '80', securityIds: ['company'] },
+        { key: 'unknown', label: 'Unknown', value: '20', percent: '20', securityIds: ['unknown'] },
+      ],
+    };
+    const wrapper = mount(AnalyticsPanel, {
+      props: { kind: 'allocation-underlying', analytics, settings: { allocationMode: 'holdings' }, compact: true },
+      global: {
+        stubs: { ...stubs, DrilldownDonut: true },
+        provide: { 'dashboard-period': ref({ from: new Date(2026, 9, 1), to: new Date(2026, 9, 31) }) },
+      },
+    });
+    const chart = wrapper.getComponent({ name: 'DrilldownDonut' });
+    expect(chart.props('data')).toEqual([
+      { id: 'company', name: 'Company', amount: 80 },
+      { id: 'unknown', name: 'Unknown', amount: 20 },
+    ]);
+    expect(chart.props('total')).toBe(100);
+    expect(wrapper.find('[aria-label="Investment allocation mode"]').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
   it('plots backend dollar gains instead of overriding them with market value', () => {
     const analytics = base();
     analytics.accountHistory = {

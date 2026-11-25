@@ -1,6 +1,6 @@
 # Investment dashboard widget verification
 
-All twenty optional investment widgets are registered in MoneyMatter's existing
+The original twenty optional investment widgets are registered in MoneyMatter's existing
 Add Widget interface. Registration does not change a saved or default dashboard.
 Adapters use the shared `AnalyticsPanel` and either `useInvestmentAnalytics` or the focused `useInvestmentHistory` hook (benchmark uses both). No widget independently replays the financial ledger. See the current routing below.
 
@@ -101,14 +101,14 @@ The repository's intended runtime remains the Node version in `package.json`.
 
 ## Current backend routing and performance header (2026-11-25)
 
-All twenty widgets use the shared backend. The original verification above refers to earlier release commits, not automatic verification of the latest optimizations.
+The original twenty widgets and the new dedicated underlying allocation widget use the shared backend. The original verification above refers to earlier release commits, not automatic verification of the latest optimizations.
 
 | Widget(s) | Backend path / section |
 | --- | --- |
 | Portfolio Performance, Value vs. Invested Capital, Portfolio Comparison | Focused history endpoint |
 | Investment Overview, Realized & Unrealized Gains | Read model: overview |
 | Combined Holdings, Best & Worst Performers, direct Portfolio Heatmap | Read model: holdings |
-| Investment Allocation, Sector Allocation, Geographical Allocation, Underlying Company Exposure, Portfolio Concentration, underlying Heatmap | Read model: exposure |
+| Investment Allocation, Investment Allocation – Underlying Companies, Sector Allocation, Geographical Allocation, Underlying Company Exposure, Portfolio Concentration, underlying Heatmap | Read model: exposure |
 | Dividend Income, Dividend Calendar | Read model: dividends |
 | Benchmark Comparison | Read model: benchmarks + focused history |
 | Investment Contributions | Read model: contributions |
@@ -121,3 +121,7 @@ Sections are response projections, not independent replay jobs. Identical scope/
 Loading states permit dashboard scroll chaining rather than trapping scrolling in an investment widget (28ebe2a); pending/retry remains scoped to the widget. This does not eliminate cold computation time.
 
 Portfolio Performance (ec1e029): the dashboard period controls (1D / 1M when selected) show the selected-period signed dollar gain and percent return inline, with the $ / +/- / % chart-mode segmented control before the open-page arrow and gear. The modes display account value, dollar gain/loss or percent return and persist per instance. The combined performance widget always requests capital/return evidence and the selected opening date, regardless of chart mode; switching modes does not issue a distinct history query. `selectedPerformanceSummary` selects the latest supported observation in the requested dates, rejects mismatched opening dates, and exposes partial/missing evidence instead of fabricated returns. Percentage returns use the backend Modified Dietz series, not simple change in account balance. The shared summary is not duplicated in the widget body. A regression test exists in `investment-widget.spec.ts`; latest compilation and browser validation were not established by the supplied deployment record.
+
+### Dedicated underlying-company allocation
+
+The main Dashboard Add Widget catalog now also offers `investment-allocation-underlying` (Investment Allocation – Underlying Companies), bringing the registry to 21 investment widget types. It is a fixed current-exposure doughnut using the existing allocation drill-down and `exposure` read-model section, with the same portfolio settings, resize and instance persistence as Investment Allocation. It aggregates direct and indirect company exposure from the backend, retains unknown composition amounts and does not run an independent calculation. The existing direct-holdings widget and saved layouts are unchanged. The new tests cover registry lifecycle, scope/section routing and the chart's underlying data including unknown exposure; run frontend tests and verify on the deployed dashboard before marking it live.

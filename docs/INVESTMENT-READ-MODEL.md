@@ -19,6 +19,8 @@ Current architecture as of backend `bedc350` and frontend `ec1e029` (2026-11-25)
 
 ## Widget routing and client caching
 
+The dedicated Dashboard Investment Allocation – Underlying Companies widget shares the `exposure` section and the existing allocation doughnut, with no additional backend calculation, migration or cache key beyond its selected scope and section.
+
 The common frontend hook `useInvestmentAnalytics` shares Vue Query keys across identical scope, dates, section and hidden-portfolio settings. Unchanged responses retain the prior analytics object. No-data pending reads poll every five seconds, stale/retrying data every 30 seconds, and ready reads every 60 seconds during US equity market hours or 120 seconds outside them; polling in the background and focus refetch are disabled. The focused history hook is independent and shares persisted daily totals for performance, value vs. invested capital, and portfolio comparison; benchmark also uses it for account history. See the widget and history guides for the full section mapping and cache limits.
 
 ## Diagnostics and remaining work

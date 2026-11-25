@@ -746,7 +746,9 @@ function rebase(value: number | null, base: number | null) {
 }
 const allocationMode = computed(() =>
   String(
-    dashboardRange.value
+    props.kind === 'allocation-underlying'
+      ? 'underlying'
+      : dashboardRange.value
       ? props.kind === 'sector'
         ? 'sector'
         : props.kind === 'geography'
@@ -1305,8 +1307,8 @@ const health = computed(() =>
         separately; deposits and withdrawals are never counted as investment gains.
       </p>
     </template>
-    <template v-if="['allocation', 'sector', 'geography'].includes(kind)">
-      <WidgetHeaderControls v-if="!dashboardRange"
+    <template v-if="['allocation', 'allocation-underlying', 'sector', 'geography'].includes(kind)">
+      <WidgetHeaderControls v-if="!dashboardRange && kind !== 'allocation-underlying'"
         ><select
           :value="allocationMode"
           aria-label="Investment allocation mode"

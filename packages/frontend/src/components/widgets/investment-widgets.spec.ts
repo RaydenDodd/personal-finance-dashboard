@@ -16,7 +16,7 @@ vi.mock('@/composable/data-queries/user-settings', () => ({ useUserSettings: () 
 vi.mock('@/lib/posthog', () => ({ trackAnalyticsEvent: vi.fn() }));
 import { useDashboardLayout } from '@/pages/dashboard/composables/use-dashboard-layout';
 
-describe('all twenty investment widgets in the native dashboard lifecycle', () => {
+describe('all twenty-one investment widgets in the native dashboard lifecycle', () => {
   beforeEach(() => {
     localStorage.clear();
     settings.value = { dashboard: { widgets: [{ widgetId: 'balance-trend', colSpan: 2 }] } };
@@ -94,8 +94,8 @@ describe('all twenty investment widgets in the native dashboard lifecycle', () =
   );
 
   it('does not automatically add investment widgets to existing or default dashboards', () => {
-    expect(INVESTMENT_WIDGETS).toHaveLength(20);
-    expect(new Set(INVESTMENT_WIDGETS.map(([kind]) => kind)).size).toBe(20);
+    expect(INVESTMENT_WIDGETS).toHaveLength(21);
+    expect(new Set(INVESTMENT_WIDGETS.map(([kind]) => kind)).size).toBe(21);
     expect(DEFAULT_DASHBOARD_LAYOUT.every((w) => !w.widgetId.startsWith('investment-'))).toBe(true);
     const scope = effectScope();
     expect(scope.run(() => useDashboardLayout().activeWidgets.value)).toEqual([
@@ -177,6 +177,8 @@ describe('investment widget presentation settings', () => {
     const normalized = investmentWidgetSettings('allocation', stored);
     expect(normalized).toMatchObject({ ...stored, portfolioIds: ['a', 'b'] });
     expect(stored.portfolioIds).toEqual(['a', 'a', 'b']);
+    expect(investmentWidgetSettings('allocation-underlying').allocationMode).toBe('underlying');
+    expect(investmentWidgetSettings('allocation-underlying', { allocationMode: 'holdings' }).allocationMode).toBe('underlying');
     expect(investmentWidgetSettings('sector').allocationMode).toBe('sector');
     expect(investmentWidgetSettings('geography').allocationMode).toBe('country');
   });

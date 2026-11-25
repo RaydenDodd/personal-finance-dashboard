@@ -13,6 +13,11 @@ export const INVESTMENT_WIDGETS = [
   ],
   ['benchmark', 'Benchmark Comparison', 'Comparable normalized performance and benchmark coverage.'],
   ['allocation', 'Investment Allocation', 'Direct holdings, underlying companies and thirteen allocation modes.'],
+  [
+    'allocation-underlying',
+    'Investment Allocation – Underlying Companies',
+    'Company exposure doughnut combining direct shares and the underlying companies in funds.',
+  ],
   ['heatmap', 'Portfolio Heatmap / Treemap', 'Explore your investments by size, performance, grouping and exposure.'],
   ['holdings', 'Combined Holdings', 'Consolidated positions, weighted cost basis and account drill-down.'],
   ['exposure', 'Underlying Company Exposure', 'Direct and indirect company exposure with fund provenance.'],
@@ -100,7 +105,9 @@ export const investmentWidgetSettings = (
     ? stored.dateRange
     : '1Y',
   allocationMode:
-    typeof stored.allocationMode === 'string' &&
+    kind === 'allocation-underlying'
+      ? 'underlying'
+      : typeof stored.allocationMode === 'string' &&
     INVESTMENT_ALLOCATION_MODES.some(([id]) => id === stored.allocationMode)
       ? stored.allocationMode
       : kind === 'sector'

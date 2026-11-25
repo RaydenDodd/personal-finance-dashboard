@@ -203,6 +203,7 @@ const pageByKind: Record<string, string> = {
   dividends: 'dividends',
   'dividend-calendar': 'dividends',
   allocation: 'allocation',
+  'allocation-underlying': 'allocation',
   heatmap: 'allocation',
   exposure: 'allocation',
   sector: 'allocation',
@@ -273,6 +274,7 @@ const saveSettings = async (patch: Record<string, unknown>, close = false) => {
           dashboardRange &&
           [
             'allocation',
+            'allocation-underlying',
             'sector',
             'geography',
             'holdings',
