@@ -1,11 +1,12 @@
 # Shared Windows build and upload implementation.
 function Invoke-PrebuiltUpload {
-    param([Parameter(Mandatory)][ValidateSet('frontend','backend')][string]$Component, [string]$SshHost = 'cardgames-pi', [switch]$NoUpload, [switch]$FullTests, [string]$TestPattern, [string]$TestBase)
+    param([Parameter(Mandatory)][ValidateSet('frontend','backend')][string]$Component, [string]$SshHost = 'cardgames-pi', [switch]$NoUpload, [switch]$Test, [switch]$FullTests, [switch]$TraceCommands, [string]$TestPattern, [string]$TestBase)
     $ErrorActionPreference = 'Stop'
     $root = Split-Path -Parent $PSScriptRoot
     Push-Location -LiteralPath $root
     $transcriptStarted = $false
     $log = $null
+    $totalTimer = [Diagnostics.Stopwatch]::StartNew()
     try {
         $logDir = Join-Path $root 'private/deploy-logs'
         New-Item -ItemType Directory -Path $logDir -Force | Out-Null
@@ -13,12 +14,15 @@ function Invoke-PrebuiltUpload {
         Start-Transcript -Path $log | Out-Null
         $transcriptStarted = $true
         Write-Host "Build log: $log"
-        Set-PSDebug -Trace 1
+        if ($TraceCommands) { Set-PSDebug -Trace 1 }
         function Invoke-Checked {
             param([string]$Command, [string[]]$Arguments)
             Write-Host ("> " + $Command + " " + ($Arguments -join ' ')) -ForegroundColor Cyan
+            $commandTimer = [Diagnostics.Stopwatch]::StartNew()
             & $Command @Arguments
-            if ($LASTEXITCODE -ne 0) { throw "$Command failed (exit $LASTEXITCODE)." }
+            $exitCode = $LASTEXITCODE
+            Write-Host ("Elapsed: {0:N1}s ({1})" -f $commandTimer.Elapsed.TotalSeconds, $Command) -ForegroundColor DarkCyan
+            if ($exitCode -ne 0) { throw "$Command failed (exit $exitCode)." }
         }
         $changes = & git status --porcelain --untracked-files=no
         if ($LASTEXITCODE -ne 0 -or $changes) { throw 'Commit or stash tracked changes before building.' }
@@ -28,14 +32,16 @@ function Invoke-PrebuiltUpload {
         $remote = & git rev-parse origin/dev
         if ($LASTEXITCODE -ne 0 -or $remote -ne $commit) { throw 'Pull dev first; HEAD must match origin/dev.' }
         if (-not (Test-Path -LiteralPath 'node_modules')) { throw 'Run npm ci at the repository root first.' }
-        if ($FullTests -and ($TestPattern -or $TestBase)) { throw 'Use -FullTests alone, or choose a focused test selection.' }
+        if ($FullTests -and ($Test -or $TestPattern -or $TestBase)) { throw 'Use -FullTests alone, or choose a focused test selection.' }
         if ($TestPattern -and $TestBase) { throw 'Use either -TestPattern or -TestBase, not both.' }
-        # Default to tests introduced or modified since the last successfully
+        $runTests = $Test -or $FullTests -or [bool]$TestPattern -or [bool]$TestBase
+        # Targeted mode selects tests introduced or modified since the last successfully
         # built component. First run uses the parent of HEAD, or an explicit base.
         $testState = Join-Path $root "private/last-tested-$Component.txt"
-        $testMode = 'changed tests'
+        $testMode = 'fast (no unit tests)'
         $testFiles = @()
-        if (-not $FullTests -and -not $TestPattern) {
+        if ($runTests -and -not $FullTests -and -not $TestPattern) {
+            $testMode = 'changed tests'
             $baseRef = $TestBase
             if (-not $baseRef -and (Test-Path -LiteralPath $testState)) {
                 $baseRef = (Get-Content -LiteralPath $testState -Raw).Trim()
@@ -51,30 +57,34 @@ function Invoke-PrebuiltUpload {
             } | ForEach-Object { $_ -replace "^packages/$Component/", '' })
             Write-Host "Test comparison: $baseRef -> $commit; changed test files: $($testFiles.Count)"
         } elseif ($FullTests) { $testMode = 'full unit suite' }
-        else { $testMode = "explicit pattern: $TestPattern" }
+        elseif ($TestPattern) { $testMode = "explicit pattern: $TestPattern" }
         Write-Host "Test mode: $testMode" -ForegroundColor Cyan
         if ($Component -eq 'backend') {
+            # Vite transpiles TypeScript without checking it; preserve this gate in every mode.
             Invoke-Checked npm.cmd @('run','typecheck','-w','packages/backend')
-            Invoke-Checked npm.cmd @('run','test:lint-rules','-w','packages/backend')
+            if ($FullTests) { Invoke-Checked npm.cmd @('run','test:lint-rules','-w','packages/backend') }
             $argsForTests = @('run','test:unit','-w','packages/backend','--','--testMatch','**/*.unit.ts','--passWithNoTests=false','--runInBand')
             if ($FullTests) { Invoke-Checked npm.cmd $argsForTests }
             elseif ($TestPattern) { Invoke-Checked npm.cmd ($argsForTests + @("--testPathPattern=$TestPattern")) }
             elseif ($testFiles.Count -gt 0) {
                 $pattern = ($testFiles | ForEach-Object { [regex]::Escape(($_ -split '/')[-1]) + '$' }) -join '|'
                 Invoke-Checked npm.cmd ($argsForTests + @("--testPathPattern=$pattern"))
-            } else { Write-Host 'No changed backend unit tests; typecheck and lint rules still ran.' -ForegroundColor Yellow }
+            } elseif ($runTests) { Write-Host 'No changed backend unit tests; typecheck still ran.' -ForegroundColor Yellow }
+            else { Write-Host 'Fast mode: unit and lint-rule tests skipped.' -ForegroundColor Yellow }
         } else {
             $argsForTests = @('run','test:unit','-w','packages/frontend','--','--run')
             if ($FullTests) { Invoke-Checked npm.cmd $argsForTests }
             elseif ($TestPattern) { Invoke-Checked npm.cmd ($argsForTests + @($TestPattern)) }
             elseif ($testFiles.Count -gt 0) { Invoke-Checked npm.cmd ($argsForTests + $testFiles) }
-            else { Write-Host 'No changed frontend unit tests; production build still runs Vue type checking.' -ForegroundColor Yellow }
+            elseif ($runTests) { Write-Host 'No changed frontend unit tests; production build still runs Vue type checking.' -ForegroundColor Yellow }
+            else { Write-Host 'Fast mode: unit tests skipped; production build includes Vue type checking.' -ForegroundColor Yellow }
         }
         Invoke-Checked npm.cmd @('run','build','-w',"packages/$Component")
         $after = & git status --porcelain --untracked-files=no
         if ($LASTEXITCODE -ne 0 -or $after) { throw 'Tracked files changed during build; review before packaging.' }
         $afterCommit = & git rev-parse HEAD
         if ($LASTEXITCODE -ne 0 -or $afterCommit -ne $commit) { throw 'HEAD changed during build.' }
+        $packageTimer = [Diagnostics.Stopwatch]::StartNew()
         $name = "$Component-$commit"
         $artifact = Join-Path $root "private/$name"
         if (Test-Path -LiteralPath $artifact) { Remove-Item -LiteralPath $artifact -Recurse -Force }
@@ -94,6 +104,7 @@ function Invoke-PrebuiltUpload {
             [IO.File]::WriteAllText((Join-Path $artifact 'docker-entrypoint.sh'), $entry.Replace("`r`n", "`n"), [Text.UTF8Encoding]::new($false))
         }
         [IO.File]::WriteAllText((Join-Path $artifact 'source-commit.txt'), $commit, [Text.UTF8Encoding]::new($false))
+        Write-Host ("Packaging elapsed: {0:N1}s" -f $packageTimer.Elapsed.TotalSeconds)
         if (-not $NoUpload) {
             $stage = "$name-upload-$([Guid]::NewGuid().ToString('N'))"
             Invoke-Checked ssh.exe @($SshHost, "mkdir -p ~/personal-finance-dashboard/private/$stage")
@@ -119,6 +130,7 @@ function Invoke-PrebuiltUpload {
         throw
     } finally {
         Set-PSDebug -Off
+        Write-Host ("Total elapsed: {0:N1}s" -f $totalTimer.Elapsed.TotalSeconds)
         if ($log) { Write-Host "Log: $log" }
         if ($transcriptStarted) { Stop-Transcript | Out-Null }
         Pop-Location

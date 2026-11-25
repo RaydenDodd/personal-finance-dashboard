@@ -20,6 +20,8 @@ if [ "${1:-}" != "--logged" ]; then
   printf 'Log: %s\n' "$log"
   exit 1
 fi
+start_seconds=$SECONDS
+trap 'printf "Total deployment elapsed: %ss\\n" "$((SECONDS-start_seconds))"' EXIT
 set -x
 exec 9>private/prebuilt-deploy.lock
 flock -n 9 || { echo 'Another prebuilt deployment is running.' >&2; exit 1; }
@@ -42,8 +44,8 @@ container=$(compose ps -q "$service")
 test -n "$container" || { echo "No running $service container; use the initial deployment guide." >&2; exit 1; }
 previous=$(docker inspect --format '{{.Image}}' "$container")
 docker tag "$previous" "$image:previous"
-sh deploy/build-prebuilt-frontend.sh "$artifact"
-if ! compose up -d --no-deps --no-build --wait --wait-timeout 300 "$service"; then
+time sh deploy/build-prebuilt-frontend.sh "$artifact"
+if ! time compose up -d --no-deps --no-build --wait --wait-timeout 300 "$service"; then
   echo "Deployment failed. Previous image retained as $image:previous." >&2
   echo 'Inspect logs before rollback; an image rollback cannot reverse database migrations.' >&2
   exit 1

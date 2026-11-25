@@ -23,9 +23,10 @@ git pull --ff-only origin dev
 .\deploy\build-backend.ps1
 ```
 
-By default both scripts run only new or modified unit test files since the last successful test/build/upload recorded locally in `private/last-tested-<component>.txt`. On the first run the comparison is `HEAD^`; use `-TestBase <earlier-commit>` to include a multi-commit update. A successful full or nonempty changed-test run records the commit; an explicit pattern or a zero-test run does not advance the marker. Backend typecheck and lint-rule tests and frontend production build/Vue typecheck remain mandatory. Use `-FullTests` for the entire unit suite, or `-TestPattern <pattern>` for a focused Jest regex or Vitest filename filter. Selected test failures stop the build. No changed tests is reported explicitly, not treated as a full-suite pass. Existing tests affected indirectly by changed code may not run in changed-test mode. Run the full suite with isolated Redis and other test dependencies available before major releases. E2e belongs in an isolated test environment.
+By default both scripts use fast mode: compile, package and upload, with mandatory backend TypeScript checking (Vite alone does not check types) and the frontend build's existing Vue type check. Unit tests and backend lint-rule tests are skipped in fast mode. Use `-Test` to run new or modified unit tests since the last successfully tested component commit (`private/last-tested-<component>.txt`), or `-TestBase <commit>` for an explicit comparison base. First targeted run defaults to `HEAD^`. Use `-TestPattern <pattern>` for a Jest regex or Vitest filename filter, or `-FullTests` for the full unit suite and backend lint-rule checks. Failed selected checks block packaging. Fast mode and zero-test or explicit-pattern runs do not advance the tested marker. Full-suite testing with isolated dependencies and e2e/migration validation remain recommended for major releases. Every native command, packaging and overall build duration is printed; `-TraceCommands` restores verbose PowerShell tracing. Pi deployments retain the database backup and health checks in all modes.
 
 ```powershell
+.\deploy\build-backend.ps1 -Test
 .\deploy\build-backend.ps1 -TestBase f72f553
 .\deploy\build-backend.ps1 -TestPattern 'read-model'
 .\deploy\build-backend.ps1 -FullTests
