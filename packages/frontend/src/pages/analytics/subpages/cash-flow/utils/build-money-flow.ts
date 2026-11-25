@@ -21,6 +21,8 @@ export interface MoneyFlowNode {
   share: number;
   /** Nodes folded into an "other" node, largest first. */
   children?: MoneyFlowNode[];
+  /** Exact contributing transaction categories, not a synthetic node or destination ID. */
+  transactionCategoryIds?: string[];
 }
 
 export interface MoneyFlowGroup extends MoneyFlowNode {
@@ -105,11 +107,15 @@ const rollUp = ({
   categoriesById: Record<string, CategoryModel>;
 }): MoneyFlowNode[] => {
   const totals = new Map<string, number>();
+  const transactionCategories = new Map<string, string[]>();
   for (const [id, entry] of Object.entries(data)) {
     const amount = pick(entry);
     if (amount <= 0) continue;
     const targetId = resolveAncestorAtLevel({ id, level, categoriesById });
     totals.set(targetId, (totals.get(targetId) ?? 0) + amount);
+    const ids = transactionCategories.get(targetId) ?? [];
+    ids.push(id);
+    transactionCategories.set(targetId, ids);
   }
 
   const total = shareOf ?? [...totals.values()].reduce((sum, v) => sum + v, 0);
@@ -126,6 +132,7 @@ const rollUp = ({
         parentName: parent?.name,
         value,
         share: value / total,
+        transactionCategoryIds: transactionCategories.get(id),
       };
     })
     .sort((a, b) => b.value - a.value);
@@ -135,7 +142,7 @@ const rollUp = ({
 
   const rest = nodes.slice(kept.length);
   const restValue = rest.reduce((sum, n) => sum + n.value, 0);
-  return [...kept, { id: OTHER_NODE_ID, name: '', value: restValue, share: restValue / total, children: rest }];
+  return [...kept, { id: OTHER_NODE_ID, name: '', value: restValue, share: restValue / total, children: rest, transactionCategoryIds: rest.flatMap((node) => node.transactionCategoryIds ?? []) }];
 };
 
 const groupExpenses = ({
@@ -227,17 +234,23 @@ export const buildMoneyFlow = ({
   const savedByCategory = new Map<string, number>();
   // Only the expense side of a tax category leaves `spend`: a tax refund stays an income source.
   const taxByCategory = new Map<string, number>();
+  const savingsTransactionCategories = new Map<string, string[]>();
+  const taxTransactionCategories = new Map<string, string[]>();
   for (const [id, entry] of Object.entries(data)) {
     const chain = ancestorChain({ id, categoriesById });
     const savingsTarget = chain.find((ancestorId) => savingsIds.has(ancestorId));
     if (savingsTarget) {
       const saved = entry.expense - entry.income;
-      if (saved > 0) savedByCategory.set(savingsTarget, (savedByCategory.get(savingsTarget) ?? 0) + saved);
+      if (saved > 0) {
+        savedByCategory.set(savingsTarget, (savedByCategory.get(savingsTarget) ?? 0) + saved);
+        savingsTransactionCategories.set(savingsTarget, [...(savingsTransactionCategories.get(savingsTarget) ?? []), id]);
+      }
       continue;
     }
     const taxTarget = chain.find((ancestorId) => taxIds.has(ancestorId));
     if (taxTarget && entry.expense > 0) {
       taxByCategory.set(taxTarget, (taxByCategory.get(taxTarget) ?? 0) + entry.expense);
+      taxTransactionCategories.set(taxTarget, [...(taxTransactionCategories.get(taxTarget) ?? []), id]);
       spend[id as RecordId] = { ...entry, expense: 0 };
       continue;
     }
@@ -263,6 +276,7 @@ export const buildMoneyFlow = ({
       color: categoriesById[id]?.color,
       value,
       share: value / taxes,
+      transactionCategoryIds: taxTransactionCategories.get(id),
     }))
     .sort((a, b) => b.value - a.value);
   const net = income - expenses - taxes;
@@ -274,6 +288,7 @@ export const buildMoneyFlow = ({
       name: categoriesById[id]?.name ?? id,
       color: categoriesById[id]?.color,
       value,
+      transactionCategoryIds: savingsTransactionCategories.get(id),
     })),
   ].sort((a, b) => b.value - a.value);
   const destinationsTotal = destinations.reduce((sum, n) => sum + n.value, 0);

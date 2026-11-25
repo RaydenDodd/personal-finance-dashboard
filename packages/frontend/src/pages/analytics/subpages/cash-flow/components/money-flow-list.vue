@@ -13,6 +13,12 @@
           v-for="(node, index) in group.nodes"
           :key="index"
           class="relative grid grid-cols-[auto_1fr_auto_auto] items-center gap-2 overflow-hidden rounded-md px-2 py-1.5 text-[13px]"
+          :class="target(group.branch, node) && 'cursor-pointer hover:bg-muted/50'"
+          :role="target(group.branch, node) ? 'link' : undefined"
+          :tabindex="target(group.branch, node) ? 0 : undefined"
+          @click="open(group.branch, node)"
+          @keydown.enter.prevent="open(group.branch, node)"
+          @keydown.space.prevent="open(group.branch, node)"
         >
           <span
             class="absolute inset-y-0 left-0 opacity-10"
@@ -49,7 +55,12 @@ import {
   pctOfIncome,
 } from '../utils/build-money-flow';
 
-const props = defineProps<{ flow: MoneyFlow }>();
+import { moneyFlowDrillDown, type FlowBranch, type FlowDrillDown } from '../utils/money-flow-drill-down';
+
+const props = defineProps<{ flow: MoneyFlow; drillDown?: boolean }>();
+const emit = defineEmits<{ 'drill-down': [target: FlowDrillDown] }>();
+const target = (branch: FlowBranch, node: MoneyFlowNode) => props.drillDown ? moneyFlowDrillDown(props.flow, branch, node) : undefined;
+const open = (branch: FlowBranch, node: MoneyFlowNode) => { const value = target(branch, node); if (value) emit('drill-down', value); };
 
 const { t } = useI18n();
 const { formatBaseCurrency } = useFormatCurrency();
@@ -64,8 +75,9 @@ const listLabel = ({ node }: { node: MoneyFlowNode }) =>
 const groups = computed(() => {
   const { income, expenses, taxes, savings, sources, expenseNodes, taxNodes, savingsNodes } = props.flow;
   return [
-    { label: t('analytics.cashFlow.income'), total: income, hint: '', nodes: sources, color: colors.value.appIncome },
+    { branch: 'income' as const, label: t('analytics.cashFlow.income'), total: income, hint: '', nodes: sources, color: colors.value.appIncome },
     {
+      branch: 'taxes' as const,
       label: t('analytics.cashFlow.composition.taxes'),
       total: taxes,
       hint: pctOfIncome({ value: taxes, income, t }),
@@ -73,6 +85,7 @@ const groups = computed(() => {
       color: colors.value.primary,
     },
     {
+      branch: 'expenses' as const,
       label: t('analytics.cashFlow.expenses'),
       total: expenses,
       hint: pctOfIncome({ value: expenses, income, t }),
@@ -80,6 +93,7 @@ const groups = computed(() => {
       color: colors.value.appExpense,
     },
     {
+      branch: 'savings' as const,
       label: t('analytics.cashFlow.composition.savings'),
       total: savings,
       hint: pctOfIncome({ value: savings, income, t }),

@@ -160,7 +160,7 @@
         </div>
       </div>
 
-      <MoneyFlowList v-if="isCompact && compositionView === 'list'" :flow="flow" />
+      <MoneyFlowList v-if="isCompact && compositionView === 'list'" :flow="flow" :drill-down="canDrillDown" @drill-down="openTransactions" />
       <div v-else class="min-w-0 space-y-2">
         <p v-if="isCompact" class="text-muted-foreground text-xs">
           {{ $t('analytics.cashFlow.composition.scrollHint') }}
@@ -172,7 +172,7 @@
           tabindex="0"
           data-testid="money-flow-scroll"
         >
-          <MoneyFlowChart :flow="flow" :class="isCompact && 'min-w-[720px]'" data-testid="money-flow-diagram" />
+          <MoneyFlowChart :flow="flow" :drill-down="canDrillDown" :class="isCompact && 'min-w-[720px]'" data-testid="money-flow-diagram" @drill-down="openTransactions" />
         </div>
       </div>
     </template>
@@ -208,6 +208,8 @@ import { cn } from '@/lib/utils';
 import { storeToRefs } from 'pinia';
 import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
+import { useRouter } from 'vue-router';
+import { moneyFlowTransactionsLocation, type FlowDrillDown } from '../utils/money-flow-drill-down';
 
 import { buildMoneyFlow, formatShare, pctOfIncome } from '../utils/build-money-flow';
 import CategoryListSkeleton from './category-list-skeleton.vue';
@@ -220,6 +222,7 @@ import PeriodSelector from './period-selector.vue';
 const period = defineModel<Period>('period', { required: true });
 
 const { t } = useI18n();
+const router = useRouter();
 const { categories } = storeToRefs(useCategoriesStore());
 const { formatBaseCurrency } = useFormatCurrency();
 const colors = useChartColors();
@@ -245,6 +248,7 @@ const queryParams = computed(() => ({
 const {
   data: spendings,
   isLoading: spendingsLoading,
+  isPlaceholderData: spendingsPlaceholder,
   error,
 } = useQuery({
   queryKey: [...VUE_QUERY_CACHE_KEYS.analyticsSpendingsByCategories, 'money-flow', queryParams],
@@ -263,6 +267,7 @@ const contributionsParams = computed(() => ({
 const {
   data: contributions,
   isPending: contributionsPending,
+  isPlaceholderData: contributionsPlaceholder,
   error: contributionsError,
 } = useQuery({
   queryKey: [...VUE_QUERY_CACHE_KEYS.analyticsInvestmentContributions, 'money-flow', contributionsParams],
@@ -276,6 +281,7 @@ const venturesParams = computed(() => ({ from: period.value.from, to: period.val
 const {
   data: ventures,
   isPending: venturesPending,
+  isPlaceholderData: venturesPlaceholder,
   error: venturesError,
 } = useQuery({
   queryKey: [...VUE_QUERY_CACHE_KEYS.analyticsVentureContributions, venturesParams],
@@ -284,6 +290,12 @@ const {
   gcTime: QUERY_CACHE_STALE_TIME.ANALYTICS * 2,
   placeholderData: keepPreviousData,
 });
+
+// Previous-period placeholders are visible but must never navigate using the new period.
+const canDrillDown = computed(() => !spendingsPlaceholder.value && !contributionsPlaceholder.value && !venturesPlaceholder.value);
+const openTransactions = (target: FlowDrillDown) => {
+  if (canDrillDown.value) void router.push(moneyFlowTransactionsLocation(period.value, target));
+};
 
 const isLoading = computed(
   () => spendingsLoading.value || contributionsPending.value || venturesPending.value || settingsPending.value,

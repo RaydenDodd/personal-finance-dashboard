@@ -1,5 +1,6 @@
 import {
   CATEGORY_TYPES,
+  TRANSACTION_TYPES,
   type CategoryModel,
   type GetSpendingsByCategoriesByTypeReturnType,
   type GetInvestmentContributionsResponse,
@@ -7,6 +8,7 @@ import {
 import { describe, expect, it } from 'vitest';
 
 import { CASH_NODE_ID, DEFICIT_NODE_ID, OTHER_NODE_ID, buildMoneyFlow } from './build-money-flow';
+import { moneyFlowDrillDown, moneyFlowTransactionsLocation } from './money-flow-drill-down';
 
 const category = ({ id, parentId = null, name = id }: { id: string; parentId?: string | null; name?: string }) =>
   ({
@@ -186,7 +188,7 @@ describe('buildMoneyFlow', () => {
       ['income', 1300],
       [DEFICIT_NODE_ID, 400],
     ]);
-    expect(flow.savingsNodes).toEqual([{ id: 'deposit', name: 'Deposit', color: '#deposit', value: 900, share: 1 }]);
+    expect(flow.savingsNodes).toEqual([{ id: 'deposit', name: 'Deposit', color: '#deposit', value: 900, share: 1, transactionCategoryIds: ['deposit'] }]);
   });
 
   it('rolls both sides up to the requested level', () => {
@@ -291,7 +293,7 @@ describe('buildMoneyFlow', () => {
     });
 
     expect(flow).toMatchObject({ income: 1340, expenses: 800, taxes: 300, net: 240, savings: 240, deficit: 0 });
-    expect(flow.taxNodes).toEqual([{ id: 'taxes', name: 'Taxes', color: '#taxes', value: 300, share: 1 }]);
+    expect(flow.taxNodes).toEqual([{ id: 'taxes', name: 'Taxes', color: '#taxes', value: 300, share: 1, transactionCategoryIds: ['incomeTax', 'propertyTax'] }]);
     expect(flow.expenseNodes.map((n) => [n.id, n.value])).toEqual([
       ['housing', 500],
       ['food', 300],
@@ -336,7 +338,7 @@ describe('buildMoneyFlow', () => {
     });
 
     expect(flow).toMatchObject({ taxes: 0, taxNodes: [] });
-    expect(flow.savingsNodes).toEqual([{ id: 'deposit', name: 'Deposit', color: '#deposit', value: 900, share: 1 }]);
+    expect(flow.savingsNodes).toEqual([{ id: 'deposit', name: 'Deposit', color: '#deposit', value: 900, share: 1, transactionCategoryIds: ['deposit'] }]);
   });
 
   it('lists independent tax roots largest first with their share of taxes', () => {
@@ -440,4 +442,17 @@ describe('buildMoneyFlow', () => {
     expect(flow.sources).toEqual([expect.objectContaining({ id: 'ghost', name: 'Ghost', color: '#0f0', value: 10 })]);
     expect(flow.net).toBe(10);
   });
+});
+
+
+it('drills into the exact source, expense group and folded Other categories', () => {
+  const flow = buildMoneyFlow({ data, categories, sourceLevel: 1, expenseLevel: 2, topN: 1 });
+  expect(moneyFlowDrillDown(flow, 'income', flow.sources[0])).toEqual({ categoryIds: ['salary', 'bonus', 'gifts'], transactionType: TRANSACTION_TYPES.income });
+  const food = flow.expenseGroups.find((node) => node.id === 'food')!;
+  expect(moneyFlowDrillDown(flow, 'expenses', food)?.categoryIds).toEqual(['groceries']);
+  expect(moneyFlowDrillDown(flow, 'savings', flow.savingsNodes.find((node) => node.id === CASH_NODE_ID))).toBeUndefined();
+  const target = moneyFlowDrillDown(flow, 'expenses', food)!;
+  expect(moneyFlowTransactionsLocation({ from: new Date(2026, 1, 1), to: new Date(2026, 1, 28) }, target)).toMatchObject({ query: { start: '2026-02-01', end: '2026-02-28', categoryIds: ['groceries'], transactionType: TRANSACTION_TYPES.expense } });
+  const folded = buildMoneyFlow({ data, categories, sourceLevel: 3, expenseLevel: 1, topN: 1 });
+  expect(moneyFlowDrillDown(folded, 'income', folded.sources.find((node) => node.id === OTHER_NODE_ID))?.categoryIds).toEqual(['bonus', 'gifts']);
 });

@@ -56,6 +56,7 @@ import {
   nodeLabel,
 } from '../utils/build-money-flow';
 import { spreadTops } from '../utils/spread-tops';
+import { moneyFlowDrillDown, type FlowDrillDown, type FlowBranch } from '../utils/money-flow-drill-down';
 
 const props = defineProps<{
   flow: MoneyFlow;
@@ -64,7 +65,9 @@ const props = defineProps<{
   chartLabel?: string;
   fitHeight?: boolean;
   responsive?: boolean;
+  drillDown?: boolean;
 }>();
+const emit = defineEmits<{ 'drill-down': [target: FlowDrillDown] }>();
 
 const { t } = useI18n();
 const { locale } = useDateLocale();
@@ -462,6 +465,27 @@ const renderChart = () => {
         content: categoryTooltip({ node, color, shareLabel: outflow.shareLabel }),
       };
     });
+  const targets = new Map<string, FlowDrillDown>();
+  const registerTarget = (key: string, branch: FlowBranch, node?: MoneyFlowNode) => {
+    if (!props.drillDown) return;
+    const target = moneyFlowDrillDown(flow, branch, node);
+    if (target) targets.set(key, target);
+  };
+  registerTarget('hub', 'income');
+  leftRows.forEach(({ key, node }) => registerTarget(key, 'income', node));
+  for (const branch of ['expenses', 'taxes', 'savings'] as const) registerTarget('mid:' + branch, branch);
+  flow.expenseGroups.forEach((node) => registerTarget('group:' + node.id, 'expenses', node));
+  rightLeaves.forEach(({ key, parentKey, node }) => registerTarget(key, parentKey === 'mid:savings' ? 'savings' : parentKey === 'mid:taxes' ? 'taxes' : 'expenses', node));
+  const bindDrillDown = <T extends d3.BaseType>(selection: d3.Selection<T, unknown, null, undefined>, key: string, label: string) => {
+    const target = targets.get(key);
+    if (!target) return selection;
+    return selection.attr('role', 'link').attr('tabindex', 0).attr('aria-label', `View transactions: ${label}`)
+      .attr('pointer-events', 'auto').style('cursor', 'pointer')
+      .on('click.drilldown', (event: MouseEvent) => { event.stopPropagation(); tooltip.visible = false; emit('drill-down', target); })
+      .on('keydown.drilldown', (event: KeyboardEvent) => {
+        if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); tooltip.visible = false; emit('drill-down', target); }
+      });
+  };
   const leavesOf = ({ parentKey }: { parentKey: string }) => rightLeaves.filter((leaf) => leaf.parentKey === parentKey);
   const rightRows = rightLeaves.map(({ node, box, content, key }) =>
     labelRow({ node, box, content, key, max: rightLabelColumn - LABEL_OFFSET }),
@@ -497,8 +521,8 @@ const renderChart = () => {
     ends: [string, string];
     names: [string, string];
     value: number;
-  }) =>
-    bindTooltip({
+  }) => {
+    const link = bindTooltip({
       selection: links
         .append('path')
         .attr('d', d)
@@ -512,6 +536,9 @@ const renderChart = () => {
         emphasize({ isActive: (path) => path === event.currentTarget }),
       )
       .on('mouseleave.highlight', () => emphasize());
+    // Incoming source ribbons select the source, outgoing ribbons the destination.
+    return bindDrillDown(link, ends[1] === 'hub' ? ends[0] : ends[1], names.join(' → '));
+  };
   // Namespaced so it stacks with the tooltip handlers on the same element.
   const bindHighlight = <T extends d3.BaseType>({
     selection,
@@ -545,7 +572,10 @@ const renderChart = () => {
       .attr('rx', 2)
       .attr('fill', color);
     if (content) bindTooltip({ selection: rect, content });
-    if (key) bindHighlight({ selection: rect, key });
+    if (key) {
+      bindHighlight({ selection: rect, key });
+      bindDrillDown(rect, key, content?.title ?? key);
+    }
     return rect;
   };
 
@@ -558,6 +588,7 @@ const renderChart = () => {
     text,
     amount = '',
     stacked = false,
+    key,
   }: {
     x: number;
     y: number;
@@ -565,6 +596,7 @@ const renderChart = () => {
     text: string;
     amount?: string;
     stacked?: boolean;
+    key?: string;
   }) => {
     const group = labels
       .append('g')
@@ -574,6 +606,7 @@ const renderChart = () => {
       .attr('stroke', colors.card)
       .attr('stroke-width', 3)
       .attr('pointer-events', 'none');
+    if (key) bindDrillDown(group, key, text);
     const name = group.append('text').attr('x', x).attr('y', y).attr('font-weight', 600).text(text);
     if (!amount) return;
     const detail = stacked
@@ -588,7 +621,7 @@ const renderChart = () => {
       .text(stacked ? amount : ` ${amount}`);
   };
   // A node too short for two lines keeps its name only.
-  const columnLabel = ({ x, box, text, value }: { x: number; box: Box; text: string; value: number }) => {
+  const columnLabel = ({ x, box, text, value, key }: { x: number; box: Box; text: string; value: number; key: string }) => {
     const stacked = fitsTwoLines({ box });
     const amount = stacked ? compactAmount(value) : '';
     const center = { x: x + HUB_WIDTH / 2, y: (box.y0 + box.y1) / 2 };
@@ -613,6 +646,7 @@ const renderChart = () => {
       text,
       amount,
       stacked,
+      key,
     });
   };
 
@@ -628,6 +662,7 @@ const renderChart = () => {
         selection: bindTooltip({ selection: labels.append('g'), content: row.content }),
         key: row.key,
       });
+      bindDrillDown(group, row.key, row.content.title);
       if (halo) group.attr('paint-order', 'stroke').attr('stroke', colors.card).attr('stroke-width', 3);
       const name = group
         .append('text')
@@ -775,6 +810,7 @@ const renderChart = () => {
         text: fitText({ text, font: nameFont, max: labelMax }),
         amount: stacked[i] || inlineWidth <= labelMax ? amount : '',
         stacked: stacked[i],
+        key: `group:${group.id}`,
       });
     });
   };
@@ -796,11 +832,11 @@ const renderChart = () => {
   });
   drawSideLabels({ x: xRight + NODE_WIDTH + LABEL_OFFSET, items: rightRows });
 
-  columnLabel({ x: xHub, box: hubBox, text: hubLabel, value: hub });
+  columnLabel({ x: xHub, box: hubBox, text: hubLabel, value: hub, key: 'hub' });
   outflows.forEach((node, i) => {
     const box = midBoxes[i]!;
     if (!isTerminal({ outflow: node })) {
-      columnLabel({ x: xMid, box, text: node.name, value: node.value });
+      columnLabel({ x: xMid, box, text: node.name, value: node.value, key: `mid:${node.id}` });
       return;
     }
     const label = labels
@@ -815,6 +851,7 @@ const renderChart = () => {
           ? fitText({ text: node.name, font: nameFont, max: width - (xMid + HUB_WIDTH + LABEL_OFFSET) })
           : node.name,
       );
+    bindDrillDown(label, `mid:${node.id}`, node.name);
     const detail = label.append('tspan').attr('font-size', DETAIL_FONT_SIZE).attr('font-weight', 400);
     if (compact) detail.attr('x', xMid + HUB_WIDTH + LABEL_OFFSET).attr('dy', DETAIL_LINE_OFFSET);
     detail.append('tspan').text(` ${compactAmount(node.value)}`);
@@ -853,6 +890,7 @@ watch(
     () => props.totalLabel,
     () => props.fitHeight,
     () => props.responsive,
+    () => props.drillDown,
     locale,
     currentTheme,
     baseCurrency,
