@@ -15,6 +15,7 @@ import * as UsersCurrencies from '@models/users-currencies.model';
 import { easternDate } from '@bt/shared/types/investment-market';
 
 import { sqlRows } from './daily-account-cache';
+import { connection } from '@models/connection';
 import { getInvestmentAnalytics, visiblePortfolioSelection } from './service';
 
 export const READ_MODEL_VERSION = 2;
@@ -24,6 +25,24 @@ const MAX_SELECTIONS = 48;
 const MAX_REDIS_BYTES = 512 * 1024;
 const CACHE_SECONDS = 90;
 const projectionInFlight = new Map<string, Promise<InvestmentAnalyticsReadResponse>>();
+let lastSnapshotCleanup = 0;
+
+/** The range adapter changes only these top-level fields. Keep whole holdings
+ * so unavailable values and per-account metadata survive exactly as before. */
+export function investmentRangeOverlay(result: InvestmentAnalytics) {
+  return { holdings: result.holdings, performanceTotals: result.performanceTotals };
+}
+
+/** Remove all unused fields from each operand before joining the overlay. */
+export function analyticsProjectionSql(section: InvestmentAnalyticsSection) {
+  const omitted = omittedAnalyticsFields(section);
+  const project = (value: string, extra: string[] = []) => {
+    const fields = [...new Set([...omitted, ...extra])];
+    return fields.length ? `(${value} - ARRAY[${fields.map((field) => "'" + field + "'").join(',')}]::text[])` : value;
+  };
+  return `CASE WHEN m."rangeBaseKey" IS NULL THEN ${project('m.payload')}
+    ELSE ${project('b.payload', ['holdings', 'performanceTotals'])} || ${project('m."rangeOverlay"')} END`;
+}
 
 interface Selection {
   portfolioIds: string[];
@@ -131,14 +150,14 @@ export async function readInvestmentAnalytics({
   const existing = projectionInFlight.get(flightKey);
   if (existing) return existing;
   const work = (async (): Promise<InvestmentAnalyticsReadResponse> => {
-    const omitted = omittedAnalyticsFields(section);
-    // SQL projection happens before network transfer and JSON parsing in Node.
-    // The names are a fixed server-side allowlist, not request-provided SQL.
-    const expression = omitted.length ? `payload - ARRAY[${omitted.map((field) => "'" + field + "'").join(',')}]::text[]` : 'payload';
+    // Project base and overlay independently before transferring the result.
+    const expression = analyticsProjectionSql(section);
     const [stored] = await sqlRows<StoredRow>(`
-      SELECT "builtAt", failures, "sourceRevision", ${expression} AS payload
-      FROM "InvestmentAnalyticsReadModels"
-      WHERE "userId"=:userId AND "selectionKey"=:key
+      SELECT m."builtAt", m.failures, m."sourceRevision", ${expression} AS payload
+      FROM "InvestmentAnalyticsReadModels" m
+      LEFT JOIN "InvestmentAnalyticsRangeBases" b ON b."userId"=m."userId"
+        AND b."baseKey"=m."rangeBaseKey" AND b."baseBuiltAt"=m."rangeBaseBuiltAt"
+      WHERE m."userId"=:userId AND m."selectionKey"=:key
     `, { userId, key });
     if (!stored) return { analytics: null, status: { state: 'pending', builtAt: null } };
     const analytics = stored.payload ? projectInvestmentAnalytics(stored.payload, section) : null;
@@ -165,6 +184,16 @@ export async function refreshNextInvestmentReadModel(): Promise<boolean> {
        OR NOT (selection ? 'currencyCode')
     RETURNING "selectionKey"
   `, { days: RETENTION_DAYS });
+  if (Date.now() - lastSnapshotCleanup >= 10 * 60 * 1000) {
+    await sqlRows(`
+      DELETE FROM "InvestmentAnalyticsRangeBases" b
+      WHERE NOT EXISTS (SELECT 1 FROM "InvestmentAnalyticsReadModels" m
+        WHERE m."userId"=b."userId" AND m."rangeBaseKey"=b."baseKey"
+          AND m."rangeBaseBuiltAt"=b."baseBuiltAt")
+      RETURNING "baseKey"
+    `);
+    lastSnapshotCleanup = Date.now();
+  }
   const revision = await sourceRevision();
   const [row] = await sqlRows<StoredRow>(`
     SELECT "userId", "selectionKey", selection, "builtAt", failures, "sourceRevision", NULL::jsonb AS payload
@@ -185,14 +214,16 @@ export async function refreshNextInvestmentReadModel(): Promise<boolean> {
       return true;
     }
     let rangeBase: InvestmentAnalytics | undefined;
+    let rangeReference: { key: string; builtAt: string } | undefined;
     if (before.performanceFrom && before.performanceThrough) {
       const baseKey = selectionKey({ ...before, performanceFrom: undefined, performanceThrough: undefined });
-      const [base] = await sqlRows<{ payload: InvestmentAnalytics | null }>(`
-        SELECT payload FROM "InvestmentAnalyticsReadModels"
+      const [base] = await sqlRows<{ payload: InvestmentAnalytics | null; exactBuiltAt: string }>(`
+        SELECT payload, "builtAt"::text AS "exactBuiltAt" FROM "InvestmentAnalyticsReadModels"
         WHERE "userId"=:userId AND "selectionKey"=:baseKey AND "sourceRevision"=:revision
           AND "builtAt" IS NOT NULL AND failures=0 AND payload IS NOT NULL
       `, { userId: row.userId, baseKey, revision });
       rangeBase = base?.payload ?? undefined;
+      if (rangeBase && base) rangeReference = { key: baseKey, builtAt: base.exactBuiltAt };
     }
     const result = await getInvestmentAnalytics({
       userId: row.userId,
@@ -209,16 +240,44 @@ export async function refreshNextInvestmentReadModel(): Promise<boolean> {
     // Never publish a range overlay assembled across two source revisions.
     if (rangeBase && await sourceRevision() !== revision) return true;
     const serializeStart = Date.now();
-    const payload = JSON.stringify(result);
+    const payload = JSON.stringify(rangeReference ? investmentRangeOverlay(result) : result);
     const serializationMs = Date.now() - serializeStart;
     const persistStart = Date.now();
-    await sqlRows(`
-      UPDATE "InvestmentAnalyticsReadModels"
-      SET payload=CAST(:payload AS jsonb), "sourceRevision"=:revision, "builtAt"=now(), "retryAt"=now()+interval '90 seconds', failures=0
-      WHERE "userId"=:userId AND "selectionKey"=:key RETURNING "selectionKey"
-    `, { userId: row.userId, key: row.selectionKey, payload, revision });
+    const params = { userId: row.userId, key: row.selectionKey, payload, revision };
+    if (rangeReference) {
+      // Copy a particular base version only once, inside the same transaction
+      // that publishes its dependent range. Never join a newer base to old gains.
+      const reference = { ...params, baseKey: rangeReference.key, baseBuiltAt: rangeReference.builtAt };
+      await connection.sequelize.transaction(async () => {
+        await sqlRows(`
+          INSERT INTO "InvestmentAnalyticsRangeBases" ("userId", "baseKey", "baseBuiltAt", payload)
+          SELECT "userId", "selectionKey", "builtAt", payload FROM "InvestmentAnalyticsReadModels"
+          WHERE "userId"=:userId AND "selectionKey"=:baseKey AND "builtAt"=CAST(:baseBuiltAt AS timestamptz)
+            AND "sourceRevision"=:revision AND payload IS NOT NULL
+          ON CONFLICT DO NOTHING RETURNING "baseKey"
+        `, reference);
+        const published = await sqlRows(`
+          UPDATE "InvestmentAnalyticsReadModels" m
+          SET payload=NULL, "rangeOverlay"=CAST(:payload AS jsonb), "rangeBaseKey"=b."baseKey", "rangeBaseBuiltAt"=b."baseBuiltAt",
+            "sourceRevision"=:revision, "builtAt"=now(), "retryAt"=now()+interval '90 seconds', failures=0
+          FROM "InvestmentAnalyticsRangeBases" b
+          WHERE m."userId"=:userId AND m."selectionKey"=:key AND b."userId"=m."userId"
+            AND b."baseKey"=:baseKey AND b."baseBuiltAt"=CAST(:baseBuiltAt AS timestamptz)
+          RETURNING m."selectionKey"
+        `, reference);
+        if (!published.length) throw new Error('Investment range base disappeared before publication');
+      });
+    } else {
+      await sqlRows(`
+        UPDATE "InvestmentAnalyticsReadModels"
+        SET payload=CAST(:payload AS jsonb), "rangeOverlay"=NULL, "rangeBaseKey"=NULL, "rangeBaseBuiltAt"=NULL,
+          "sourceRevision"=:revision, "builtAt"=now(), "retryAt"=now()+interval '90 seconds', failures=0
+        WHERE "userId"=:userId AND "selectionKey"=:key RETURNING "selectionKey"
+      `, params);
+    }
     logger.info('Investment analytics read-model publication', {
       payloadBytes: Buffer.byteLength(payload),
+      storageMode: rangeReference ? 'range-overlay' : 'full',
       serializationMs,
       persistenceMs: Date.now() - persistStart,
       reusedBase: Boolean(rangeBase),

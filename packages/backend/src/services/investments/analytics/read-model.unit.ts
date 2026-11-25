@@ -1,4 +1,5 @@
-import { canonicalSelection, readStatus, selectionKey } from './read-model';
+import { analyticsProjectionSql, canonicalSelection, investmentRangeOverlay, readStatus, selectionKey } from './read-model';
+import type { InvestmentAnalytics } from '@bt/shared/types/investment-analytics';
 
 describe('investment analytics durable read model', () => {
   const selection = { portfolioIds: ['b', 'a', 'a'], benchmarkSymbols: ['SPY'], hiddenPortfolioIds: ['c'] };
@@ -43,4 +44,23 @@ it('marks a persisted result stale on source revision changes', () => {
   const now = Date.now();
   expect(readStatus({ builtAt: new Date(now), failures: 0, sourceRevision: 'a' }, now, 'b').state).toBe('stale');
   expect(readStatus({ builtAt: new Date(now), failures: 0, sourceRevision: 'a' }, now, 'a').state).toBe('ready');
+});
+
+
+describe('range overlay storage', () => {
+  it('keeps only the range-dependent collections and restores the original result', () => {
+    const base = { generatedAt: 'base', holdings: [{ id: 's', personalReturns: { custom: null } }], performanceTotals: {}, history: [{ date: '2020-01-01' }], exposure: [{ id: 'fund' }] };
+    const result = { ...base, holdings: [{ id: 's', personalReturns: { custom: '2.5' } }], performanceTotals: { custom: { gain: '10', percent: '2.5', covered: 1, total: 1 } } };
+    const overlay = investmentRangeOverlay(result as unknown as InvestmentAnalytics);
+    expect(Object.keys(overlay).sort()).toEqual(['holdings', 'performanceTotals']);
+    expect({ ...base, ...overlay }).toEqual(result);
+  });
+  it('projects the pinned base separately from the custom range', () => {
+    const sql = analyticsProjectionSql('holdings');
+    expect(sql).toContain('b.payload - ARRAY[');
+    expect(sql).toContain('m."rangeOverlay" - ARRAY[');
+    expect(sql).toContain("'history'");
+    expect(sql).toContain("'holdings'");
+    expect(analyticsProjectionSql('all')).toContain('|| m."rangeOverlay"');
+  });
 });
