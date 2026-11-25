@@ -1,11 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { calendarRoles, monthBounds, monthCells, spendingEntries, summarizeDay } from './finance-calendar-model';
+import { calendarRoles, fundingEntries, monthBounds, monthCells, spendingEntries, summarizeDay } from './finance-calendar-model';
 
 describe('monthly finance calendar', () => {
   it('uses calendar days and correct Sunday offsets including leap years', () => {
     expect(monthBounds('2024-02')).toEqual({ from: '2024-02-01', to: '2024-02-29' });
     expect(monthCells('2026-11')[0]).toEqual({ date: '2026-11-01', day: 1 });
     expect(monthCells('2024-02').slice(0, 4)).toEqual([null, null, null, null]);
+    expect(monthCells('2026-11')).toHaveLength(35);
+    expect(monthCells('2026-08')).toHaveLength(42);
+  });
+  it('colors actual funding transactions without a separate payroll or principal source', () => {
+    expect(fundingEntries({ entries: [{ id: 'a', date: '2026-11-21', group: 'Investments', label: 'M1', amount: 200, currency: 'USD' }] }))
+      .toMatchObject([{ id: 'a', group: 'Investments', color: calendarRoles[1]!.color, amount: 200 }]);
   });
   it('sizes activity bands proportionally without treating a withdrawal as zero', () => {
     const rows = calendarRoles.map((role, i) => ({

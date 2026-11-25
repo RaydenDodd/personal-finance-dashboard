@@ -1,6 +1,5 @@
 import { FINANCIAL_COLORS } from '@bt/shared/financial-colors';
-import type { GetInvestmentContributionsResponse, GetPivotReportResponse } from '@bt/shared/types';
-import type { PayrollDashboard } from '@bt/shared/types/payroll';
+import type { GetPivotReportResponse } from '@bt/shared/types';
 
 export interface CalendarEntry {
   id: string;
@@ -13,10 +12,7 @@ export interface CalendarEntry {
   note?: string;
 }
 export interface FundingCalendarResponse {
-  investments: GetInvestmentContributionsResponse;
-  currencyCode: string;
-  savings: { id: string; date: string; label: string; amount: number; currency: string; note: string }[];
-  savingsAvailable: boolean;
+  entries: (Omit<CalendarEntry, 'color' | 'group'> & { group: 'Income' | 'Investments' | 'Savings' })[];
 }
 
 export const calendarRoles = [
@@ -35,35 +31,20 @@ export function monthBounds(month: string) {
 export function monthCells(month: string) {
   const { from, to } = monthBounds(month);
   const first = new Date(from + 'T12:00:00Z').getUTCDay();
-  return [
+  const cells = [
     ...Array.from({ length: first }, () => null),
     ...Array.from({ length: Number(to.slice(-2)) }, (_, i) => ({
       day: i + 1, date: month + '-' + String(i + 1).padStart(2, '0'),
     })),
   ];
+  while (cells.length % 7 !== 0) cells.push(null);
+  return cells;
 }
 
-export function fundingEntries(payroll?: PayrollDashboard, funding?: FundingCalendarResponse): CalendarEntry[] {
-  const pay = (payroll?.statements ?? []).filter((row) =>
-    Number.isFinite(row.totals.net) && row.totals.net !== 0 && !row.incompleteFields?.includes('net'),
-  ).map((row) => ({
-    id: 'pay:' + row.id, date: row.payDate.slice(0, 10), group: 'Income',
-    label: payroll?.employments.find((job) => job.id === row.employmentId)?.employerName ?? 'Paycheck',
-    amount: row.totals.net, currency: row.currency, color: FINANCIAL_COLORS.income,
-    note: 'Recorded take-home pay',
+export function fundingEntries(funding?: FundingCalendarResponse): CalendarEntry[] {
+  return (funding?.entries ?? []).map(row => ({
+    ...row, color: calendarRoles.find(role => role.group === row.group)!.color,
   }));
-  const investments = (funding?.investments.buckets ?? []).flatMap((bucket) =>
-    bucket.byPortfolio.filter((row) => row.amount !== 0 && !!funding?.currencyCode).map((row) => ({
-      id: 'invest:' + bucket.periodStart + ':' + row.portfolioId, date: bucket.periodStart, group: 'Investments',
-      label: funding?.investments.portfolios.find((p) => p.portfolioId === row.portfolioId)?.name ?? 'Portfolio',
-      amount: row.amount, currency: funding!.currencyCode, color: FINANCIAL_COLORS.investments,
-      note: 'Net external portfolio funding',
-    })),
-  );
-  const savings = (funding?.savings ?? []).map((row) => ({
-    ...row, id: 'save:' + row.id, group: 'Savings', color: FINANCIAL_COLORS.savings,
-  }));
-  return [...pay, ...investments, ...savings];
 }
 
 export function spendingEntries(report?: GetPivotReportResponse): CalendarEntry[] {

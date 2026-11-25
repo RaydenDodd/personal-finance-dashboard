@@ -3,9 +3,7 @@ import { authenticateSession } from '@middlewares/better-auth';
 import { Router } from 'express';
 import { createController } from '@controllers/helpers/controller-factory';
 import { getPivotTableReport } from '@services/stats/reports/pivot.report';
-import { getInvestmentContributionsReport } from '@services/stats/reports/investment-contributions.report';
-import { getBaseCurrency } from '@models/users-currencies.model';
-import { getCashFlows, getFinanceAccounts } from '@services/personal-finance';
+import { getFundingCalendar } from '@services/stats/funding-calendar';
 import { z } from 'zod';
 
 const router = Router({});
@@ -44,27 +42,8 @@ router.get('/calendar/spending', createController(calendarQuery, async ({ user, 
   }),
 })));
 
-router.get('/calendar/funding', createController(calendarQuery, async ({ user, query }) => {
-  const owner = user.id === Number(process.env.FINANCE_OWNER_USER_ID || '1');
-  const [investments, currency, accounts, flows] = await Promise.all([
-    getInvestmentContributionsReport({ userId: user.id, ...query, granularity: 'daily' }),
-    getBaseCurrency({ userId: user.id }),
-    owner ? getFinanceAccounts(user.id) : Promise.resolve([]),
-    owner ? getCashFlows(user.id, undefined, query) : Promise.resolve([]),
-  ]);
-  const byId = new Map(accounts.map((account) => [account.id, account]));
-  const savings = flows.flatMap((flow) => {
-    if (flow.opening || flow.amount <= 0 || !['contribution', 'transfer'].includes(flow.type)) return [];
-    const destination = byId.get(flow.type === 'transfer' ? flow.toAccountId ?? '' : flow.accountId);
-    const origin = byId.get(flow.accountId);
-    if (!destination?.included || destination.categoryId !== 'savings' || destination.balanceKind !== 'asset') return [];
-    if (flow.type === 'transfer' && origin?.categoryId === 'savings') return [];
-    return [{
-      id: flow.id, date: flow.date, label: destination.name, amount: flow.amount,
-      currency: destination.currencyCode, note: flow.description || 'Recorded savings deposit',
-    }];
-  });
-  return { data: { investments, currencyCode: currency?.currencyCode ?? '', savings, savingsAvailable: owner } };
-}));
+router.get('/calendar/funding', createController(calendarQuery, async ({ user, query }) => ({
+  data: await getFundingCalendar({ userId: user.id, ...query }),
+})));
 
 export default router;
