@@ -8,6 +8,9 @@ export interface BrokerExportEvent {
   rowNumber: number;
   broker: 'robinhood' | 'm1';
   date: string;
+  postedDate?: string;
+  securityId?: string;
+  securityIdType?: string;
   kind: BrokerExportKind;
   action: string;
   symbol: string | null;
@@ -24,6 +27,13 @@ export interface BrokerExportResult {
   events: BrokerExportEvent[];
   issues: string[];
   hasCompleteHoldings: false;
+}
+
+function m1DetailDate(raw: string): string | null {
+  const match = /^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{1,2}),\s+(\d{4})$/.exec(raw.trim());
+  if (!match) return null;
+  const month = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].indexOf(match[1]!) + 1;
+  return dateOnly(month + '/' + match[2] + '/' + match[3]);
 }
 
 function dateOnly(raw: string): string | null {
@@ -64,10 +74,11 @@ export function parseBrokerPortfolioExport({
   if (!accountKey.trim()) throw new Error('An explicit source account key is required');
   const rows = parse(fileContent, { bom: true, skip_empty_lines: true, relax_column_count: true }) as string[][];
   const headers = rows[0]?.map((cell) => cell.trim());
+  const m1Detail = ['Date', 'Posted Date', 'Symbol', 'Description', 'Transaction Type', 'Amount', 'Units', 'Unit Type', 'Unit Price', 'Security Id', 'Security Id Type'].every((header) => headers?.includes(header));
   const broker =
     headers?.includes('Trans Code') && headers.includes('Activity Date')
       ? 'robinhood'
-      : headers?.join('|') === 'Date|Activity|Value|Summary'
+      : (m1Detail || headers?.join('|') === 'Date|Activity|Value|Summary')
         ? 'm1'
         : null;
   if (!broker || !headers) throw new Error('Unsupported broker export columns');
@@ -76,21 +87,45 @@ export function parseBrokerPortfolioExport({
   const occurrences = new Map<string, number>();
   for (const [index, raw] of rows.slice(1).entries()) {
     const get = (column: string) => (raw[headers.indexOf(column)] ?? '').trim();
-    const date = dateOnly(get(broker === 'robinhood' ? 'Activity Date' : 'Date'));
-    if (!date) {
+    const date = m1Detail ? m1DetailDate(get('Date')) : dateOnly(get(broker === 'robinhood' ? 'Activity Date' : 'Date'));
+    const postedDate = m1Detail ? m1DetailDate(get('Posted Date')) : null;
+    if (!date || (m1Detail && !postedDate)) {
       issues.push(`Row ${index + 2}: missing/invalid source date`);
       continue;
     }
-    const action = get(broker === 'robinhood' ? 'Trans Code' : 'Activity');
+    const sourceAction = get(m1Detail ? 'Transaction Type' : broker === 'robinhood' ? 'Trans Code' : 'Activity');
+    const action = m1Detail && sourceAction === 'PURCHASED' ? 'Buy' : m1Detail && sourceAction === 'SOLD' ? 'Sell' : sourceAction;
     let symbol =
-      broker === 'robinhood' ? get('Instrument') || null : (get('Summary').match(/^([A-Z][A-Z0-9.-]*)\s/)?.[1] ?? null);
-    const description = get(broker === 'robinhood' ? 'Description' : 'Summary') || action;
-    const quantity = broker === 'robinhood' ? brokerDecimal(get('Quantity')) : null;
-    const reportedPrice = broker === 'robinhood' ? brokerDecimal(get('Price')) : null;
-    const cashAmount = brokerDecimal(get(broker === 'robinhood' ? 'Amount' : 'Value'));
+      m1Detail ? get('Symbol') || null : broker === 'robinhood' ? get('Instrument') || null : (get('Summary').match(/^([A-Z][A-Z0-9.-]*)\s/)?.[1] ?? null);
+    const description = get(m1Detail || broker === 'robinhood' ? 'Description' : 'Summary') || action;
+    const sourceQuantity = m1Detail ? brokerDecimal(get('Units')) : null;
+    const quantity = m1Detail && sourceQuantity !== null ? new Big(sourceQuantity).abs().toString() : broker === 'robinhood' ? brokerDecimal(get('Quantity')) : null;
+    const reportedPrice = m1Detail ? brokerDecimal(get('Unit Price')) : broker === 'robinhood' ? brokerDecimal(get('Price')) : null;
+    const sourceCash = brokerDecimal(get(m1Detail || broker === 'robinhood' ? 'Amount' : 'Value'));
+    // M1 detailed activity uses positive purchase cost and negative sale proceeds,
+    // opposite the cash-ledger convention for these two actions only.
+    const cashAmount = m1Detail && ['Buy', 'Sell'].includes(action) && sourceCash !== null ? new Big(sourceCash).neg().toString() : sourceCash;
+    const securityId = m1Detail ? get('Security Id') : '';
+    const securityIdType = m1Detail ? get('Security Id Type') : '';
     let kind: BrokerExportKind = 'review',
       issue: string | null = null;
-    if (broker === 'robinhood') {
+    if (m1Detail) {
+      if (['Buy', 'Sell'].includes(action)) {
+        if (!symbol || !quantity || new Big(quantity).lte(0) || !reportedPrice || new Big(reportedPrice).lte(0) ||
+            cashAmount === null || sourceQuantity === null || get('Unit Type') !== 'SHARES' ||
+            (action === 'Buy' ? new Big(cashAmount).gte(0) || new Big(sourceQuantity).lte(0) : new Big(cashAmount).lte(0) || new Big(sourceQuantity).gte(0))) {
+          issue = 'Trade lacks valid execution details or has conflicting source signs';
+        } else kind = 'trade';
+      } else if (sourceAction === 'TRANSFER' && cashAmount !== null && new Big(cashAmount).gt(0) && /^ACH deposit of .+ completed\.$/i.test(description)) {
+        kind = 'cash';
+      } else if (sourceAction === 'DIVIDEND' && symbol && cashAmount !== null && new Big(cashAmount).gt(0)) {
+        kind = 'dividend';
+      } else if (sourceAction === 'OTHER' && /^Securities lending interest of .+ received\.$/i.test(description) && cashAmount !== null && new Big(cashAmount).gt(0)) {
+        kind = 'interest';
+      } else if (['FEE', 'SRVCHG', 'MARGININTEREST'].includes(sourceAction) && cashAmount !== null && new Big(cashAmount).lt(0)) {
+        kind = 'fee';
+      } else issue = 'Unrecognized transfer, reversal, award, correction or unsupported activity requires review';
+    } else if (broker === 'robinhood') {
       if (['Buy', 'Sell'].includes(action)) {
         if (
           !symbol ||
@@ -134,6 +169,7 @@ export function parseBrokerPortfolioExport({
       reportedPrice,
       cashAmount,
       description,
+      ...(m1Detail ? ['m1-detailed-v1', postedDate, securityId, securityIdType] : []),
     ]);
     const occurrence = (occurrences.get(identity) ?? 0) + 1;
     occurrences.set(identity, occurrence);
@@ -145,6 +181,7 @@ export function parseBrokerPortfolioExport({
       rowNumber: index + 2,
       broker,
       date,
+      ...(m1Detail ? { postedDate: postedDate!, securityId, securityIdType } : {}),
       kind,
       action,
       symbol,
@@ -155,7 +192,8 @@ export function parseBrokerPortfolioExport({
       issue,
     });
   }
-  if (broker === 'm1')
+  if (m1Detail) issues.push('Detailed M1 executions are available; complete opening positions, cash and corporate-action coverage are not established by this export. Reconcile overlapping sources before applying.');
+  else if (broker === 'm1')
     issues.push(
       'M1 activity summary has no executed trades or opening/current holdings. Holdings, cost basis and total investment returns cannot be reconstructed.',
     );

@@ -67,3 +67,32 @@ describe('broker portfolio source normalization', () => {
     expect(brokerSymbolsNeedingReview(parsed.events)).toEqual(['ABC', 'XYZ']);
   });
 });
+
+const m1Header = 'Date,Posted Date,Symbol,Description,Transaction Type,Amount,Units,Unit Type,Unit Price,Security Id,Security Id Type';
+describe('M1 detailed execution export', () => {
+  const deposit = '"Jan 5, 2025","Jan 5, 2025",,ACH deposit of $50 completed.,TRANSFER,$50.00,--,CURRENCY,--,,';
+  const buy = '"Jan 6, 2025","Jan 6, 2025",ABC,0.5 shares purchased.,PURCHASED,$50.00,0.5,SHARES,$100.00,123456789,CUSIP';
+  const sell = '"Jan 7, 2025","Jan 8, 2025",ABC,0.1 shares sold.,SOLD,-$10.00,-0.1,SHARES,$100.00,123456789,CUSIP';
+  const parse = (rows: string[]) => parseBrokerPortfolioExport({ accountKey: 'synthetic-m1', fileContent: [m1Header, ...rows].join('\n') });
+  it('normalizes purchase and sale signs and retains both dates and security identity', () => {
+    const result = parse([buy, sell, deposit]);
+    expect(result.events).toHaveLength(3);
+    expect(result.events[0]).toMatchObject({ kind: 'trade', action: 'Buy', quantity: '0.5', cashAmount: '-50', securityId: '123456789', securityIdType: 'CUSIP' });
+    expect(result.events[1]).toMatchObject({ kind: 'trade', action: 'Sell', quantity: '0.1', cashAmount: '10', postedDate: '2025-01-08' });
+    expect(result.events[2]).toMatchObject({ kind: 'cash', cashAmount: '50' });
+    expect(result.hasCompleteHoldings).toBe(false);
+  });
+  it('preserves repeated same-day deposit occurrences and stable overlapping source identities', () => {
+    const first = parse([deposit, buy, deposit]);
+    const second = parse([sell, deposit, deposit, buy]);
+    expect(new Set(first.events.map(e => e.sourceRowId)).size).toBe(3);
+    expect(second.events.slice(1).map(e => e.sourceRowId).sort()).toEqual(first.events.map(e => e.sourceRowId).sort());
+  });
+  it('keeps returned ACH and bonuses out of external funding', () => {
+    const result = parse([
+      '"Jan 5, 2025","Jan 5, 2025",,ACH deposit of $50 was returned.,OTHER,-$50.00,--,CURRENCY,--,,',
+      '"Jan 5, 2025","Jan 5, 2025",,Sign Up Bonus,CASH,$10.00,--,CURRENCY,--,,',
+    ]);
+    expect(result.events.map(e => e.kind)).toEqual(['review', 'review']);
+  });
+});
