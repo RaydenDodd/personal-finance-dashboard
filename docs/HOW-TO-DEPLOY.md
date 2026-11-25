@@ -23,7 +23,14 @@ git pull --ff-only origin dev
 .\deploy\build-backend.ps1
 ```
 
-The frontend script runs Vitest in non-watch mode and the production build (which includes Vue type checking). The backend script runs TypeScript checking, lint-rule tests and the Jest unit suite with the Windows-compatible glob and explicit failure on no tests. These are unit checks, not a full e2e or production verification suite. Fixture-dependent tests may skip; review the output. E2e belongs in an isolated test environment.
+By default both scripts run only new or modified unit test files since the last successful test/build/upload recorded locally in `private/last-tested-<component>.txt`. On the first run the comparison is `HEAD^`; use `-TestBase <earlier-commit>` to include a multi-commit update. A successful full or nonempty changed-test run records the commit; an explicit pattern or a zero-test run does not advance the marker. Backend typecheck and lint-rule tests and frontend production build/Vue typecheck remain mandatory. Use `-FullTests` for the entire unit suite, or `-TestPattern <pattern>` for a focused Jest regex or Vitest filename filter. Selected test failures stop the build. No changed tests is reported explicitly, not treated as a full-suite pass. Existing tests affected indirectly by changed code may not run in changed-test mode. Run the full suite with isolated Redis and other test dependencies available before major releases. E2e belongs in an isolated test environment.
+
+```powershell
+.\deploy\build-backend.ps1 -TestBase f72f553
+.\deploy\build-backend.ps1 -TestPattern 'read-model'
+.\deploy\build-backend.ps1 -FullTests
+.\deploy\build-frontend.ps1 -FullTests
+```
 
 Both build scripts check tracked cleanliness and exact origin/dev identity, package into `private/<component>-<full-commit>`, stage/upload over SCP, and report success/failure. `-NoUpload` leaves a local package only; `-SshHost` overrides the default alias. An already published artifact for the same commit is not overwritten. Reuse it if verified or remove it only when no deployment is using it.
 
