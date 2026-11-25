@@ -114,10 +114,11 @@ export function useInvestmentHistory({
       selection.value,
       [...(settings.value?.ui?.hiddenPortfolioIds ?? [])].sort(),
     ]),
-    queryFn: async () => {
+    queryFn: async ({ queryKey }) => {
+      const request = queryKey[2] as typeof selection.value;
       const r = await api.get("/investments/analytics/history", {
-        ...selection.value,
-        portfolioIds: selection.value.portfolioIds.join(","),
+        ...request,
+        portfolioIds: request.portfolioIds.join(","),
       });
       return historyChartAdapter(
         (r.data ?? r) as unknown as InvestmentAccountHistoryResponse,

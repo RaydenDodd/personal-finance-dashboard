@@ -38,8 +38,9 @@ export function useInvestmentAnalytics({
     ]),
     queryFn: async ({ queryKey }) => {
       const previous = client.getQueryData<Awaited<ReturnType<typeof getInvestmentAnalyticsReadModel>>>(queryKey);
+      const request = queryKey[1] as typeof selection.value;
       const next = await getInvestmentAnalyticsReadModel({
-        ...selection.value,
+        ...request,
         knownBuiltAt: previous?.analytics ? previous.status.builtAt ?? undefined : undefined,
       });
       return next.unchanged && previous?.analytics ? { ...next, analytics: previous.analytics } : next;

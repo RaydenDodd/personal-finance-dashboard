@@ -11,7 +11,7 @@ const props = defineProps<{ class?: string }>();
     class="-mx-1 min-h-0"
     :class="bounded ? 'flex-1' : 'max-h-96'"
     :viewport-class="
-      ['pl-1 pr-3 md:overscroll-contain-if-scrollable', !bounded && 'max-h-96'].filter(Boolean).join(' ')
+      ['pl-1 pr-3 overscroll-y-auto', !bounded && 'max-h-96'].filter(Boolean).join(' ')
     "
     data-module-scroll
   >

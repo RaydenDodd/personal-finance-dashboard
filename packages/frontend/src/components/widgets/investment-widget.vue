@@ -151,8 +151,15 @@ const broad = useInvestmentAnalytics({
 const narrow = useInvestmentHistory({
   portfolioIds,
   enabled: () => focusedHistory.value || kind.value === 'benchmark',
-  includeCapital: () => ['performance', 'portfolio-comparison', 'value-capital', 'benchmark'].includes(kind.value),
-  gainFrom: () => investmentRange(settings.value, '1900-01-01').from,
+  includeCapital: () => kind.value === 'value-capital' || kind.value === 'benchmark' ||
+    (['performance', 'portfolio-comparison'].includes(kind.value) && settings.value.unit !== 'dollars'),
+  gainFrom: () => {
+    const range = investmentRange(settings.value, '1900-01-01');
+    const short = Date.parse(payrollToday()) - Date.parse(range.from) <= 7 * 86400000;
+    const needsPeriodReturns = kind.value === 'benchmark' ||
+      (['performance', 'portfolio-comparison'].includes(kind.value) && settings.value.unit !== 'dollars');
+    return needsPeriodReturns || short ? range.from : undefined;
+  },
   includeEvents: () => Boolean(settings.value.showEvents),
 });
 const data = computed(() =>
@@ -241,7 +248,7 @@ const saveSettings = async (patch: Record<string, unknown>, close = false) => {
 
 <template>
   <WidgetWrapper
-    :is-fetching="isFetching"
+    :is-fetching="isFetching || isPending"
     :data-investment-widget="kind"
     :compact-header="hasPeriodControls && mobileHeader"
   >
@@ -310,11 +317,11 @@ const saveSettings = async (patch: Record<string, unknown>, close = false) => {
       ref="bodyRef"
       :is="bounded ? ScrollArea : 'div'"
       :class="bounded ? 'min-h-0 min-w-0 flex-1' : 'min-w-0'"
-      viewport-class="pr-2 [&>div]:!block"
+      viewport-class="pr-2 overscroll-y-auto [&>div]:!block"
       :data-investment-instance="widget.instanceId ?? widget.widgetId"
     >
-      <LoadingState v-if="isPending" />
-      <ErrorState v-else-if="error" message="Investment analytics could not be loaded." @retry="refetch()" />
+      <LoadingState v-if="isPending && !data" />
+      <ErrorState v-else-if="error && !data" message="Investment analytics could not be loaded." @retry="refetch()" />
       <AnalyticsPanel
         v-else-if="data"
         :analytics="data"

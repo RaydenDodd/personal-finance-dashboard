@@ -33,7 +33,7 @@
       :class="
         cn(
           isDashboard
-            ? 'flex min-h-0 flex-1 touch-pan-y flex-col overflow-y-auto overscroll-y-contain'
+            ? 'flex min-h-0 flex-1 touch-pan-y flex-col overflow-y-auto overscroll-y-auto'
             : 'h-full overflow-y-auto',
           contentClass,
         )

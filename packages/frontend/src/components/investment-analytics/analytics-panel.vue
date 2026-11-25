@@ -666,11 +666,13 @@ const chartPoints = computed<InvestmentChartPoint[]>(() => {
       .filter((date) => date.slice(0, 10) >= range.value.from && date.slice(0, 10) <= range.value.through)
       .sort();
     // Comparison starts only at an actual shared observation, with no forward-filled index values.
-    const common = dates.find((date) => series.every((row) => row.points.some((point) => point.date === date)));
+    const benchmarkPoints = new Map(series.map((row) => [row.id, new Map(row.points.map((point) => [point.date, point.returnPercent]))]));
+    const portfolioPoints = new Map(comparablePortfolioPoints.value.map((row) => [row.date, row.returnPercent]));
+    const common = dates.find((date) => series.every((row) => benchmarkPoints.get(row.id)?.has(date)));
     if (!common) return [];
     const portfolioBase = chartNumber(comparablePortfolioPoints.value.find((row) => row.date >= common)?.returnPercent);
     const bases = new Map(
-      series.map((row) => [row.id, Number(row.points.find((point) => point.date === common)!.returnPercent)]),
+      series.map((row) => [row.id, Number(benchmarkPoints.get(row.id)!.get(common))]),
     );
     return dates
       .filter((date) => date >= common)
@@ -678,14 +680,14 @@ const chartPoints = computed<InvestmentChartPoint[]>(() => {
         date,
         values: {
           portfolio: rebase(
-            chartNumber(comparablePortfolioPoints.value.find((row) => row.date === date)?.returnPercent),
+            chartNumber(portfolioPoints.get(date)),
             portfolioBase,
           ),
           ...Object.fromEntries(
             series.map((row) => [
               row.id,
               rebase(
-                chartNumber(row.points.find((point) => point.date === date)?.returnPercent),
+                chartNumber(benchmarkPoints.get(row.id)?.get(date)),
                 bases.get(row.id) ?? null,
               ),
             ]),

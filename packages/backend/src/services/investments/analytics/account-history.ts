@@ -129,9 +129,10 @@ export async function getAccountHistory({
     const samples = await intradayAccountHistory(ids, currencyCode, shortFrom, params.through);
     if (samples.length) {
       const baseline = rows.filter((r) => r.date < shortFrom);
+      const dailyByAccountDate = new Map(rows.map((r) => [r.portfolioId + ':' + r.date, r]));
       const sampleRows = samples.flatMap((point) =>
         ids.map((id) => {
-          const daily = rows.find((r) => r.portfolioId === id && r.date === point.date.slice(0, 10));
+          const daily = dailyByAccountDate.get(id + ':' + point.date.slice(0, 10));
           return {
             portfolioId: id,
             date: point.date,
@@ -185,10 +186,16 @@ export async function getAccountHistory({
         { ids },
       )
     : [];
+  const capitalByAccount = new Map<string, typeof tradeCapital>();
+  for (const row of tradeCapital) {
+    const list = capitalByAccount.get(row.portfolioId);
+    if (list) list.push(row);
+    else capitalByAccount.set(row.portfolioId, [row]);
+  }
   const returnFunding = (id: string, date: string, row: (typeof rows)[number] | undefined) =>
     row?.coverage.cash
       ? row.netFunding
-      : (tradeCapital.findLast((t) => t.portfolioId === id && t.date <= date.slice(0, 10))?.capital ?? null);
+      : (capitalByAccount.get(id)?.findLast((t) => t.date <= date.slice(0, 10))?.capital ?? null);
   const periodCapitals: (string | null)[][] = [];
   result.accounts = scope.map((p) => {
     const m = meta.find((r) => r.id === p.id),
