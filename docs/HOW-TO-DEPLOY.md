@@ -35,6 +35,8 @@ By default both scripts use fast mode: compile, package and upload, with mandato
 
 Both build scripts check tracked cleanliness and exact origin/dev identity, package into `private/<component>-<full-commit>`, compress to a single tar.gz, stage/upload over SCP, verify SHA-256, extract and publish without overwriting existing artifacts, and report success/failure. `-NoUpload` leaves a local package only; `-SshHost` overrides the default alias. An already published artifact for the same commit is not overwritten. Reuse it if verified or remove it only when no deployment is using it.
 
+Automated SSH commands disable stdin and terminal allocation (`-n -T`); SSH and SCP both use batch authentication, a 10-second connection timeout and server keepalives (10 seconds, three unanswered probes). Configure a trusted host key and working SSH key/agent in advance. If upload stalls at the first SSH command and resumes on Enter, verify `ssh.exe -n -T -o BatchMode=yes -o ConnectTimeout=10 cardgames-pi "echo SSH_OK"` from the same PowerShell session. If the updated script still pauses, check classic Windows Console QuickEdit/selection mode or try Windows Terminal. The keepalives detect an unresponsive SSH peer, not a slow remote command; no overall transfer deadline is imposed.
+
 On green PASS, SSH into the Pi:
 
 ```powershell

@@ -108,15 +108,21 @@ function Invoke-PrebuiltUpload {
         [IO.File]::WriteAllText((Join-Path $artifact 'source-commit.txt'), $commit, [Text.UTF8Encoding]::new($false))
         Write-Host ("Packaging elapsed: {0:N1}s" -f $packageTimer.Elapsed.TotalSeconds)
         if (-not $NoUpload) {
+            # Uploads are unattended: do not allow ssh to consume console stdin,
+            # request a terminal or prompt for credentials. Bound connection and
+            # unresponsive-peer waits while retaining normal live command output.
+            $connectionOptions = @('-o','BatchMode=yes','-o','ConnectTimeout=10','-o','ServerAliveInterval=10','-o','ServerAliveCountMax=3')
+            $sshOptions = @('-n','-T') + $connectionOptions
+            $scpOptions = @('-B') + $connectionOptions
             $stage = "$name-upload-$([Guid]::NewGuid().ToString('N'))"
             $archive = Join-Path $root "private/$stage.tar.gz"
             try {
                 Invoke-Checked tar.exe @('-czf', $archive, '--options', 'gzip:compression-level=1', '-C', (Join-Path $root 'private'), $name)
                 $hash = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
                 Write-Host ("Compressed artifact: {0:N2} MiB" -f ((Get-Item -LiteralPath $archive).Length / 1MB))
-                Invoke-Checked ssh.exe @($SshHost, "umask 077 && mkdir -p ~/personal-finance-dashboard/private/$stage")
-                Invoke-Checked scp.exe @($archive, "${SshHost}:personal-finance-dashboard/private/$stage/artifact.tar.gz")
-                Invoke-Checked ssh.exe @($SshHost, "set -e; cd ~/personal-finance-dashboard/private; test ! -e $name; echo '$hash  $stage/artifact.tar.gz' | sha256sum -c -; tar -xzf $stage/artifact.tar.gz -C $stage; test -f $stage/$name/source-commit.txt; grep -qx $commit $stage/$name/source-commit.txt; mv -T --no-clobber $stage/$name $name; test ! -e $stage/$name; rm $stage/artifact.tar.gz; rmdir $stage")
+                Invoke-Checked ssh.exe ($sshOptions + @($SshHost, "umask 077 && mkdir -p ~/personal-finance-dashboard/private/$stage"))
+                Invoke-Checked scp.exe ($scpOptions + @($archive, "${SshHost}:personal-finance-dashboard/private/$stage/artifact.tar.gz"))
+                Invoke-Checked ssh.exe ($sshOptions + @($SshHost, "set -e; cd ~/personal-finance-dashboard/private; test ! -e $name; echo '$hash  $stage/artifact.tar.gz' | sha256sum -c -; tar -xzf $stage/artifact.tar.gz -C $stage; test -f $stage/$name/source-commit.txt; grep -qx $commit $stage/$name/source-commit.txt; mv -T --no-clobber $stage/$name $name; test ! -e $stage/$name; rm $stage/artifact.tar.gz; rmdir $stage"))
             } finally {
                 if (Test-Path -LiteralPath $archive) { Remove-Item -LiteralPath $archive -Force }
             }
