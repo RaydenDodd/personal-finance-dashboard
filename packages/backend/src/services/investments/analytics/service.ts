@@ -53,6 +53,7 @@ import { compactAnalytics } from './compact-response';
 import { dailyPositionChange } from './daily-performance';
 import { getFundSnapshots, latestFundSnapshots } from './fund-snapshots';
 import { buildHistory } from './history';
+import { createPriceDateResolver, InvestmentPriceWindowCache } from './price-window-cache';
 import {
   allocation,
   fundOverlap,
@@ -72,6 +73,9 @@ import { sourceQuantityEvidence } from './source-quantity-evidence';
 
 const decimal = (m: Money | string | number): string => (Money.isMoney(m) ? m.toDecimalString(18) : String(m));
 const dateString = (d: Date | string | null | undefined) => (d ? new Date(d).toISOString() : null);
+type AnalyticsPrice = SecurityPriceRow & Pick<SecurityPricing, 'previousClose'>;
+// One bounded dataset in the worker; no user financial data is retained here.
+const priceWindow = new InvestmentPriceWindowCache<AnalyticsPrice>();
 
 export const assertOwnedSelection = (requested: string[] | undefined, owned: string[]): string[] => {
   if (!requested?.length) return owned;
@@ -93,6 +97,7 @@ async function getAnalyticsImpl({
   compact = false,
   overlapPair,
   rangeBase,
+  priceRevision,
 }: {
   userId: number;
   portfolioIds?: string[];
@@ -105,6 +110,7 @@ async function getAnalyticsImpl({
   overlapPair?: [string, string];
   /** Internal worker optimization; caller must verify identical scope and source revision. */
   rangeBase?: InvestmentAnalytics;
+  priceRevision?: string;
 }): Promise<InvestmentAnalytics> {
   const timings: Record<string, number> = {};
   const started = performance.now();
@@ -125,6 +131,8 @@ async function getAnalyticsImpl({
   const userCurrency = await UsersCurrencies.getCurrency({ userId, isDefaultCurrency: true });
   const currencyCode = userCurrency?.currency.code ?? 'USD';
   const today = easternDate();
+  const reuseBase = Boolean(rangeBase && performanceFrom && performanceThrough && compact && !overlapPair);
+  const priceDate = createPriceDateResolver();
   const [brokers, balances, transactions, transfers, storedSnapshots] = await Promise.all([
     BrokerPortfolioData.findAll({ where: { portfolioId: { [Op.in]: ids } } }),
     PortfolioBalances.findAll({ where: { portfolioId: { [Op.in]: ids } } }),
@@ -168,22 +176,27 @@ async function getAnalyticsImpl({
   const benchmarksSecurities = await Securities.findAll({
     where: { symbol: { [Op.in]: benchmarkSymbols }, currencyCode },
   });
-  const loadedPrices = (await SecurityPricing.findAll({
+  const priceIds = [...new Set([...securityIds, ...benchmarksSecurities.map((item) => item.id)])].sort();
+  const priceNow = Date.now();
+  const loadPriceRows = async (from: number, through: number): Promise<AnalyticsPrice[]> => (await SecurityPricing.findAll({
     where: {
-      securityId: { [Op.in]: [...new Set([...securityIds, ...benchmarksSecurities.map((s) => s.id)])] },
-      date: { [Op.lte]: new Date() },
+      securityId: { [Op.in]: priceIds },
+      date: { [Op.lte]: new Date(through) },
       // Account analytics replay daily values. Keep daily bars and recent real
       // quotes; individual security charts still load the complete native history.
       [Op.or]: [
         { priceAsOf: null },
         literal(`("date" AT TIME ZONE 'UTC') = date_trunc('day', "date" AT TIME ZONE 'UTC')`),
-        { date: { [Op.gte]: new Date(Date.now() - 7 * 86400000) } },
+        { date: { [Op.gte]: new Date(from) } },
       ],
     },
     order: [['date', 'ASC']],
     attributes: ['securityId', 'date', 'priceClose', 'unadjustedClose', 'source', 'priceAsOf', 'previousClose'],
     raw: true,
-  })) as unknown as (SecurityPriceRow & Pick<SecurityPricing, 'previousClose'>)[];
+  })) as unknown as AnalyticsPrice[];
+  const priceCacheKey = priceRevision && process.env.INVESTMENT_WORKER_ROLE === 'true'
+    ? JSON.stringify([priceRevision, priceIds]) : undefined;
+  const { rows: loadedPrices, hit: priceCacheHit } = await priceWindow.read(priceCacheKey, priceNow, loadPriceRows);
   const usSessionIds = new Set(
     [...securities, ...benchmarksSecurities].filter(usesUsEquitySession).map((s) => String(s.id)),
   );
@@ -196,6 +209,7 @@ async function getAnalyticsImpl({
       usEquityObservationAllowed(p.priceAsOf),
   );
   const pricesBySecurity = new Map<string, (typeof prices)[number][]>(Map.groupBy(prices, (p) => p.securityId));
+  const baseHoldings = reuseBase ? new Map(rangeBase!.holdings.map((h) => [h.id, h])) : undefined;
   phase('securityPricesMs');
   const health: InvestmentAnalytics['health'] = [];
   const holdingsByIdentity = new Map<string, InvestmentHolding>();
@@ -529,12 +543,14 @@ async function getAnalyticsImpl({
     h.weight = percent(h.marketValue, marketValue ?? new Big(knownSecurities).plus(knownCash).toString());
     h.dividends = sum((dividendsBySecurity.get(h.securityId) ?? []).map((d) => d.amount));
     const series = pricesBySecurity.get(h.securityId) ?? [];
-    h.periodReturns = recordedPriceReturns(
+    // Standard price returns are already in the same-revision snapshot. Only custom return is overlaid.
+    const previousReturns = baseHoldings?.get(h.id)?.periodReturns;
+    h.periodReturns = previousReturns ? { ...previousReturns } : recordedPriceReturns(
       series.map((p) => ({ date: new Date(p.date).toISOString(), price: decimal(p.priceClose) })),
     );
     if (performanceFrom && performanceThrough) {
-      const opening = series.findLast((p) => investmentPriceDate(p.date) < performanceFrom);
-      const closing = series.findLast((p) => investmentPriceDate(p.date) <= performanceThrough);
+      const opening = series.findLast((p) => priceDate(p.date) < performanceFrom);
+      const closing = series.findLast((p) => priceDate(p.date) <= performanceThrough);
       if (
         opening &&
         closing &&
@@ -723,7 +739,6 @@ async function getAnalyticsImpl({
   if (performanceFrom && performanceThrough && (performanceFrom > performanceThrough || performanceThrough > today))
     throw new ValidationError({ message: 'Choose a date range through today or earlier.' });
   phase('holdingsAndDailyMetricsMs');
-  const reuseBase = Boolean(rangeBase && performanceFrom && performanceThrough && compact && !overlapPair);
   const periodDates: Record<string, string> = {
     ...(reuseBase ? {} : positionPeriodDates(today)),
     ...(performanceFrom && performanceThrough
@@ -735,7 +750,7 @@ async function getAnalyticsImpl({
   if (performanceThrough) baselineDays.add(performanceThrough);
   const positionBaselines = new Map<string, string>();
   const positionQuantities = new Map<string, string | null>();
-  const shareUnitFactor = createShareUnitFactor(prices, investmentPriceDate);
+  const shareUnitFactor = createShareUnitFactor(prices, priceDate);
   const nativeRows = transactions.map((t) => ({
     portfolioId: t.portfolioId,
     securityId: t.securityId,
@@ -764,6 +779,8 @@ async function getAnalyticsImpl({
   ].sort((a, b) => +a.date - +b.date);
   phase('positionEvidenceMs');
   const history = buildHistory({
+    sharedUnitFactor: shareUnitFactor,
+    priceDate,
     positionDates: reuseBase ? [...baselineDays] : undefined,
     onHoldingQuantity: (row) => {
       if (baselineDays.has(row.date))
@@ -914,6 +931,7 @@ async function getAnalyticsImpl({
         holdings: holdings.length,
         transactions: transactions.length,
         priceRows: prices.length,
+        priceCacheHit,
         valuationDays: baselineDays.size,
         customRange: true,
         reusedBase: true,
@@ -1437,6 +1455,7 @@ async function getAnalyticsImpl({
       holdings: holdings.length,
       transactions: transactions.length,
       priceRows: prices.length,
+      priceCacheHit,
       historyDays: history.length,
       customRange: Boolean(performanceFrom && performanceThrough),
     });
@@ -1472,8 +1491,9 @@ const deduplicatedAnalytics = withDeduplication(boundedAnalytics, {
     compact,
     overlapPair,
     rangeBase,
+    priceRevision,
   }) =>
-    `investment-analytics:${userId}:${portfolioIds?.toSorted().join(',') ?? 'all'}:${benchmarkSymbols?.join(',') ?? 'default'}:${hiddenPortfolioIds?.toSorted().join(',')}:${compositionRevision}:${performanceFrom}:${performanceThrough}:${compact}:${overlapPair?.join(',')}:${rangeBase?.generatedAt ?? ''}`,
+    `investment-analytics:${userId}:${portfolioIds?.toSorted().join(',') ?? 'all'}:${benchmarkSymbols?.join(',') ?? 'default'}:${hiddenPortfolioIds?.toSorted().join(',')}:${compositionRevision}:${performanceFrom}:${performanceThrough}:${compact}:${overlapPair?.join(',')}:${rangeBase?.generatedAt ?? ''}:${priceRevision ?? ''}`,
   ttl: 1000,
   maxCacheSize: 8,
 });

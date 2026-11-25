@@ -65,6 +65,7 @@ export const buildPriceLookup = (
   rows: SecurityPriceRow[],
   dateKey: (date: Date | string, dateOnly?: boolean) => string = formatDateKey,
   currentShareUnits = false,
+  sharedUnitFactor?: ReturnType<typeof createShareUnitFactor>,
 ): PriceLookup => {
   const pricesBySecurity = new Map<string, Array<{ date: string; price: number }>>();
   const pricesBySecurityAndDate = new Map<string, number>();
@@ -74,7 +75,7 @@ export const buildPriceLookup = (
       .filter((p) => p.unadjustedClose != null)
       .map((p) => `${p.securityId}_${dateKey(p.priceAsOf ?? p.date, p.priceAsOf ? false : undefined)}`),
   );
-  const unitFactor = currentShareUnits ? createShareUnitFactor(rows, dateKey) : null;
+  const unitFactor = currentShareUnits ? (sharedUnitFactor ?? createShareUnitFactor(rows, dateKey)) : null;
   for (const price of rows) {
     const dateStr = dateKey(price.priceAsOf ?? price.date, price.priceAsOf ? false : undefined);
     if (price.unadjustedClose == null && price.source === 'yahoo' && rawDays.has(`${price.securityId}_${dateStr}`))

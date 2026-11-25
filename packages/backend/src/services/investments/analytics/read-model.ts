@@ -23,6 +23,7 @@ const RETENTION_DAYS = 7;
 const MAX_SELECTIONS = 48;
 const MAX_REDIS_BYTES = 512 * 1024;
 const CACHE_SECONDS = 90;
+const projectionInFlight = new Map<string, Promise<InvestmentAnalyticsReadResponse>>();
 
 interface Selection {
   portfolioIds: string[];
@@ -126,25 +127,34 @@ export async function readInvestmentAnalytics({
     const hit = await redisClient.get(cacheKey);
     if (hit) return { analytics: JSON.parse(hit) as InvestmentAnalytics, status };
   } catch { /* PostgreSQL remains authoritative if Redis is unavailable. */ }
-  const omitted = omittedAnalyticsFields(section);
-  // SQL projection happens before network transfer and JSON parsing in Node.
-  // The names are a fixed server-side allowlist, not request-provided SQL.
-  const expression = omitted.reduce((sql, field) => sql + " - '" + field + "'", 'payload');
-  const [stored] = await sqlRows<StoredRow>(`
-    SELECT "builtAt", failures, "sourceRevision", ${expression} AS payload
-    FROM "InvestmentAnalyticsReadModels"
-    WHERE "userId"=:userId AND "selectionKey"=:key
-  `, { userId, key });
-  if (!stored) return { analytics: null, status: { state: 'pending', builtAt: null } };
-  const analytics = stored.payload ? projectInvestmentAnalytics(stored.payload, section) : null;
-  const actualStatus = readStatus(stored, Date.now(), revision);
-  if (analytics && actualStatus.builtAt === status.builtAt && section !== 'all') {
-    const json = JSON.stringify(analytics);
-    if (Buffer.byteLength(json) <= MAX_REDIS_BYTES) {
-      try { await redisClient.set(cacheKey, json, 'EX', CACHE_SECONDS); } catch { /* durable fallback */ }
+  const flightKey = JSON.stringify([cacheKey, revision]);
+  const existing = projectionInFlight.get(flightKey);
+  if (existing) return existing;
+  const work = (async (): Promise<InvestmentAnalyticsReadResponse> => {
+    const omitted = omittedAnalyticsFields(section);
+    // SQL projection happens before network transfer and JSON parsing in Node.
+    // The names are a fixed server-side allowlist, not request-provided SQL.
+    const expression = omitted.length ? `payload - ARRAY[${omitted.map((field) => "'" + field + "'").join(',')}]::text[]` : 'payload';
+    const [stored] = await sqlRows<StoredRow>(`
+      SELECT "builtAt", failures, "sourceRevision", ${expression} AS payload
+      FROM "InvestmentAnalyticsReadModels"
+      WHERE "userId"=:userId AND "selectionKey"=:key
+    `, { userId, key });
+    if (!stored) return { analytics: null, status: { state: 'pending', builtAt: null } };
+    const analytics = stored.payload ? projectInvestmentAnalytics(stored.payload, section) : null;
+    const actualStatus = readStatus(stored, Date.now(), revision);
+    if (analytics && actualStatus.builtAt === status.builtAt && section !== 'all') {
+      const json = JSON.stringify(analytics);
+      if (Buffer.byteLength(json) <= MAX_REDIS_BYTES) {
+        try { await redisClient.set(cacheKey, json, 'EX', CACHE_SECONDS); } catch { /* durable fallback */ }
+      }
     }
+    return { analytics, status: actualStatus };
+  })();
+  projectionInFlight.set(flightKey, work);
+  try { return await work; } finally {
+    if (projectionInFlight.get(flightKey) === work) projectionInFlight.delete(flightKey);
   }
-  return { analytics, status: actualStatus };
 }
 
 /** Called by the scheduler, never the request handler. One selection per run. */
@@ -192,6 +202,7 @@ export async function refreshNextInvestmentReadModel(): Promise<boolean> {
       performanceThrough: before.performanceThrough,
       compact: true,
       rangeBase,
+      priceRevision: revision,
     });
     const after = await resolveSelection(row.userId, row.selection);
     if (selectionKey(after) !== row.selectionKey) return true;

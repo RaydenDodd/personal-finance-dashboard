@@ -47,7 +47,12 @@ export function buildHistory({
   onAnchorDifference,
   sampleTimes,
   positionDates,
+  sharedUnitFactor,
+  priceDate = investmentPriceDate,
 }: {
+  priceDate?: typeof investmentPriceDate;
+  /** Optional identical price-row factor supplied by the current analytics calculation. */
+  sharedUnitFactor?: ReturnType<typeof createShareUnitFactor>;
   /** Only replay requested dates for position callbacks; no account-history series is returned. */
   positionDates?: readonly string[];
   sampleTimes?: string[];
@@ -146,12 +151,12 @@ export function buildHistory({
   const byBroker = new Map(brokers.map((b) => [b.portfolioId, b]));
   const byPortfolio = new Map<string, Map<string, string | null>>();
   const knownByPortfolio = new Map<string, Map<string, string | null>>();
-  const findPrice = createFindPriceForDate(buildPriceLookup(prices, investmentPriceDate, true));
-  const shareUnitFactor = createShareUnitFactor(prices, investmentPriceDate);
+  const shareUnitFactor = sharedUnitFactor ?? createShareUnitFactor(prices, priceDate);
+  const findPrice = createFindPriceForDate(buildPriceLookup(prices, priceDate, true, shareUnitFactor));
   const observed = new Set(
     prices.map((p) => {
       const canonicalDaily = new Date(p.date).toISOString().endsWith('T00:00:00.000Z');
-      return `${p.securityId}:${canonicalDaily ? investmentPriceDate(p.date) : investmentPriceDate(p.priceAsOf ?? p.date, false)}`;
+      return `${p.securityId}:${canonicalDaily ? priceDate(p.date) : priceDate(p.priceAsOf ?? p.date, false)}`;
     }),
   );
   const securityById = new Map<string, Securities>(securities.map((s) => [s.id, s]));
