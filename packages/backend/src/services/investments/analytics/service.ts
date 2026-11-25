@@ -144,7 +144,7 @@ async function getAnalyticsImpl({
     getFundSnapshots(userId),
   ]);
   phase('sourceReadsMs');
-  const transactionsBySecurity = Map.groupBy(transactions, (t) => t.securityId);
+  const transactionsBySecurity = Map.groupBy(transactions, (t) => String(t.securityId));
   let fundSnapshots = latestFundSnapshots(storedSnapshots, today);
   const brokerById = new Map(brokers.map((b) => [b.portfolioId, b]));
   const portfolioById = new Map<string, Portfolios>(scope.map((p) => [p.id, p]));
@@ -745,7 +745,7 @@ async function getAnalyticsImpl({
     settlementAmount: decimal(t.settlementAmount),
     settlementCurrencyCode: t.settlementCurrencyCode,
   })) as TransactionRow[];
-  const nativeRowsByPortfolio = Map.groupBy(nativeRows, (t) => t.portfolioId);
+  const nativeRowsByPortfolio = Map.groupBy(nativeRows, (t) => String(t.portfolioId));
   const historyRows = [
     ...nativeRows,
     ...brokers.flatMap(
@@ -809,7 +809,7 @@ async function getAnalyticsImpl({
     amount: decimal(t.refAmount),
     quantity: decimal(t.quantity),
   }));
-  const periodTradesBySecurity = Map.groupBy(periodTrades, (t) => t.securityId);
+  const periodTradesBySecurity = Map.groupBy(periodTrades, (t) => String(t.securityId));
   for (const h of holdings)
     h.personalReturns = positionPeriodReturns({
       holding: h,

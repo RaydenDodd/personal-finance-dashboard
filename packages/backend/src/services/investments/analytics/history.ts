@@ -83,7 +83,7 @@ export function buildHistory({
     quantity: number;
   }) => void;
 }): InvestmentHistoryPoint[] {
-  const nativeByPortfolio = Map.groupBy(transactions, (t) => t.portfolioId);
+  const nativeByPortfolio = Map.groupBy(transactions, (t) => String(t.portfolioId));
   transactions = [
     ...transactions,
     ...brokers.flatMap(
@@ -121,7 +121,7 @@ export function buildHistory({
     dates.push(d.toISOString().slice(0, 10));
   if (sampleTimes) dates.splice(0, dates.length, ...sampleTimes);
   const dateSet = new Set(dates);
-  const transactionsByPortfolio = Map.groupBy(transactions, (t) => t.portfolioId);
+  const transactionsByPortfolio = Map.groupBy(transactions, (t) => String(t.portfolioId));
   const transfersByDay = Map.groupBy(transfers, (t) => t.date);
   const observedBrokerDates = new Set<string>();
   for (const broker of brokers) {
