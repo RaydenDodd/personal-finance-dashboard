@@ -12,6 +12,8 @@ import {
   saveCompositionSchedule,
 } from '@services/investments/composition/service';
 import { z } from 'zod';
+import { investmentAnalyticsSections } from '@bt/shared/types/investment-analytics-read';
+import { readInvestmentAnalytics } from '@services/investments/analytics/read-model';
 
 const list = z
   .union([z.string().max(4000), z.array(z.string().max(100)).max(100)])
@@ -144,4 +146,17 @@ export const importFundHoldings = createController(
       }),
     };
   },
+);
+
+export const getAnalyticsReadModel = createController(
+  z.object({
+    query: z.object({
+      portfolioIds: list,
+      benchmarkSymbols: list,
+      performanceFrom: z.iso.date().optional(),
+      performanceThrough: z.iso.date().optional(),
+      section: z.enum(investmentAnalyticsSections).default('all'),
+    }),
+  }),
+  async ({ user, query }) => ({ data: await readInvestmentAnalytics({ userId: user.id, ...query }) }),
 );

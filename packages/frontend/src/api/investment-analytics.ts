@@ -1,4 +1,5 @@
 import { api } from '@/api/_api';
+import type { InvestmentAnalyticsReadResponse, InvestmentAnalyticsSection } from '@bt/shared/types/investment-analytics-read';
 import type {
   FundCompositionStatus,
   InvestmentFundOverlap,
@@ -89,4 +90,23 @@ export async function refreshFundComposition(
 }
 export async function setCompositionSchedule(enabled: boolean, contact?: string): Promise<void> {
   await api.post('/investments/analytics/composition/schedule', { enabled, ...(contact ? { contact } : {}) });
+}
+
+export async function getInvestmentAnalyticsReadModel({
+  portfolioIds = [], benchmarks = [], performanceFrom, performanceThrough, section = 'all',
+}: {
+  portfolioIds?: string[];
+  benchmarks?: string[];
+  performanceFrom?: string;
+  performanceThrough?: string;
+  section?: InvestmentAnalyticsSection;
+}): Promise<InvestmentAnalyticsReadResponse> {
+  const response = await api.get('/investments/analytics/read-model', {
+    portfolioIds: portfolioIds.join(','),
+    benchmarkSymbols: benchmarks.join(','),
+    performanceFrom,
+    performanceThrough,
+    section,
+  });
+  return response.data ?? response;
 }
