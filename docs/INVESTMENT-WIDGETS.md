@@ -2,8 +2,7 @@
 
 All twenty optional investment widgets are registered in MoneyMatter's existing
 Add Widget interface. Registration does not change a saved or default dashboard.
-Each adapter uses `useInvestmentAnalytics` and the same `AnalyticsPanel` as the
-Investments pages. No widget computes financial values independently.
+Adapters use the shared `AnalyticsPanel` and either `useInvestmentAnalytics` or the focused `useInvestmentHistory` hook (benchmark uses both). No widget independently replays the financial ledger. See the current routing below.
 
 Every type supports multiple instances identified by the existing `instanceId`,
 with separate portfolio selections, saved date ranges and chart settings. The
@@ -98,3 +97,27 @@ Automated checks:
 On a Node 26 development host, run Vitest with
 `NODE_OPTIONS=--no-experimental-webstorage` so jsdom supplies browser storage.
 The repository's intended runtime remains the Node version in `package.json`.
+
+
+## Current backend routing and performance header (2026-11-25)
+
+All twenty widgets use the shared backend. The original verification above refers to earlier release commits, not automatic verification of the latest optimizations.
+
+| Widget(s) | Backend path / section |
+| --- | --- |
+| Portfolio Performance, Value vs. Invested Capital, Portfolio Comparison | Focused history endpoint |
+| Investment Overview, Realized & Unrealized Gains | Read model: overview |
+| Combined Holdings, Best & Worst Performers, direct Portfolio Heatmap | Read model: holdings |
+| Investment Allocation, Sector Allocation, Geographical Allocation, Underlying Company Exposure, Portfolio Concentration, underlying Heatmap | Read model: exposure |
+| Dividend Income, Dividend Calendar | Read model: dividends |
+| Benchmark Comparison | Read model: benchmarks + focused history |
+| Investment Contributions | Read model: contributions |
+| ETF Overlap | Read model: overlap |
+| Risk & Drawdown | Read model: risk |
+| Market Data Health | Read model: health |
+
+Sections are response projections, not independent replay jobs. Identical scope/section requests share client query state and backend projection work; different sections can reuse the same persisted result. Current heatmap and standard position periods use the undated base where supported; custom direct heatmap/performer dates use a sparse range overlay when the matching base exists. Underlying heatmap requests exposure without a custom position range. See [read-model architecture](INVESTMENT-READ-MODEL.md) and [focused history](INVESTMENT-HISTORY-ARCHITECTURE.md).
+
+Loading states permit dashboard scroll chaining rather than trapping scrolling in an investment widget (28ebe2a); pending/retry remains scoped to the widget. This does not eliminate cold computation time.
+
+Portfolio Performance (ec1e029): the dashboard period controls (1D / 1M when selected) show the selected-period signed dollar gain and percent return inline, with the $ / +/- / % chart-mode segmented control before the open-page arrow and gear. The modes display account value, dollar gain/loss or percent return and persist per instance. The combined performance widget always requests capital/return evidence and the selected opening date, regardless of chart mode; switching modes does not issue a distinct history query. `selectedPerformanceSummary` selects the latest supported observation in the requested dates, rejects mismatched opening dates, and exposes partial/missing evidence instead of fabricated returns. Percentage returns use the backend Modified Dietz series, not simple change in account balance. The shared summary is not duplicated in the widget body. A regression test exists in `investment-widget.spec.ts`; latest compilation and browser validation were not established by the supplied deployment record.

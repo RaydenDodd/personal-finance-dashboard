@@ -1,5 +1,7 @@
 # Consolidated investment analytics: reused and new functionality
 
+For the current runtime path, caching, background worker and range-overlay storage (November 25, 2026), see [Investment analytics durable read model](INVESTMENT-READ-MODEL.md). This document describes the underlying calculation architecture.
+
 The consolidated Investments layer reads existing portfolio records, including hidden broker mirrors. It does not change portfolio management, native account balances, net-worth inclusion, transaction processing, pricing, or lot accounting.
 
 | Capability                                                           | Existing implementation reused                                                                                                                                         | Consolidation work                                                                                                                                                                                                 |
