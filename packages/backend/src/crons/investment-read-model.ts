@@ -5,7 +5,7 @@ import { createScheduledSync } from './lib/create-scheduled-sync';
 
 export const investmentReadModelCron = createScheduledSync({
   name: 'investment analytics read models',
-  cronExpression: '*/30 * * * * *',
+  cronExpression: '*/15 * * * * *',
   timeZone: 'America/New_York',
   scheduleDescription: 'one dirty or due persisted analytics selection per run',
   run: withLock('investment-analytics-read-model', async () => ({

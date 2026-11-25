@@ -7,6 +7,7 @@ import { useModuleLayout } from './composables/use-module-layout';
 import type { DashboardWidgetConfig } from '@/api/user-settings';
 import { Button } from '@/components/lib/ui/button';
 import { payrollToday } from '@/pages/income-management/payroll/date-range';
+import { usesCustomPositionPeriod } from '@/components/investment-analytics/performers-model';
 import { investmentRange } from '@/components/investment-analytics/date-range';
 import AnalyticsPanel from '@/components/investment-analytics/analytics-panel.vue';
 import { investmentSectionForWidget } from '@bt/shared/types/investment-analytics-read';
@@ -123,8 +124,13 @@ const sharedBenchmarks = inject<Ref<string[]> | null>('investment-shared-benchma
 const benchmarks = computed(
   () => sharedBenchmarks?.value ?? (kind.value === 'benchmark' ? settings.value.benchmarks : []),
 );
+const positionPeriod = computed(() => kind.value === 'heatmap'
+  ? String(settings.value.colorBy ?? 'daily')
+  : String(settings.value.performerPeriod ?? 'daily'));
 const performanceFrom = computed(() =>
-  (dashboardRange.value || ['heatmap', 'performers'].includes(kind.value)) && settings.value.from
+  ['heatmap', 'performers'].includes(kind.value) &&
+  !(kind.value === 'heatmap' && settings.value.holdingsMode === 'underlying') &&
+  usesCustomPositionPeriod(settings.value, positionPeriod.value)
     ? String(settings.value.from)
     : undefined,
 );
@@ -139,7 +145,7 @@ const broad = useInvestmentAnalytics({
   benchmarks: () => kind.value === 'benchmark' ? benchmarks.value : [],
   performanceFrom: () => ['heatmap', 'performers'].includes(kind.value) ? performanceFrom.value : undefined,
   performanceThrough: () => ['heatmap', 'performers'].includes(kind.value) ? performanceThrough.value : undefined,
-  section: () => investmentSectionForWidget(kind.value),
+  section: () => kind.value === 'heatmap' && settings.value.holdingsMode === 'underlying' ? 'exposure' : investmentSectionForWidget(kind.value),
   enabled: () => !focusedHistory.value,
 });
 const narrow = useInvestmentHistory({

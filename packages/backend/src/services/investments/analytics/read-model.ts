@@ -162,7 +162,8 @@ export async function refreshNextInvestmentReadModel(): Promise<boolean> {
     WHERE "retryAt" <= now()
       AND "requestedAt" >= now() - interval '10 minutes'
       AND ("builtAt" IS NULL OR ("sourceRevision" IS DISTINCT FROM :revision AND "builtAt" <= now() - interval '90 seconds') OR "builtAt" <= now() - interval '60 minutes')
-    ORDER BY ("builtAt" IS NOT NULL), "retryAt", "requestedAt" DESC LIMIT 1
+    ORDER BY ("builtAt" IS NOT NULL),
+      (selection ? 'performanceFrom'), "retryAt", "requestedAt" DESC LIMIT 1
   `, { revision });
   if (!row) return false;
   try {
