@@ -35,6 +35,7 @@ export const createInvestmentTransactionBodyShape = {
   price: numericString({ allowZero: true }),
   fees: numericString({ allowZero: true }).optional().default('0'),
   name: z.string().optional(),
+  sourceRowId: z.string().regex(/^[a-f0-9]{64}$/).optional(),
   settlementCurrencyCode: currencyCode().optional(),
   settlementAmount: numericString({ allowZero: true }).optional(),
   settlementFees: numericString({ allowZero: true }).optional(),

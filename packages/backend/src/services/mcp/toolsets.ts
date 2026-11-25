@@ -18,6 +18,7 @@ import { archiveTrackerTool } from './tools/archive-tracker';
 import { assignTagsToTransactionTool } from './tools/assign-tags-to-transaction';
 import { bulkDeletePayeesTool } from './tools/bulk-delete-payees';
 import { bulkDeleteTransactionsTool } from './tools/bulk-delete-transactions';
+import { bulkImportInvestmentTransactionsTool } from './tools/bulk-import-investment-transactions';
 import { bulkUpdateTransactionsTool } from './tools/bulk-update-transactions';
 import { confirmPlannedTransactionTool } from './tools/confirm-planned-transaction';
 import { createAccountTool } from './tools/create-account';
@@ -266,6 +267,7 @@ export const ALL_TOOLS: readonly ToolDef[] = [
   assignTagsToTransactionTool,
   bulkDeletePayeesTool,
   bulkDeleteTransactionsTool,
+  bulkImportInvestmentTransactionsTool,
   bulkUpdateTransactionsTool,
   confirmPlannedTransactionTool,
   createAccountTool,

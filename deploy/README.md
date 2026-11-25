@@ -199,6 +199,37 @@ Merchant rules additionally require the `toolset:automations` grant; reconnect
 the client and select Automations if those tools are absent. Clients may cache
 the tool list and need a tool refresh or reconnection after deployment changes.
 
+### Investment MCP tools
+
+After deployment, reconnect each ChatGPT account separately and select
+Investments (`toolset:investments`) plus transaction editing (`finance:write`).
+Grant `finance:delete` only if deletion is needed. Confirm the connected identity
+with `get_user_profile`; the owner is derived from OAuth, not a tool argument.
+
+The investment toolset already provides portfolio/holding reads, trade reads,
+single trade create/update/delete, and `link_transaction_to_portfolio`.
+`bulk_import_investment_transactions` accepts up to 50 reviewed execution rows
+for one portfolio. Resolve securities and create missing holdings first. Pass
+the original broker source row SHA-256 IDs, actual quantities, prices and dates.
+Retry with the same IDs; the existing broker provenance lock prevents duplicate
+cash and holding updates for those IDs. Distinct legitimate identical executions
+need distinct stable source IDs. A row failure stops the batch, reporting the
+completed rows and remaining source IDs. Do not import inferred trades from an
+M1 trading-window summary or count a deposit as another buy. Link the existing
+bank withdrawal once, and check existing broker funding records before linking
+to avoid double counting.
+
+For a non-mutating OAuth and tools/list smoke check on the deployed server:
+
+```sh
+MCP_VERIFY_INVESTMENTS=true node scripts/validate-mcp.mjs
+```
+
+This optional mode requests the investment, write and delete scopes but makes
+only read calls. Its token stays in memory rather than replacing the existing
+read-only session file. It verifies server-side discovery, not ChatGPT's cached
+tool list; reconnect ChatGPT and confirm the tools are visible there separately.
+
 Use `mcp.codex.example.toml` as a snippet in your private Codex configuration,
 or `mcp.vscode.example.json` in VS Code's MCP configuration. Both examples
 assume the SSH tunnel and matching localhost OAuth origin. Use the existing

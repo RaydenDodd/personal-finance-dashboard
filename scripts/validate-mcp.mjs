@@ -13,7 +13,10 @@ import { dirname, resolve, sep } from 'node:path';
 const base = (process.env.MCP_HTTP_BASE_URL || 'http://localhost:8095').replace(/\/$/, '');
 const origin = (process.env.MCP_ORIGIN || 'http://localhost:8095').replace(/\/$/, '');
 const resource = `${origin}/mcp`;
-const scopes = ['finance:read', 'profile:read'];
+const verifyInvestments = process.env.MCP_VERIFY_INVESTMENTS === 'true';
+const scopes = ['finance:read', 'profile:read', ...(verifyInvestments
+  ? ['toolset:investments', 'finance:write', 'finance:delete']
+  : [])];
 const sessionPath = resolve(process.env.MCP_SESSION_FILE || 'private/mcp-session.json');
 const privateDirectory = resolve('private');
 const cookieJar = new Map();
@@ -118,7 +121,7 @@ async function authorizeOwner() {
       authenticated: true,
       body: { accept: true, oauth_query: authorizationTarget.search.slice(1), scope: scopes.join(' ') },
     }),
-    stage: 'OAuth read-only consent',
+    stage: 'OAuth consent',
   }), callback);
   requireCondition({
     condition: consentTarget.origin === new URL(callback).origin && consentTarget.pathname === '/callback' &&
@@ -143,8 +146,9 @@ async function authorizeOwner() {
   });
   requireCondition({ condition: typeof token.access_token === 'string', message: 'OAuth access token missing' });
   requireCondition({
-    condition: !String(token.scope).includes('finance:write') && !String(token.scope).includes('finance:delete'),
-    message: 'OAuth token unexpectedly includes write permissions',
+    condition: scopes.every((scope) => String(token.scope).split(/\s+/).includes(scope)) &&
+      (verifyInvestments || (!String(token.scope).includes('finance:write') && !String(token.scope).includes('finance:delete'))),
+    message: 'OAuth token did not receive the expected scopes',
   });
   const session = {
     serverUrl: `${base}/mcp`,
@@ -155,6 +159,9 @@ async function authorizeOwner() {
     scope: token.scope,
     expiresAt: Date.now() + Number(token.expires_in) * 1000,
   };
+  // The optional investment discovery check requests mutation scopes but performs no writes.
+  // Keep that access token in memory only and do not overwrite the read-only session cache.
+  if (verifyInvestments) return session;
   requireCondition({
     condition: sessionPath.startsWith(`${privateDirectory}${sep}`),
     message: 'MCP session files must stay inside ignored private/',
@@ -189,7 +196,7 @@ async function main() {
     await expectJson({ response: await request({ path }), stage: 'OAuth discovery' });
   }
   let session;
-  if (process.env.MCP_FRESH_AUTH !== 'true') {
+  if (!verifyInvestments && process.env.MCP_FRESH_AUTH !== 'true') {
     try {
       const candidate = JSON.parse(await readFile(sessionPath, 'utf8'));
       if (candidate.resource === resource && candidate.expiresAt > Date.now() + 60_000) session = candidate;
@@ -230,6 +237,16 @@ async function main() {
   await rpc({ stage: 'MCP account read', body: {
     jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'get_accounts', arguments: {} },
   } });
+  if (verifyInvestments) {
+    for (const name of [
+      'get_portfolios', 'get_portfolio_holdings', 'get_investment_transactions',
+      'create_holding', 'create_investment_transaction', 'update_investment_transaction',
+      'delete_investment_transaction', 'bulk_import_investment_transactions',
+      'link_transaction_to_portfolio',
+    ]) {
+      requireCondition({ condition: tools.some((tool) => tool.name === name), message: `Investment MCP tool missing: ${name}` });
+    }
+  }
   const personalTool = tools.some((tool) => tool.name === 'get_personal_net_worth');
   if (personalTool) {
     await rpc({ stage: 'MCP personal finance read', body: {
@@ -247,7 +264,7 @@ async function main() {
   await termination.arrayBuffer();
   console.log(JSON.stringify({ authentication: 'passed', oauthPkce: 'passed', discovery: 'passed',
     streamableHttp: 'passed', toolCount: tools.length, accountRead: 'passed',
-    personalNetWorthRead: personalTool ? 'passed' : 'not-deployed', tokenScope: 'read-only' }));
+    personalNetWorthRead: personalTool ? 'passed' : 'not-deployed', investmentDiscovery: verifyInvestments ? 'passed' : 'not-requested', tokenScope: verifyInvestments ? 'investment-write-and-delete' : 'read-only' }));
 }
 
 main().catch((error) => {

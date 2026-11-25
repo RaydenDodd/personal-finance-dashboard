@@ -27,6 +27,9 @@ export const createInvestmentTransactionTool = defineTool({
     ),
     fees: shape.fees.describe('Transaction fees/commissions as a decimal string (default "0")'),
     name: shape.name.describe('Optional label or note for this transaction'),
+    sourceRowId: shape.sourceRowId.describe(
+      'Optional stable SHA-256 broker source row identity; retry the same source row with the same ID to avoid duplicate cash and holdings changes',
+    ),
     settlementCurrencyCode: shape.settlementCurrencyCode.describe(
       'Currency of the cash that actually moved, when it differs from the security currency. Requires settlementAmount',
     ),
