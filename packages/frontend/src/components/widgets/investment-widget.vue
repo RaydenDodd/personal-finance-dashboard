@@ -9,6 +9,7 @@ import { Button } from '@/components/lib/ui/button';
 import { payrollToday } from '@/pages/income-management/payroll/date-range';
 import { investmentRange } from '@/components/investment-analytics/date-range';
 import AnalyticsPanel from '@/components/investment-analytics/analytics-panel.vue';
+import { investmentSectionForWidget } from '@bt/shared/types/investment-analytics-read';
 import { useInvestmentAnalytics } from '@/composable/data-queries/investment-analytics';
 import { useInvestmentHistory } from '@/composable/data-queries/investment-history';
 import { usePortfolios } from '@/composable/data-queries/portfolios';
@@ -135,9 +136,10 @@ const performanceThrough = computed(() =>
 const focusedHistory = computed(() => ['performance', 'value-capital', 'portfolio-comparison'].includes(kind.value));
 const broad = useInvestmentAnalytics({
   portfolioIds,
-  benchmarks,
-  performanceFrom,
-  performanceThrough,
+  benchmarks: () => kind.value === 'benchmark' ? benchmarks.value : [],
+  performanceFrom: () => ['heatmap', 'performers'].includes(kind.value) ? performanceFrom.value : undefined,
+  performanceThrough: () => ['heatmap', 'performers'].includes(kind.value) ? performanceThrough.value : undefined,
+  section: () => investmentSectionForWidget(kind.value),
   enabled: () => !focusedHistory.value,
 });
 const narrow = useInvestmentHistory({

@@ -43,7 +43,7 @@ const settingsOpen = ref(false),
   refreshError = ref(''),
   groupFilter = ref('all'),
   brokerFilter = ref('all');
-const broadAll = useInvestmentAnalytics({ enabled: () => props.page !== 'performance' || importOpen.value });
+const broadAll = useInvestmentAnalytics({ section: 'page', enabled: () => props.page !== 'performance' || importOpen.value });
 const narrowAll = useInvestmentHistory({ enabled: () => props.page === 'performance' });
 const all = { data: computed(() => (props.page === 'performance' ? narrowAll.data.value : broadAll.data.value)) };
 const portfolioIds = computed(() => {
@@ -65,6 +65,7 @@ const noMatches = computed(() =>
   ),
 );
 const broadQuery = useInvestmentAnalytics({
+  section: 'page',
   portfolioIds,
   benchmarks: () => (props.page === 'performance' ? ((settings.value.benchmarks as string[]) ?? []) : []),
   enabled: () => !noMatches.value && props.page !== 'performance',

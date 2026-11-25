@@ -22,3 +22,19 @@ describe('investment analytics durable read model', () => {
     expect(readStatus({ builtAt: new Date(now), failures: 1 }, now).state).toBe('retrying');
   });
 });
+
+import { omittedAnalyticsFields, investmentSectionForWidget } from '@bt/shared/types/investment-analytics-read';
+
+describe('focused analytics payloads', () => {
+  it('omits expensive look-through and overlap for holdings widgets', () => {
+    expect(investmentSectionForWidget('heatmap')).toBe('holdings');
+    expect(omittedAnalyticsFields('holdings')).toEqual(expect.arrayContaining(['exposure', 'overlap', 'history']));
+    expect(omittedAnalyticsFields('holdings')).not.toContain('holdings');
+  });
+  it('keeps required sections for exposure, dividend and benchmark widgets', () => {
+    expect(omittedAnalyticsFields(investmentSectionForWidget('dividends'))).not.toContain('dividends');
+    expect(omittedAnalyticsFields(investmentSectionForWidget('sector'))).not.toContain('allocations');
+    expect(omittedAnalyticsFields(investmentSectionForWidget('benchmark'))).not.toContain('benchmarks');
+    expect(omittedAnalyticsFields('all')).toEqual([]);
+  });
+});

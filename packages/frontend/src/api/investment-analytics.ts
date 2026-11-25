@@ -93,13 +93,14 @@ export async function setCompositionSchedule(enabled: boolean, contact?: string)
 }
 
 export async function getInvestmentAnalyticsReadModel({
-  portfolioIds = [], benchmarks = [], performanceFrom, performanceThrough, section = 'all',
+  portfolioIds = [], benchmarks = [], performanceFrom, performanceThrough, section = 'all', knownBuiltAt,
 }: {
   portfolioIds?: string[];
   benchmarks?: string[];
   performanceFrom?: string;
   performanceThrough?: string;
   section?: InvestmentAnalyticsSection;
+  knownBuiltAt?: string;
 }): Promise<InvestmentAnalyticsReadResponse> {
   const response = await api.get('/investments/analytics/read-model', {
     portfolioIds: portfolioIds.join(','),
@@ -107,6 +108,7 @@ export async function getInvestmentAnalyticsReadModel({
     performanceFrom,
     performanceThrough,
     section,
+    knownBuiltAt,
   });
   return response.data ?? response;
 }

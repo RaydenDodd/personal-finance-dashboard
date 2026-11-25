@@ -107,9 +107,17 @@ function Invoke-PrebuiltUpload {
         Write-Host ("Packaging elapsed: {0:N1}s" -f $packageTimer.Elapsed.TotalSeconds)
         if (-not $NoUpload) {
             $stage = "$name-upload-$([Guid]::NewGuid().ToString('N'))"
-            Invoke-Checked ssh.exe @($SshHost, "mkdir -p ~/personal-finance-dashboard/private/$stage")
-            Invoke-Checked scp.exe @('-r', $artifact, "${SshHost}:personal-finance-dashboard/private/$stage/")
-            Invoke-Checked ssh.exe @($SshHost, "cd ~/personal-finance-dashboard/private && if test -e $name; then echo 'Artifact already exists; reuse it or remove it only when not deploying.' >&2; exit 1; fi; mv -T $stage/$name $name && rmdir $stage")
+            $archive = Join-Path $root "private/$stage.tar.gz"
+            try {
+                Invoke-Checked tar.exe @('-czf', $archive, '-C', (Join-Path $root 'private'), $name)
+                $hash = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+                Write-Host ("Compressed artifact: {0:N2} MiB" -f ((Get-Item -LiteralPath $archive).Length / 1MB))
+                Invoke-Checked ssh.exe @($SshHost, "umask 077 && mkdir -p ~/personal-finance-dashboard/private/$stage")
+                Invoke-Checked scp.exe @($archive, "${SshHost}:personal-finance-dashboard/private/$stage/artifact.tar.gz")
+                Invoke-Checked ssh.exe @($SshHost, "set -e; cd ~/personal-finance-dashboard/private; test ! -e $name; echo '$hash  $stage/artifact.tar.gz' | sha256sum -c -; tar -xzf $stage/artifact.tar.gz -C $stage; test -f $stage/$name/source-commit.txt; grep -qx $commit $stage/$name/source-commit.txt; mv -T --no-clobber $stage/$name $name; test ! -e $stage/$name; rm $stage/artifact.tar.gz; rmdir $stage")
+            } finally {
+                if (Test-Path -LiteralPath $archive) { Remove-Item -LiteralPath $archive -Force }
+            }
             Write-Host "Uploaded private/$name"
         }
         if (-not $TestPattern -and ($FullTests -or $testFiles.Count -gt 0)) {

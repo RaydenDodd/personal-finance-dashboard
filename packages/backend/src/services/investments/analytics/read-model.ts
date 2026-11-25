@@ -2,6 +2,7 @@ import type { InvestmentAnalytics } from '@bt/shared/types/investment-analytics'
 import {
   type InvestmentAnalyticsReadResponse,
   type InvestmentAnalyticsSection,
+  omittedAnalyticsFields,
   projectInvestmentAnalytics,
 } from '@bt/shared/types/investment-analytics-read';
 import { ValidationError } from '@js/errors';
@@ -77,8 +78,8 @@ export function readStatus(row: Pick<StoredRow, 'builtAt' | 'failures'>, now = D
 
 /** A GET only registers demand and reads the durable result. No financial replay on the request path. */
 export async function readInvestmentAnalytics({
-  userId, section = 'all', ...input
-}: Request & { userId: number; section?: InvestmentAnalyticsSection }): Promise<InvestmentAnalyticsReadResponse> {
+  userId, section = 'all', knownBuiltAt, ...input
+}: Request & { userId: number; section?: InvestmentAnalyticsSection; knownBuiltAt?: string }): Promise<InvestmentAnalyticsReadResponse> {
   const selection = await resolveSelection(userId, input);
   const key = selectionKey(selection);
   // Serialize admission per owner using the Users row. Prevent unbounded date-range variants.
@@ -91,13 +92,26 @@ export async function readInvestmentAnalytics({
       WHERE EXISTS (SELECT 1 FROM "InvestmentAnalyticsReadModels" WHERE "userId"=:userId AND "selectionKey"=:key)
          OR (SELECT count(*) FROM "InvestmentAnalyticsReadModels" WHERE "userId"=:userId) < :maxSelections
       ON CONFLICT ("userId", "selectionKey") DO UPDATE SET "requestedAt"=now()
-      RETURNING *
+      RETURNING "userId", "selectionKey", "builtAt", failures, NULL::jsonb AS payload
     ) SELECT * FROM admitted
   `, { userId, key, selection: JSON.stringify(selection), maxSelections: MAX_SELECTIONS });
   if (!row) throw new ValidationError({ message: 'Too many investment analytics selections. Reuse an existing range or try again after cleanup.' });
+  const status = readStatus(row);
+  if (!status.builtAt) return { analytics: null, status };
+  if (knownBuiltAt === status.builtAt) return { analytics: null, status, unchanged: true };
+  const omitted = omittedAnalyticsFields(section);
+  // SQL projection happens before network transfer and JSON parsing in Node.
+  // The names are a fixed server-side allowlist, not request-provided SQL.
+  const expression = omitted.reduce((sql, field) => sql + " - '" + field + "'", 'payload');
+  const [stored] = await sqlRows<StoredRow>(`
+    SELECT "builtAt", failures, ${expression} AS payload
+    FROM "InvestmentAnalyticsReadModels"
+    WHERE "userId"=:userId AND "selectionKey"=:key
+  `, { userId, key });
+  if (!stored) return { analytics: null, status: { state: 'pending', builtAt: null } };
   return {
-    analytics: row.payload ? projectInvestmentAnalytics(row.payload, section) : null,
-    status: readStatus(row),
+    analytics: stored.payload ? projectInvestmentAnalytics(stored.payload, section) : null,
+    status: readStatus(stored),
   };
 }
 
@@ -112,6 +126,7 @@ export async function refreshNextInvestmentReadModel(): Promise<boolean> {
     SELECT "userId", "selectionKey", selection, "builtAt", failures, NULL::jsonb AS payload
     FROM "InvestmentAnalyticsReadModels"
     WHERE "retryAt" <= now()
+      AND "requestedAt" >= now() - interval '10 minutes'
       AND ("builtAt" IS NULL OR "builtAt" <= now() - interval '5 minutes')
     ORDER BY ("builtAt" IS NOT NULL), "retryAt", "requestedAt" DESC LIMIT 1
   `);

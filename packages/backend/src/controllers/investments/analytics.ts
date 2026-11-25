@@ -156,6 +156,7 @@ export const getAnalyticsReadModel = createController(
       performanceFrom: z.iso.date().optional(),
       performanceThrough: z.iso.date().optional(),
       section: z.enum(investmentAnalyticsSections).default('all'),
+      knownBuiltAt: z.iso.datetime().optional(),
     }),
   }),
   async ({ user, query }) => ({ data: await readInvestmentAnalytics({ userId: user.id, ...query }) }),

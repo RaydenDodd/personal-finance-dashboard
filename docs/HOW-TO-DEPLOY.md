@@ -33,7 +33,7 @@ By default both scripts use fast mode: compile, package and upload, with mandato
 .\deploy\build-frontend.ps1 -FullTests
 ```
 
-Both build scripts check tracked cleanliness and exact origin/dev identity, package into `private/<component>-<full-commit>`, stage/upload over SCP, and report success/failure. `-NoUpload` leaves a local package only; `-SshHost` overrides the default alias. An already published artifact for the same commit is not overwritten. Reuse it if verified or remove it only when no deployment is using it.
+Both build scripts check tracked cleanliness and exact origin/dev identity, package into `private/<component>-<full-commit>`, compress to a single tar.gz, stage/upload over SCP, verify SHA-256, extract and publish without overwriting existing artifacts, and report success/failure. `-NoUpload` leaves a local package only; `-SshHost` overrides the default alias. An already published artifact for the same commit is not overwritten. Reuse it if verified or remove it only when no deployment is using it.
 
 On green PASS, SSH into the Pi:
 
