@@ -1218,8 +1218,14 @@ const health = computed(() =>
         v-if="kind === 'portfolio-comparison'"
         class="text-muted-foreground text-xs"
       >
-        Recorded portfolio values in {{ analytics.currencyCode }}. Cash flows affect balances; these are not comparable
-        investment returns.
+        <template v-if="gainView">
+          Returns and gains require dated funding and valuation evidence. Missing returns remain gaps, not inferred
+          from balance changes.
+        </template>
+        <template v-else>
+          Recorded portfolio values in {{ analytics.currencyCode }}. Cash flows affect balances; these are not comparable
+          investment returns.
+        </template>
       </p>
       <p
         v-show="inlineInformation && showInformation"

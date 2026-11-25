@@ -1,19 +1,17 @@
 import type { DashboardWidgetConfig } from '@/api/user-settings';
 import { mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { computed, nextTick, ref } from 'vue';
+import { computed, nextTick, ref, toValue } from 'vue';
 
 import { INVESTMENT_WIDGETS } from './investment-widgets';
 
 const analytics = ref<unknown>({ selectedPortfolioIds: ['a'], holdings: [], metrics: {} });
 const pending = ref(false);
 const error = ref<unknown>(null);
-const queryCalls: {
-  portfolioIds: { value: string[] };
-  benchmarks: { value: string[] };
-  performanceThrough?: { value: string | undefined };
-  section?: () => string;
-}[] = [];
+type BroadArgs = NonNullable<Parameters<typeof import('@/composable/data-queries/investment-analytics').useInvestmentAnalytics>[0]>;
+type HistoryArgs = NonNullable<Parameters<typeof import('@/composable/data-queries/investment-history').useInvestmentHistory>[0]>;
+const queryCalls: BroadArgs[] = [];
+const historyCalls: HistoryArgs[] = [];
 const refetch = vi.fn();
 vi.mock('@/composable/data-queries/investment-analytics', () => ({
   useInvestmentAnalytics: (args: (typeof queryCalls)[number]) => {
@@ -22,13 +20,10 @@ vi.mock('@/composable/data-queries/investment-analytics', () => ({
   },
 }));
 vi.mock('@/composable/data-queries/investment-history', () => ({
-  useInvestmentHistory: () => ({
-    data: analytics,
-    isPending: pending,
-    isFetching: computed(() => pending.value),
-    error,
-    refetch,
-  }),
+  useInvestmentHistory: (args: HistoryArgs) => {
+    historyCalls.push(args);
+    return { data: analytics, isPending: pending, isFetching: computed(() => pending.value), error, refetch };
+  },
 }));
 vi.mock('@/composable/data-queries/portfolios', () => ({
   usePortfolios: () => ({ data: ref([{ id: 'a', name: 'Broker A' }]) }),
@@ -64,14 +59,16 @@ vi.mock('./components/error-state.vue', () => ({
 }));
 import InvestmentWidget from './investment-widget.vue';
 
+beforeEach(() => {
+  queryCalls.length = 0;
+  historyCalls.length = 0;
+  analytics.value = { selectedPortfolioIds: ['a'], holdings: [], metrics: {} };
+  pending.value = false;
+  error.value = null;
+  refetch.mockReset();
+});
+
 describe('investment widget adapters use shared live analytics', () => {
-  beforeEach(() => {
-    queryCalls.length = 0;
-    analytics.value = { selectedPortfolioIds: ['a'], holdings: [], metrics: {} };
-    pending.value = false;
-    error.value = null;
-    refetch.mockReset();
-  });
   const create = (kind: string, config: Record<string, unknown> = {}, period?: ReturnType<typeof ref>) => {
     const widget = ref<DashboardWidgetConfig>({
       widgetId: `investment-${kind}`,
@@ -96,8 +93,18 @@ describe('investment widget adapters use shared live analytics', () => {
   it.each(INVESTMENT_WIDGETS)('%s connects its shared panel to selected portfolio data', async (kind) => {
     const { wrapper, widget } = create(kind, { portfolioIds: ['a'], benchmarks: ['QQQ'], dateRange: 'YTD' });
     expect(queryCalls).toHaveLength(1);
-    expect(queryCalls[0]!.portfolioIds.value).toEqual(kind === 'performance' ? [] : ['a']);
-    expect(queryCalls[0]!.benchmarks.value).toEqual(kind === 'benchmark' ? ['QQQ'] : []);
+    expect(historyCalls).toHaveLength(1);
+    const focused = ['performance', 'value-capital', 'portfolio-comparison'].includes(kind);
+    const broad = queryCalls[0]!;
+    const history = historyCalls[0]!;
+    expect(toValue(broad.enabled)).toBe(!focused);
+    expect(toValue(history.enabled)).toBe(focused || kind === 'benchmark');
+    if (kind === 'performance' || kind === 'benchmark' || kind === 'value-capital') {
+      expect(toValue(history.includeCapital)).toBe(true);
+    }
+    expect(toValue(broad.portfolioIds)).toEqual(kind === 'performance' ? [] : ['a']);
+    expect(toValue(history.portfolioIds)).toEqual(kind === 'performance' ? [] : ['a']);
+    expect(toValue(broad.benchmarks)).toEqual(kind === 'benchmark' ? ['QQQ'] : []);
     const panel = wrapper.findComponent({ name: 'AnalyticsPanel' });
     expect(panel.props('analytics')).toBe(analytics.value);
     expect(panel.props('kind')).toBe(kind);
@@ -108,7 +115,8 @@ describe('investment widget adapters use shared live analytics', () => {
     expect(panel.props('compact')).toBe(true);
     widget.value.config = { portfolioIds: ['b', 'c'], dateRange: '3M' };
     await nextTick();
-    expect(queryCalls[0]!.portfolioIds.value).toEqual(kind === 'performance' ? [] : ['b', 'c']);
+    expect(toValue(queryCalls[0]!.portfolioIds)).toEqual(kind === 'performance' ? [] : ['b', 'c']);
+    expect(toValue(historyCalls[0]!.portfolioIds)).toEqual(kind === 'performance' ? [] : ['b', 'c']);
     expect(panel.props('settings')).toMatchObject({
       portfolioIds: kind === 'performance' ? [] : ['b', 'c'],
       dateRange: '3M',
@@ -121,8 +129,8 @@ describe('investment widget adapters use shared live analytics', () => {
     const { wrapper } = create('allocation-underlying', { portfolioIds: ['a'], allocationMode: 'holdings' }, period);
     const panel = wrapper.findComponent({ name: 'AnalyticsPanel' });
     expect(wrapper.text()).toContain('Investment Allocation – Underlying Companies');
-    expect(queryCalls[0]!.section?.()).toBe('exposure');
-    expect(queryCalls[0]!.portfolioIds.value).toEqual(['a']);
+    expect(toValue(queryCalls[0]!.section)).toBe('exposure');
+    expect(toValue(queryCalls[0]!.portfolioIds)).toEqual(['a']);
     expect(panel.props('kind')).toBe('allocation-underlying');
     expect(panel.props('settings').allocationMode).toBe('underlying');
     wrapper.unmount();
@@ -152,6 +160,7 @@ describe('investment widget adapters use shared live analytics', () => {
 
   it('shows loading and retry states without rendering fabricated analytics', async () => {
     pending.value = true;
+    analytics.value = undefined;
     const { wrapper } = create('overview');
     expect(wrapper.find('[data-testid="loading"]').exists()).toBe(true);
     expect(wrapper.findComponent({ name: 'AnalyticsPanel' }).exists()).toBe(false);
@@ -165,6 +174,19 @@ describe('investment widget adapters use shared live analytics', () => {
     analytics.value = undefined;
     await nextTick();
     expect(wrapper.text()).toContain('Investment analytics are unavailable');
+    wrapper.unmount();
+  });
+
+  it('retains the last successful analytics while refreshing or after a refresh error', async () => {
+    const { wrapper } = create('overview');
+    pending.value = true;
+    await nextTick();
+    expect(wrapper.findComponent({ name: 'AnalyticsPanel' }).exists()).toBe(true);
+    expect(wrapper.find('[data-testid="loading"]').exists()).toBe(false);
+    pending.value = false;
+    error.value = new Error('Refresh failed');
+    await nextTick();
+    expect(wrapper.findComponent({ name: 'AnalyticsPanel' }).exists()).toBe(true);
     wrapper.unmount();
   });
 
@@ -269,13 +291,13 @@ it('does not send a future Dashboard month-end to the holding-performance endpoi
       stubs: { 'router-link': { template: '<a><slot/></a>' } },
     },
   });
-  const through = queryCalls.at(-1)?.performanceThrough?.value;
+  const through = toValue(queryCalls.at(-1)?.performanceThrough);
   expect(through).toBeDefined();
   expect(Date.parse(through!)).toBeLessThanOrEqual(Date.now());
   wrapper.unmount();
 });
 
-it('shares the report selection across Dashboard tile kinds instead of fetching parallel reports', () => {
+it('keeps benchmark and custom range requests out of unrelated Dashboard tile kinds', () => {
   const period = ref({ from: new Date(2026, 9, 1), to: new Date(2026, 9, 31) }),
     shared = ref(['SPY']);
   const mountKind = (kind: string) =>
@@ -293,8 +315,11 @@ it('shares the report selection across Dashboard tile kinds instead of fetching 
     second = mountKind('heatmap');
   const a = queryCalls.at(-2)!,
     b = queryCalls.at(-1)!;
-  expect(a.benchmarks.value).toEqual(b.benchmarks.value);
-  expect(a.performanceThrough?.value).toBe(b.performanceThrough?.value);
+  expect(toValue(a.benchmarks)).toEqual([]);
+  expect(toValue(b.benchmarks)).toEqual([]);
+  expect(toValue(a.portfolioIds)).toEqual(toValue(b.portfolioIds));
+  expect(toValue(a.performanceThrough)).toBeUndefined();
+  expect(toValue(b.performanceThrough)).toBeDefined();
   first.unmount();
   second.unmount();
 });

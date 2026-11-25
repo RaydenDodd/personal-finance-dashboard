@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import type { DashboardWidgetConfig, UserSettingsSchema } from '@/api/user-settings';
 import { DEFAULT_DASHBOARD_LAYOUT, WIDGET_REGISTRY } from '@/components/widgets/widget-registry';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -18,7 +19,7 @@ import { useDashboardLayout } from '@/pages/dashboard/composables/use-dashboard-
 
 describe('all twenty-one investment widgets in the native dashboard lifecycle', () => {
   beforeEach(() => {
-    localStorage.clear();
+    window.localStorage.clear();
     settings.value = { dashboard: { widgets: [{ widgetId: 'balance-trend', colSpan: 2 }] } };
     patchAsync.mockReset().mockImplementation(async (patch) => {
       // Simulate the settings API round trip, including a fresh JSON value on reload.

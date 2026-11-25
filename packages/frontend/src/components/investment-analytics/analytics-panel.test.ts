@@ -267,10 +267,19 @@ describe('shared investment panels', () => {
     expect(interest.text()).not.toContain('$5.00');
     expect(interest.text()).toContain('partial history');
   });
-  it('keeps portfolio comparison in dollars when only balances are recorded', () => {
-    const wrapper = panel('portfolio-comparison', base(), { unit: 'percent' });
-    expect(wrapper.findComponent({ name: 'SeriesChart' }).props('percent')).toBe(false);
-    expect(wrapper.text()).toContain('these are not comparable investment returns');
+  it('honors portfolio comparison percent mode but does not fabricate returns from recorded balances', () => {
+    const analytics = base();
+    analytics.portfolios = [{ id: 'p', name: 'Account A' }] as InvestmentAnalytics['portfolios'];
+    analytics.accountHistory = {
+      dates: ['2026-11-01'],
+      accounts: [{ id: 'p', values: ['1000'], periodReturnPercent: [null] }],
+    } as NonNullable<InvestmentAnalytics['accountHistory']>;
+    const wrapper = panel('portfolio-comparison', analytics, { unit: 'percent' });
+    const chart = wrapper.findComponent({ name: 'SeriesChart' });
+    expect(chart.props('percent')).toBe(true);
+    expect(chart.props('points')).toEqual([]);
+    expect(wrapper.text()).toContain('Missing returns remain gaps');
+    wrapper.unmount();
   });
   it('keeps value versus invested capital in dollars even with old percent settings', () => {
     const wrapper = panel('value-capital', base(), { unit: 'percent' });
