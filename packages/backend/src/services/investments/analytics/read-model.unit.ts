@@ -18,7 +18,7 @@ describe('investment analytics durable read model', () => {
     const now = Date.parse('2026-11-25T12:00:00Z');
     expect(readStatus({ builtAt: null, failures: 0 }, now).state).toBe('pending');
     expect(readStatus({ builtAt: new Date(now), failures: 0 }, now).state).toBe('ready');
-    expect(readStatus({ builtAt: new Date(now - 300000), failures: 0 }, now).state).toBe('stale');
+    expect(readStatus({ builtAt: new Date(now - 3600000), failures: 0 }, now).state).toBe('stale');
     expect(readStatus({ builtAt: new Date(now), failures: 1 }, now).state).toBe('retrying');
   });
 });
@@ -37,4 +37,10 @@ describe('focused analytics payloads', () => {
     expect(omittedAnalyticsFields(investmentSectionForWidget('benchmark'))).not.toContain('benchmarks');
     expect(omittedAnalyticsFields('all')).toEqual([]);
   });
+});
+
+it('marks a persisted result stale on source revision changes', () => {
+  const now = Date.now();
+  expect(readStatus({ builtAt: new Date(now), failures: 0, sourceRevision: 'a' }, now, 'b').state).toBe('stale');
+  expect(readStatus({ builtAt: new Date(now), failures: 0, sourceRevision: 'a' }, now, 'a').state).toBe('ready');
 });

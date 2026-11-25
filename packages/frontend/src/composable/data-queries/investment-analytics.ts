@@ -50,9 +50,10 @@ export function useInvestmentAnalytics({
     retry: false,
     refetchInterval: (query) =>
       !query.state.data?.analytics || query.state.data.status.state !== 'ready'
-        ? 5000
+        ? (query.state.data?.analytics ? 30000 : 10000)
         : usEquityMarketOpen() ? 60000 : 120000,
     refetchIntervalInBackground: false,
+    refetchOnWindowFocus: false,
   });
   return { ...query, isPending: computed(() => query.isPending.value || (!query.isError.value && !query.data.value)) };
 }

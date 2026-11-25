@@ -126,9 +126,11 @@ export function useInvestmentHistory({
     enabled: computed(() => toValue(enabled)),
     staleTime: 5 * 60 * 1000,
     retry: false,
+    refetchOnWindowFocus: false,
+    refetchIntervalInBackground: false,
     refetchInterval: (q) =>
       q.state.data?.accountHistory?.pending
-        ? 2000
+        ? 10000
         : usEquityMarketOpen()
           ? 5 * 60 * 1000
           : false,
