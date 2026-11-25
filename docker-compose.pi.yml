@@ -54,6 +54,7 @@ services:
       DB_QUERY_LOGGING: 'false'
     # Backend owns schema migrations. Do not run them again in the worker.
     entrypoint: [node, --enable-source-maps, dist/investment-worker.js]
+    command: []
     depends_on:
       backend: { condition: service_healthy }
       db: { condition: service_healthy }

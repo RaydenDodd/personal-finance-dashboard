@@ -190,14 +190,18 @@ export async function refreshNextInvestmentReadModel(): Promise<boolean> {
       WHERE "userId"=:userId AND "selectionKey"=:key RETURNING "selectionKey"
     `, { userId: row.userId, key: row.selectionKey, payload: JSON.stringify(result), revision });
     return true;
-  } catch {
+  } catch (error) {
     // Retain the last valid payload and retry with bounded backoff.
     await sqlRows(`
       UPDATE "InvestmentAnalyticsReadModels"
       SET failures=failures+1, "retryAt"=now()+make_interval(secs => LEAST(900, 15 * (failures+1)))
       WHERE "userId"=:userId AND "selectionKey"=:key RETURNING "selectionKey"
     `, { userId: row.userId, key: row.selectionKey });
-    logger.warn('Investment analytics read-model refresh failed; previous result retained.');
+    logger.warn('Investment analytics read-model refresh failed; previous result retained.', {
+      selectionKey: row.selectionKey,
+      failures: row.failures + 1,
+      errorType: error instanceof Error ? error.name : 'unknown',
+    });
     return true;
   }
 }

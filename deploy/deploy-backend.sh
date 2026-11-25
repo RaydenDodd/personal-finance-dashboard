@@ -29,15 +29,23 @@ git diff --quiet && git diff --cached --quiet || {
   echo 'Tracked local changes exist; review them before deploying.' >&2
   exit 1
 }
+previous_head=$(git rev-parse HEAD)
 git fetch origin dev
 git merge --ff-only origin/dev
 commit=$(git rev-parse HEAD)
+# Bash may still be executing the previous version of this script after merge.
+# Restart from the updated file before deploying any new topology.
+if [ "$previous_head" != "$commit" ]; then
+  exec 9>&-
+  exec bash deploy/deploy-backend.sh --logged
+fi
 test "$commit" = "$(git rev-parse origin/dev)" || { echo 'HEAD is not origin/dev.' >&2; exit 1; }
 artifact="private/backend-$commit"
 test -f "$artifact/source-commit.txt" || { echo "Missing uploaded artifact: $artifact" >&2; exit 1; }
 test "$(cat "$artifact/source-commit.txt")" = "$commit" || { echo 'Artifact commit mismatch.' >&2; exit 1; }
 compose() { docker compose --env-file .env.pi.local -f docker-compose.pi.yml "$@"; }
 compose config --quiet
+test -f "$artifact/backend-dist/investment-worker.js" || { echo 'Missing investment worker bundle; rebuild and upload backend.' >&2; exit 1; }
 service=backend
 image=personal-finance-dashboard-backend
 container=$(compose ps -q "$service")
@@ -46,7 +54,9 @@ previous=$(docker inspect --format '{{.Image}}' "$container")
 docker tag "$previous" "$image:previous"
 time compose run --rm --no-deps backup once
 # Stop old worker before changing the shared backend image or running migrations.
-compose stop investment-worker
+if [ -n "$(compose ps -a -q investment-worker)" ]; then
+  compose stop investment-worker
+fi
 time sh deploy/build-prebuilt-backend.sh "$artifact"
 if ! time compose up -d --no-deps --no-build --wait --wait-timeout 300 "$service"; then
   echo "Deployment failed. Previous image retained as $image:previous." >&2
@@ -57,6 +67,7 @@ if ! time compose up -d --no-deps --no-build --wait --wait-timeout 300 investmen
   echo 'Analytics worker deployment failed. Inspect worker logs before proceeding.' >&2
   exit 1
 fi
+test -n "$(compose ps -q investment-worker)" || { echo 'Investment worker is not running.' >&2; exit 1; }
 compose exec -T frontend nginx -s reload
 compose ps
 echo "Deployed $service from $commit; previous image retained as $image:previous."

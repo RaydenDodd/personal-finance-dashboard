@@ -276,7 +276,11 @@ export async function getAccountHistory({
     result.gainFrom = gainFrom;
   }
   result.pending = result.accounts.some((p) => p.pending);
-  if (result.pending) void investmentHistoryCron.triggerManualSync({ userId }).catch(() => undefined);
+  // The dedicated worker drains the durable dirty-history queue. Polling GETs
+  // must not launch competing calculations in the HTTP process.
+  if (result.pending && process.env.INVESTMENT_WORKER_EXTERNAL !== 'true') {
+    void investmentHistoryCron.triggerManualSync({ userId }).catch(() => undefined);
+  }
   if (includeEvents) {
     const events = await sqlRows<{
       id: string;

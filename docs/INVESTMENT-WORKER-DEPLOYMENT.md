@@ -6,7 +6,7 @@ The worker has a four-connection PostgreSQL pool, a single sequential work loop,
 
 ## Deploy
 
-Build the backend with the usual Windows script, then run deploy/deploy-backend.sh. The backend deploy script stops the previous worker, deploys the backend, then starts and waits for the new worker. The frontend does not need rebuilding for this change.
+Build the backend with the usual Windows script. On the Pi, run `git pull --ff-only origin dev` before invoking `deploy/deploy-backend.sh`. This matters when a deployment script itself changed: an already-running old script can continue executing its previous instructions after pulling a new revision. The backend deploy script stops the previous worker, deploys the backend, then starts and waits for the new worker. The frontend does not need rebuilding for this change.
 
 Check:
 - docker compose --env-file .env.pi.local -f docker-compose.pi.yml ps
@@ -18,3 +18,5 @@ Compare HTTP runtime performance event-loop metrics, cached request latency, his
 
 ## Still pending
 Per-security incremental calculation, source-specific invalidation, narrow historical queries, and equivalent income/spending/net-worth/tax profiling. This split is not a promise of lower total CPU time or instantaneous cold analytics.
+
+For a deployment that already installed the new backend but omitted the worker, start it directly with `docker compose --env-file .env.pi.local -f docker-compose.pi.yml up -d --no-deps --no-build --wait --wait-timeout 300 investment-worker`. A healthy HTTP backend by itself does not establish worker health.

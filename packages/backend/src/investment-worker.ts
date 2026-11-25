@@ -27,23 +27,26 @@ async function main() {
   heartbeat();
   while (!stopping) {
     let didWork = false;
+    // A busy or stale history lock must never suppress read-model processing.
+    // Serve requested analytics first, then allow bounded history work.
     try {
-      // Keep historical backfill and read models from competing with each other.
-      // A bounded history pass is due at most once per 15 seconds.
-      if (Date.now() >= nextHistory) {
-        nextHistory = Date.now() + 15000;
-        const history = await investmentHistoryCron.triggerManualSync();
-        didWork = history.chunks > 0;
-      }
-      if (!stopping) {
-        const analytics = await investmentReadModelCron.triggerManualSync();
-        didWork = analytics.refreshed || didWork;
-      }
+      const analytics = await investmentReadModelCron.triggerManualSync();
+      didWork = analytics.refreshed;
     } catch (error) {
-      logger.warn('Investment worker iteration failed; will retry', {
+      logger.warn('Investment read-model worker pass failed; will retry', {
         errorType: error instanceof Error ? error.name : 'unknown',
       });
-      await sleep(5000);
+    }
+    if (!stopping && Date.now() >= nextHistory) {
+      nextHistory = Date.now() + 15000;
+      try {
+        const history = await investmentHistoryCron.triggerManualSync();
+        didWork = history.chunks > 0 || didWork;
+      } catch (error) {
+        logger.warn('Investment history worker pass failed; will retry', {
+          errorType: error instanceof Error ? error.name : 'unknown',
+        });
+      }
     }
     heartbeat();
     if (!stopping) await sleep(didWork ? 2000 : 5000);
