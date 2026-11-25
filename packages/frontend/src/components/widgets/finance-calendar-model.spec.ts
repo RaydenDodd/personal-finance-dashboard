@@ -1,0 +1,32 @@
+import { describe, expect, it } from 'vitest';
+import { calendarRoles, monthBounds, monthCells, spendingEntries, summarizeDay } from './finance-calendar-model';
+
+describe('monthly finance calendar', () => {
+  it('uses calendar days and correct Sunday offsets including leap years', () => {
+    expect(monthBounds('2024-02')).toEqual({ from: '2024-02-01', to: '2024-02-29' });
+    expect(monthCells('2026-11')[0]).toEqual({ date: '2026-11-01', day: 1 });
+    expect(monthCells('2024-02').slice(0, 4)).toEqual([null, null, null, null]);
+  });
+  it('sizes activity bands proportionally without treating a withdrawal as zero', () => {
+    const rows = calendarRoles.map((role, i) => ({
+      ...role, label: role.group, id: String(i), date: '2026-11-01', amount: [100, -50, 50][i]!, currency: 'USD',
+    }));
+    const groups = summarizeDay(rows);
+    expect(groups.map((group) => group.width)).toEqual([50, 25, 25]);
+    expect(groups.find((group) => group.group === 'Investments')?.amount).toBe(-50);
+    expect(summarizeDay([{ ...rows[0]!, currency: 'EUR' }, rows[1]!]).map(g => g.width)).toEqual([50, 50]);
+  });
+  it('uses server category totals, avoids child double counts, preserves refunds and ignores zero cells', () => {
+    const entries = spendingEntries({
+      columns: [{ key: '2026-11-01', periodStart: '2026-11-01', periodEnd: '2026-11-01', label: 'Nov 1' }],
+      rows: [
+        { id: 'food', label: 'Food', color: '#ef4444', parentId: null, kind: 'parent', values: { '2026-11-01': 25 }, total: 25 },
+        { id: 'restaurant', label: 'Restaurant', color: '#ef4444', parentId: 'food', kind: 'child', values: { '2026-11-01': 25 }, total: 25 },
+        { id: 'other', label: 'Other', color: '#123456', parentId: null, kind: 'flat', values: { '2026-11-01': -5 }, total: -5 },
+      ],
+      currencyCode: 'USD', columnTotals: { '2026-11-01': 20 }, grandTotal: 20,
+    });
+    expect(entries.map(r => r.amount)).toEqual([25, -5]);
+    expect(entries.map(r => r.color)).toEqual(['#ef4444', '#123456']);
+  });
+});

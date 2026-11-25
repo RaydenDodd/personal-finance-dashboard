@@ -17,7 +17,7 @@ export const generatePivotBuckets = ({
 }: {
   from: string;
   to: string;
-  granularity: PivotGranularity;
+  granularity: PivotGranularity | 'daily';
 }): PeriodBucket[] => generatePeriodBuckets({ from, to, granularity });
 
 /**
@@ -31,9 +31,11 @@ export const getBucketKey = ({
   granularity,
 }: {
   periodStart: Date;
-  granularity: PivotGranularity;
+  granularity: PivotGranularity | 'daily';
 }): string => {
   switch (granularity) {
+    case 'daily':
+      return format(periodStart, 'yyyy-MM-dd');
     case 'yearly':
       return format(periodStart, 'yyyy');
     case 'quarterly':
@@ -54,9 +56,11 @@ export const getBucketLabel = ({
   granularity,
 }: {
   periodStart: Date;
-  granularity: PivotGranularity;
+  granularity: PivotGranularity | 'daily';
 }): string => {
   switch (granularity) {
+    case 'daily':
+      return format(periodStart, 'yyyy-MM-dd');
     case 'yearly':
       return format(periodStart, 'yyyy');
     case 'quarterly':

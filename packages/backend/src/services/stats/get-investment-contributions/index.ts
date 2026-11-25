@@ -14,7 +14,7 @@ interface GetInvestmentContributionsParams {
   userId: number;
   from: string;
   to: string;
-  granularity: InvestmentContributionsGranularity;
+  granularity: InvestmentContributionsGranularity | 'daily';
   /**
    * Optional subset of the user's enabled portfolios to scope the contributions
    * to. The requested ids are intersected against the owned-and-enabled set in the

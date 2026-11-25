@@ -373,6 +373,24 @@ for (const [id, name, description] of [
 // Registration leaves every existing dashboard and the default layout untouched.
 Object.assign(WIDGET_REGISTRY, INVESTMENT_WIDGET_DEFINITIONS);
 
+// Read-only monthly calendars; each instance has independent navigation.
+for (const [id, name, description] of [
+  ['financial-activity-calendar', 'Income & Contributions Calendar', 'Recorded paydays, investment funding and savings deposits by day.'],
+  ['spending-calendar', 'Spending Calendar', 'Daily spending by category with clickable amounts and purchase records.'],
+] as const) {
+  WIDGET_REGISTRY[id] = {
+    id, name, description, literalLabels: true, allowMultiple: true,
+    defaultColSpan: 2, defaultRowSpan: 2,
+    allowedSizes: [
+      { colSpan: 1, rowSpan: 2, label: '1×2' },
+      { colSpan: 2, rowSpan: 2, label: '2×2' },
+      { colSpan: 3, rowSpan: 2, label: '3×2' },
+    ],
+    needsPeriod: false,
+    component: () => import('./finance-calendar-widget.vue'),
+  };
+}
+
 export const DEFAULT_DASHBOARD_LAYOUT = [
   { widgetId: 'balance-trend', colSpan: 2 },
   { widgetId: 'latest-records', colSpan: 1, rowSpan: 2 },

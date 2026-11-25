@@ -26,7 +26,7 @@ interface GetPivotReportParams {
   userId: number;
   from: string;
   to: string;
-  granularity: PivotGranularity;
+  granularity: PivotGranularity | 'daily';
   rowDimension: PivotRowDimension;
   measure: PivotMeasure;
   accountIds?: string[];

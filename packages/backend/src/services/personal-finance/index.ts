@@ -188,10 +188,11 @@ async function getSnapshots(userId: number, transaction?: Transaction): Promise<
     createdAt: new Date(r.createdAt).toISOString(),
   })) as FinanceSnapshot[];
 }
-export async function getCashFlows(userId: number, transaction?: Transaction): Promise<FinanceCashFlow[]> {
+export async function getCashFlows(userId: number, transaction?: Transaction, range?: { from: string; to: string }): Promise<FinanceCashFlow[]> {
   const result = await rows<Row>(
-    'SELECT * FROM "PersonalFinanceCashFlows" WHERE "userId"=:userId AND "supersededAt" IS NULL AND (verified OR evidence->>\'ownerAccepted\'=\'true\') ORDER BY date,"createdAt",id',
-    { userId },
+    'SELECT * FROM "PersonalFinanceCashFlows" WHERE "userId"=:userId AND "supersededAt" IS NULL AND (verified OR evidence->>\'ownerAccepted\'=\'true\')' +
+      (range ? ' AND date BETWEEN :from AND :to' : '') + ' ORDER BY date,"createdAt",id',
+    { userId, ...range },
     transaction,
   );
   return result.map((r) => ({
