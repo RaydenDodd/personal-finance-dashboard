@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import type { DashboardWidgetConfig, UserSettingsSchema } from '@/api/user-settings';
 import { DEFAULT_DASHBOARD_LAYOUT, WIDGET_REGISTRY } from '@/components/widgets/widget-registry';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { effectScope, ref } from 'vue';
 
 import {
@@ -17,9 +17,25 @@ vi.mock('@/composable/data-queries/user-settings', () => ({ useUserSettings: () 
 vi.mock('@/lib/posthog', () => ({ trackAnalyticsEvent: vi.fn() }));
 import { useDashboardLayout } from '@/pages/dashboard/composables/use-dashboard-layout';
 
+// Node's experimental Web Storage can shadow jsdom's implementation in Vitest.
+// Give each test a real Storage-shaped, isolated cache, without mocking layout logic.
+beforeEach(() => {
+  const entries = new Map<string, string>();
+  const storage: Storage = {
+    get length() { return entries.size; },
+    clear: () => entries.clear(),
+    getItem: (key) => entries.get(String(key)) ?? null,
+    key: (index) => [...entries.keys()][index] ?? null,
+    removeItem: (key) => { entries.delete(String(key)); },
+    setItem: (key, value) => { entries.set(String(key), String(value)); },
+  };
+  vi.stubGlobal('localStorage', storage);
+});
+
+afterEach(() => vi.unstubAllGlobals());
+
 describe('all twenty-one investment widgets in the native dashboard lifecycle', () => {
   beforeEach(() => {
-    window.localStorage.clear();
     settings.value = { dashboard: { widgets: [{ widgetId: 'balance-trend', colSpan: 2 }] } };
     patchAsync.mockReset().mockImplementation(async (patch) => {
       // Simulate the settings API round trip, including a fresh JSON value on reload.
