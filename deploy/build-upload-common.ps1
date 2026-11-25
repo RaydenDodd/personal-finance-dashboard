@@ -4,9 +4,19 @@ function Invoke-PrebuiltUpload {
     $ErrorActionPreference = 'Stop'
     $root = Split-Path -Parent $PSScriptRoot
     Push-Location -LiteralPath $root
+    $transcriptStarted = $false
+    $log = $null
     try {
+        $logDir = Join-Path $root 'private/deploy-logs'
+        New-Item -ItemType Directory -Path $logDir -Force | Out-Null
+        $log = Join-Path $logDir ("build-$Component-" + (Get-Date -Format 'yyyyMMdd-HHmmss') + '-' + $PID + '.log')
+        Start-Transcript -Path $log | Out-Null
+        $transcriptStarted = $true
+        Write-Host "Build log: $log"
+        Set-PSDebug -Trace 1
         function Invoke-Checked {
             param([string]$Command, [string[]]$Arguments)
+            Write-Host ("> " + $Command + " " + ($Arguments -join ' ')) -ForegroundColor Cyan
             & $Command @Arguments
             if ($LASTEXITCODE -ne 0) { throw "$Command failed (exit $LASTEXITCODE)." }
         }
@@ -18,7 +28,14 @@ function Invoke-PrebuiltUpload {
         $remote = & git rev-parse origin/dev
         if ($LASTEXITCODE -ne 0 -or $remote -ne $commit) { throw 'Pull dev first; HEAD must match origin/dev.' }
         if (-not (Test-Path -LiteralPath 'node_modules')) { throw 'Run npm ci at the repository root first.' }
-        if ($Component -eq 'backend') { Invoke-Checked npm.cmd @('run','typecheck','-w','packages/backend') }
+        if ($Component -eq 'backend') {
+            Invoke-Checked npm.cmd @('run','typecheck','-w','packages/backend')
+            Invoke-Checked npm.cmd @('run','test:lint-rules','-w','packages/backend')
+            # Avoid Windows Jest's rootDir/extglob discovery issue and fail on zero tests.
+            Invoke-Checked npm.cmd @('run','test:unit','-w','packages/backend','--','--testMatch','**/*.unit.ts','--passWithNoTests=false','--runInBand')
+        } else {
+            Invoke-Checked npm.cmd @('run','test:unit','-w','packages/frontend','--','--run')
+        }
         Invoke-Checked npm.cmd @('run','build','-w',"packages/$Component")
         $after = & git status --porcelain --untracked-files=no
         if ($LASTEXITCODE -ne 0 -or $after) { throw 'Tracked files changed during build; review before packaging.' }
@@ -51,6 +68,22 @@ function Invoke-PrebuiltUpload {
             Write-Host "Uploaded private/$name"
         }
         Write-Host "Built $Component at $commit"
-        Write-Host "On the Pi: sh deploy/deploy-$Component.sh"
-    } finally { Pop-Location }
+        Set-PSDebug -Off
+        if ($NoUpload) {
+            Write-Host "PASS: $Component tests and build succeeded. Local package only; upload before deploying." -ForegroundColor Green
+        } else {
+            Write-Host "PASS: $Component tests, build and upload succeeded. Ready to deploy on the Pi." -ForegroundColor Green
+            Write-Host "On the Pi: sh deploy/deploy-$Component.sh"
+        }
+    } catch {
+        Set-PSDebug -Off
+        Write-Host "FAIL: $Component build/upload failed. DO NOT PROCEED." -ForegroundColor Red
+        Write-Host $_.Exception.Message -ForegroundColor Red
+        throw
+    } finally {
+        Set-PSDebug -Off
+        if ($log) { Write-Host "Log: $log" }
+        if ($transcriptStarted) { Stop-Transcript | Out-Null }
+        Pop-Location
+    }
 }

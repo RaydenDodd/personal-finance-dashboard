@@ -1,7 +1,26 @@
-#!/bin/sh
-set -eu
+#!/bin/bash
+if [ -z "${BASH_VERSION:-}" ]; then exec bash "$0" "$@"; fi
+set -euo pipefail
+# Use bash for a live tee log without masking the deployment's exit status.
 cd "$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
-mkdir -p private
+umask 077
+mkdir -p private/deploy-logs
+log="private/deploy-logs/deploy-backend-$(date -u +%Y%m%dT%H%M%SZ)-$.log"
+# Outer process owns the pipeline and preserves both command and logging failures.
+if [ "${1:-}" != "--logged" ]; then
+  set +e
+  bash "deploy/deploy-backend.sh" --logged 2>&1 | tee "$log"
+  statuses=("${PIPESTATUS[@]}")
+  if [ "${statuses[0]}" -eq 0 ] && [ "${statuses[1]}" -eq 0 ]; then
+    printf '\033[32mPASS: backend deployed and healthy.\033[0m\n' | tee -a "$log"
+    printf 'Log: %s\n' "$log"
+    exit 0
+  fi
+  printf '\033[31mFAIL: backend deployment did not complete successfully. DO NOT PROCEED.\033[0m\n' | tee -a "$log"
+  printf 'Log: %s\n' "$log"
+  exit 1
+fi
+set -x
 exec 9>private/prebuilt-deploy.lock
 flock -n 9 || { echo 'Another prebuilt deployment is running.' >&2; exit 1; }
 git diff --quiet && git diff --cached --quiet || {
