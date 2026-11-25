@@ -109,7 +109,7 @@ function Invoke-PrebuiltUpload {
             $stage = "$name-upload-$([Guid]::NewGuid().ToString('N'))"
             $archive = Join-Path $root "private/$stage.tar.gz"
             try {
-                Invoke-Checked tar.exe @('-czf', $archive, '-C', (Join-Path $root 'private'), $name)
+                Invoke-Checked tar.exe @('-czf', $archive, '--options', 'gzip:compression-level=1', '-C', (Join-Path $root 'private'), $name)
                 $hash = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
                 Write-Host ("Compressed artifact: {0:N2} MiB" -f ((Get-Item -LiteralPath $archive).Length / 1MB))
                 Invoke-Checked ssh.exe @($SshHost, "umask 077 && mkdir -p ~/personal-finance-dashboard/private/$stage")

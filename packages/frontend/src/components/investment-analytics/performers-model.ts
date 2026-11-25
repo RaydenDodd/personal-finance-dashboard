@@ -1,5 +1,6 @@
 import type { InvestmentHolding } from '@bt/shared/types/investment-analytics';
-import { latestUsEquitySessionDate } from '@bt/shared/types/investment-market';
+import { positionPeriodDates } from '@bt/shared/types/investment-position-periods';
+import { easternDate, latestUsEquitySessionDate } from '@bt/shared/types/investment-market';
 
 import { chartNumber } from './chart-model';
 
@@ -19,13 +20,20 @@ export const INVESTMENT_PERFORMER_PERIODS = [
 ] as const;
 
 /** Ranking uses shared-service returns; unsupported periods remain absent rather than zero. */
-export const usesCustomPositionPeriod = (settings: Record<string, unknown>, period: string) =>
-  Boolean(
-    settings.from &&
-    settings.through &&
-    !['unrealized', 'all'].includes(period) &&
-    (period !== 'daily' || settings.through !== latestUsEquitySessionDate()),
-  );
+export function usesCustomPositionPeriod(
+  settings: Record<string, unknown>,
+  period: string,
+  today = easternDate(),
+): boolean {
+  if (!settings.from || !settings.through || ['unrealized', 'all'].includes(period)) return false;
+  if (period === 'daily') {
+    return settings.from !== settings.through || settings.through !== latestUsEquitySessionDate();
+  }
+  if (period === 'custom') return true;
+  const dates = positionPeriodDates(today);
+  const opening = dates[period as keyof typeof dates];
+  return !opening || settings.from !== opening || settings.through !== today;
+}
 export function rankInvestmentPerformers(
   holdings: InvestmentHolding[],
   period = 'unrealized',

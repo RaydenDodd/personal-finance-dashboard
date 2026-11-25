@@ -3,29 +3,7 @@ import Big from 'big.js';
 
 import { percent } from './math';
 
-export function positionPeriodDates(today: string) {
-  const end = new Date(today + 'T12:00:00Z');
-  const monthly = (months: number) => {
-    const date = new Date(end);
-    const day = date.getUTCDate();
-    date.setUTCDate(1);
-    date.setUTCMonth(date.getUTCMonth() - months);
-    date.setUTCDate(Math.min(day, new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0)).getUTCDate()));
-    return date.toISOString().slice(0, 10);
-  };
-  const week = new Date(end);
-  week.setUTCDate(week.getUTCDate() - 7);
-  return {
-    weekly: week.toISOString().slice(0, 10),
-    monthly: monthly(1),
-    '3m': monthly(3),
-    '6m': monthly(6),
-    ytd: new Date(Date.UTC(end.getUTCFullYear(), 0, 0)).toISOString().slice(0, 10),
-    '1y': monthly(12),
-    '2y': monthly(24),
-    '5y': monthly(60),
-  };
-}
+export { positionPeriodDates } from '@bt/shared/types/investment-position-periods';
 
 /** Read adapter over the native replay and net settlement cash; no tax-lot calculation. */
 export function positionPeriodReturns(input: {
@@ -47,6 +25,8 @@ export function positionPeriodReturns(input: {
 }) {
   const result: NonNullable<InvestmentHolding['personalReturns']> = {};
   const h = input.holding;
+  const accounts = new Set(h.accounts.map((a) => a.portfolioId));
+  const holdingTrades = input.trades.filter((t) => t.securityId === h.securityId && accounts.has(t.portfolioId));
   for (const [period, date] of Object.entries(input.dates)) {
     const key = period as keyof typeof result;
     const values = h.accounts.map((a) => input.openingValue(a.portfolioId, h.securityId, date));
@@ -67,10 +47,8 @@ export function positionPeriodReturns(input: {
     let net = new Big(0),
       buys = new Big(0),
       income = new Big(0);
-    const periodTrades = input.trades.filter(
+    const periodTrades = holdingTrades.filter(
       (t) =>
-        t.securityId === h.securityId &&
-        h.accounts.some((a) => a.portfolioId === t.portfolioId) &&
         t.date > date &&
         (period !== 'custom' || !input.through || t.date <= input.through),
     );

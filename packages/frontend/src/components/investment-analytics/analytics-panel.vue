@@ -23,6 +23,8 @@ import { useChartInteraction } from '@/composable/charts/use-chart-interaction';
 import SeriesChart from './series-chart.vue';
 import HoldingsTable from './holdings-table.vue';
 import Treemap from './treemap.vue';
+import { positionPeriodDates } from '@bt/shared/types/investment-position-periods';
+import { easternDate } from '@bt/shared/types/investment-market';
 import OverlapDetails from './overlap-details.vue';
 import CompositionHealth from './composition-health.vue';
 import MetricBreakdown from './metric-breakdown.vue';
@@ -858,9 +860,17 @@ const performanceRange = computed<PayrollRange>({
       all: 'unrealized',
       custom: 'custom',
     };
+    const period = periods[value.preset] ?? 'daily';
+    const today = easternDate();
+    const dates = positionPeriodDates(today);
+    const opening = dates[period as keyof typeof dates];
+    // Only normalize the current standard preset, never an explicitly custom or shifted range.
+    const normalized = opening && value.through === today && value.preset !== 'custom'
+      ? { ...value, from: opening }
+      : value;
     emit('settings-change', {
-      ...investmentRangeSettings(value),
-      [props.kind === 'heatmap' ? 'colorBy' : 'performerPeriod']: periods[value.preset] ?? 'daily',
+      ...investmentRangeSettings(normalized),
+      [props.kind === 'heatmap' ? 'colorBy' : 'performerPeriod']: period,
     });
   },
 });

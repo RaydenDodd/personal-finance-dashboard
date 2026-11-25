@@ -1246,8 +1246,15 @@ async function getAnalyticsImpl({
         amount: decimal(t.refAmount),
         quantity: decimal(t.quantity),
       }));
+      const tradesByPair = new Map<string, typeof txs>();
+      for (const trade of txs) {
+        const key = trade.portfolioId + ':' + trade.securityId;
+        const existing = tradesByPair.get(key);
+        if (existing) existing.push(trade);
+        else tradesByPair.set(key, [trade]);
+      }
       for (const pair of pairs.values()) {
-        const pairTrades = txs.filter((t) => t.portfolioId === pair.portfolioId && t.securityId === pair.securityId);
+        const pairTrades = tradesByPair.get(pair.portfolioId + ':' + pair.securityId) ?? [];
         for (const [period, start] of Object.entries(periodDates)) {
           const end = period === 'custom' && performanceThrough ? performanceThrough : today;
           const opening = quantityAt(pair.portfolioId, pair.securityId, start),
@@ -1278,7 +1285,7 @@ async function getAnalyticsImpl({
           positionQuantity: quantityAt,
           openingValue: (p, s, d) =>
             quantityAt(p, s, d) === '0' ? '0' : (positionBaselines.get(`${p}:${s}:${d}`) ?? null),
-          trades: txs,
+          trades: pairTrades,
           onGain: (period, gain, base) => {
             if (new Big(gain).eq(0) && new Big(base).eq(0)) return;
             gains.set(period, (gains.get(period) ?? new Big(0)).plus(gain));
