@@ -135,6 +135,7 @@ export const accountSyncWorker = new Worker<AccountSyncJobData>(
   {
     connection: connectionOptions,
     concurrency: 5,
+    autorun: process.env.INVESTMENT_WORKER_ROLE !== 'true',
     maxStalledCount: 2,
   },
 );

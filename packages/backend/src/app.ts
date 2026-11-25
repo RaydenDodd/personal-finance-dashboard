@@ -7,6 +7,7 @@ import express from 'express';
 import fs from 'fs';
 import https from 'https';
 import path from 'path';
+import { monitorEventLoopDelay, performance } from 'node:perf_hooks';
 
 import { initializeBackgroundJobs, shutdownBackgroundJobs } from './background-jobs';
 import { API_PREFIX } from './config';
@@ -60,6 +61,24 @@ const onServerReady = ({ protocol }: { protocol: 'http' | 'https' }) => {
   logger.info(`[OK] ${protocol.toUpperCase()} Server is running on ${protocol}://localhost:${port}`);
   logger.info(`API Prefix: ${API_PREFIX}`);
   initializeBackgroundJobs();
+  if (process.env.INVESTMENT_HTTP_PERF_LOG === 'true') {
+    const lag = monitorEventLoopDelay({ resolution: 20 });
+    lag.enable();
+    let previous = performance.eventLoopUtilization();
+    const timer = setInterval(() => {
+      const utilization = performance.eventLoopUtilization(previous);
+      previous = performance.eventLoopUtilization();
+      logger.info('HTTP runtime performance', {
+        eventLoopP95Ms: Math.round(lag.percentile(95) / 1e6),
+        eventLoopMaxMs: Math.round(lag.max / 1e6),
+        eventLoopUtilization: Number(utilization.utilization.toFixed(3)),
+        rssMb: Math.round(process.memoryUsage().rss / 1048576),
+        heapUsedMb: Math.round(process.memoryUsage().heapUsed / 1048576),
+      });
+      lag.reset();
+    }, 30000);
+    timer.unref();
+  }
 };
 
 if (isTest) {

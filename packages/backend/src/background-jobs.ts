@@ -87,7 +87,11 @@ export function initializeBackgroundJobs() {
   for (const cron of allEnvCrons) cron.startCron();
 
   if (process.env.NODE_ENV === 'production') {
-    for (const cron of prodOnlyCrons) cron.startCron();
+    for (const cron of prodOnlyCrons) {
+      if (process.env.INVESTMENT_WORKER_EXTERNAL === 'true' &&
+          (cron === investmentReadModelCron || cron === investmentHistoryCron)) continue;
+      cron.startCron();
+    }
     // Resume due, explicitly enabled composition checks after a restart.
     const timer = setTimeout(() => {
       void fundCompositionRefreshCron.triggerManualSync().catch(() => undefined);

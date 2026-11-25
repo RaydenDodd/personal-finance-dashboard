@@ -197,7 +197,9 @@ const sequelize = new Sequelize({
   pool:
     process.env.NODE_ENV === 'test'
       ? { max: 50, min: 0, evict: 10_000 }
-      : { max: 16, min: 2, idle: 30_000, evict: 60_000 },
+      : process.env.INVESTMENT_WORKER_ROLE === 'true'
+        ? { max: 4, min: 0, idle: 10_000, evict: 30_000 }
+        : { max: 16, min: 2, idle: 30_000, evict: 60_000 },
   // TCP keepalive stops idle pooled connections from being silently dropped by
   // intermediate networking (Docker NAT/proxy) — a dead connection is only
   // discovered at checkout, forcing a slow reconnect inside a request.

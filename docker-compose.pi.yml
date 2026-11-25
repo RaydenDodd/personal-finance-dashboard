@@ -24,6 +24,8 @@ services:
       ATTACHMENTS_DIR: /app/packages/backend/data/attachments
       NODE_OPTIONS: --max-old-space-size=768
       DB_QUERY_LOGGING: 'false'
+      INVESTMENT_WORKER_EXTERNAL: 'true'
+      INVESTMENT_HTTP_PERF_LOG: 'true'
     volumes: [attachments:/app/packages/backend/data/attachments]
     depends_on:
       db: { condition: service_healthy }
@@ -37,6 +39,34 @@ services:
       start_period: 120s
     mem_limit: 1g
     cpus: 1.5
+    logging: *logging
+    networks: [finance]
+
+  investment-worker:
+    image: personal-finance-dashboard-backend:local
+    restart: unless-stopped
+    env_file: .env.pi.local
+    environment:
+      IS_SELF_HOST: 'true'
+      SYSTEM_DEMO_DISABLED: 'true'
+      INVESTMENT_WORKER_ROLE: 'true'
+      NODE_OPTIONS: --max-old-space-size=640
+      DB_QUERY_LOGGING: 'false'
+    # Backend owns schema migrations. Do not run them again in the worker.
+    entrypoint: [node, --enable-source-maps, dist/investment-worker.js]
+    depends_on:
+      backend: { condition: service_healthy }
+      db: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test: [CMD, node, -e, "if(Date.now()-require('fs').statSync('/tmp/investment-worker-heartbeat').mtimeMs>180000)process.exit(1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 120s
+    stop_grace_period: 2m
+    mem_limit: 896m
+    cpus: 0.75
     logging: *logging
     networks: [finance]
 

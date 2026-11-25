@@ -35,7 +35,7 @@ export const redisReady: Promise<void> = (async () => {
 
   // Clear stale sync statuses from Redis on startup
   // Skip in test environment - handled by setupIntegrationTests.ts beforeEach
-  if (process.env.NODE_ENV !== 'test') {
+  if (process.env.NODE_ENV !== 'test' && process.env.INVESTMENT_WORKER_ROLE !== 'true') {
     await clearAllSyncStatuses();
   }
 })();

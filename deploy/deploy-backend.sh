@@ -45,10 +45,16 @@ test -n "$container" || { echo "No running $service container; use the initial d
 previous=$(docker inspect --format '{{.Image}}' "$container")
 docker tag "$previous" "$image:previous"
 time compose run --rm --no-deps backup once
+# Stop old worker before changing the shared backend image or running migrations.
+compose stop investment-worker
 time sh deploy/build-prebuilt-backend.sh "$artifact"
 if ! time compose up -d --no-deps --no-build --wait --wait-timeout 300 "$service"; then
   echo "Deployment failed. Previous image retained as $image:previous." >&2
   echo 'Inspect logs before rollback; an image rollback cannot reverse database migrations.' >&2
+  exit 1
+fi
+if ! time compose up -d --no-deps --no-build --wait --wait-timeout 300 investment-worker; then
+  echo 'Analytics worker deployment failed. Inspect worker logs before proceeding.' >&2
   exit 1
 fi
 compose exec -T frontend nginx -s reload
