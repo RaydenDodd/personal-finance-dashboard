@@ -1,3 +1,4 @@
+import { listGroups, createGroup, updateGroup, deleteGroup } from '@controllers/investments/groups';
 import { isTestSeedingEnabled } from '@common/utils/env';
 import {
   estimateCostController as importEstimateCostController,
@@ -71,6 +72,10 @@ const router = Router({});
 // portfolios and deleting existing ones are blocked per-route below; admin-only
 // endpoints enforce their own access checks.
 router.use(authenticateSession);
+router.get('/groups', listGroups);
+router.post('/groups', blockDemoUsers, createGroup);
+router.put('/groups/:id', blockDemoUsers, updateGroup);
+router.delete('/groups/:id', blockDemoUsers, deleteGroup);
 router.get('/analytics', getAnalytics);
 router.get('/analytics/read-model', getAnalyticsReadModel);
 router.get('/analytics/history', getAccountHistoryController);

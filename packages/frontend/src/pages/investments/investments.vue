@@ -27,6 +27,8 @@
       </DemoRestricted>
     </div>
 
+    <InvestmentGroups v-if="!isDemo" />
+
     <template v-if="portfoliosQuery.isLoading.value">
       <div class="mb-6 grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4">
         <Card v-for="i in 3" :key="i" class="overflow-hidden">
@@ -223,6 +225,7 @@ import { usePortfolios } from '@/composable/data-queries/portfolios';
 import { usePortfolioVisibility } from '@/composable/use-portfolio-visibility';
 import { cn } from '@/lib/utils';
 import PortfolioCardBalance from '@/pages/investments/components/portfolio-card-balance.vue';
+import InvestmentGroups from './components/investment-groups.vue';
 import PortfoliosTrash from '@/pages/investments/components/portfolios-trash.vue';
 import { ROUTES_NAMES } from '@/routes/constants';
 import { useCurrenciesStore, useUserStore } from '@/stores';
