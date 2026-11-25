@@ -62,7 +62,7 @@ provide(
       return Math.max(
         140,
         availableHeight.value -
-          (kind.value === 'risk' || kind.value === 'contributions' ? 160 : kind.value === 'performance' ? 24 : 46),
+          (kind.value === 'risk' || kind.value === 'contributions' ? 160 : kind.value === 'performance' ? 48 : 46),
       );
     const base = kind.value === 'heatmap' ? (fullPage ? 380 : 340) : fullPage ? 288 : 208;
     return base + Math.max(0, (fullPage || bounded.value ? (widget.value.rowSpan ?? 1) : 1) - 1) * 180;
@@ -151,13 +151,15 @@ const broad = useInvestmentAnalytics({
 const narrow = useInvestmentHistory({
   portfolioIds,
   enabled: () => focusedHistory.value || kind.value === 'benchmark',
-  includeCapital: () => kind.value === 'value-capital' || kind.value === 'benchmark' ||
-    (['performance', 'portfolio-comparison'].includes(kind.value) && settings.value.unit !== 'dollars'),
+  // The performance widget shows both gain and return even when the chart
+  // itself displays account value in dollars.
+  includeCapital: () => ['value-capital', 'benchmark', 'performance'].includes(kind.value) ||
+    (kind.value === 'portfolio-comparison' && settings.value.unit !== 'dollars'),
   gainFrom: () => {
     const range = investmentRange(settings.value, '1900-01-01');
     const short = Date.parse(payrollToday()) - Date.parse(range.from) <= 7 * 86400000;
-    const needsPeriodReturns = kind.value === 'benchmark' ||
-      (['performance', 'portfolio-comparison'].includes(kind.value) && settings.value.unit !== 'dollars');
+    const needsPeriodReturns = ['benchmark', 'performance'].includes(kind.value) ||
+      (kind.value === 'portfolio-comparison' && settings.value.unit !== 'dollars');
     return needsPeriodReturns || short ? range.from : undefined;
   },
   includeEvents: () => Boolean(settings.value.showEvents),

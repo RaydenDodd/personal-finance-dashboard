@@ -432,3 +432,31 @@ it('uses the existing account-return history instead of clipping benchmarks to t
   expect(points[0].values.portfolio).toBe(0);
   expect(points.at(-1).values.portfolio).toBeCloseTo(10);
 });
+
+
+it('shows signed gains and returns for a selected value-chart period and does not reuse another opening date', async () => {
+  const analytics = base();
+  analytics.accountHistory = {
+    generatedAt: analytics.generatedAt,
+    currencyCode: 'USD',
+    dates: ['2026-11-19', '2026-11-20'],
+    total: ['1000', '1050'],
+    accountsKnown: [1, 1],
+    accountsFull: [1, 1],
+    accounts: [],
+    pending: false,
+    gainFrom: '2026-11-20',
+    periodGains: [null, '50'],
+    periodReturnPercent: [null, '5'],
+  };
+  analytics.history = analytics.accountHistory.dates.map((date, i) => ({
+    date, marketValue: analytics.accountHistory!.total[i], knownMarketValue: analytics.accountHistory!.total[i],
+    portfolios: {}, coverage: 100,
+  })) as InvestmentAnalytics['history'];
+  const wrapper = panel('performance', analytics, { dateRange: '1D', from: '2026-11-20', through: '2026-11-20', unit: 'dollars' });
+  const summary = wrapper.get('[data-testid="investment-performance-summary"]');
+  expect(summary.text()).toContain('+$50.00');
+  expect(summary.text()).toContain('+5.00%');
+  await wrapper.setProps({ settings: { dateRange: '1M', from: '2026-11-01', through: '2026-11-20', unit: 'dollars' } });
+  expect(wrapper.find('[data-testid="investment-performance-summary"]').exists()).toBe(false);
+});

@@ -86,6 +86,10 @@ const pct = (value: string | number | null | undefined) =>
     : Number(value) < 100 && Number(value) > 99.99
       ? '<100%'
       : `${Number(value).toFixed(2)}%`;
+const signedMoney = (value: string | number | null | undefined) =>
+  value != null && Number(value) > 0 ? '+' + money(value) : money(value);
+const signedPercent = (value: string | number | null | undefined) =>
+  value != null && Number(value) > 0 ? '+' + pct(value) : pct(value);
 const signed = (value: string | number | null | undefined) =>
   value == null ? 'text-muted-foreground' : Number(value) >= 0 ? 'text-app-income-color' : 'text-app-expense-color';
 const metricLabels: Record<string, string> = {
@@ -450,11 +454,21 @@ const gainLabel = computed(() => (percent.value ? 'Portfolio return' : 'Portfoli
 const performanceSummary = computed(() => {
   const h = props.analytics.accountHistory;
   if (!h?.dates) return null;
+  // Never relabel returns calculated from another opening date as the current period.
+  if (h.gainFrom && range.value.preset !== 'all' && h.gainFrom !== range.value.from) return null;
   const i = h.dates.findLastIndex(
     (date, i) =>
       date.slice(0, 10) >= range.value.from && date.slice(0, 10) <= range.value.through && h.periodGains?.[i] != null,
   );
-  return i < 0 ? null : { gain: h.periodGains?.[i], percent: h.periodReturnPercent?.[i] };
+  if (i < 0) return null;
+  const accounts = h.accounts ?? [];
+  const gain = h.periodGains?.[i];
+  const percent = h.periodReturnPercent?.[i];
+  const partial = Boolean(h.pending || accounts.some((account) =>
+    account.periodGains?.[i] == null || (percent != null && account.periodReturnPercent?.[i] == null) ||
+    account.full?.[i] === false,
+  ));
+  return { gain, percent, partial, date: h.dates[i] };
 });
 const chartSeries = computed<InvestmentChartSeries[]>(() => {
   if (gainView.value)
@@ -1055,17 +1069,19 @@ const health = computed(() =>
       </DateRange>
       <component
         :is="dashboardRange ? 'div' : WidgetHeaderControls"
-        v-if="['performance', 'portfolio-comparison'].includes(kind) && performanceSummary"
+        v-if="(['performance', 'portfolio-comparison'].includes(kind) && performanceSummary) || (kind === 'performance' && dashboardRange)"
         ><div
           data-testid="investment-performance-summary"
-          class="flex items-baseline gap-2 text-sm whitespace-nowrap sm:gap-3 sm:text-base"
+          class="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-sm tabular-nums sm:gap-x-3 sm:text-base"
+          :title="performanceSummary?.date ? 'Latest supported observation: ' + performanceSummary.date : 'Selected period gain and return are unavailable.'"
         >
-          <strong :class="signed(performanceSummary.gain)">{{ money(performanceSummary.gain) }}</strong>
+          <strong :class="signed(performanceSummary?.gain)">{{ signedMoney(performanceSummary?.gain) }}</strong>
           <strong
-            :class="signed(performanceSummary.percent)"
+            :class="signed(performanceSummary?.percent)"
             title="Estimated return weighted by dated deposits and withdrawals (Modified Dietz). Supported account history only."
-            >{{ pct(performanceSummary.percent) }}</strong
+            >{{ signedPercent(performanceSummary?.percent) }}</strong
           >
+          <span v-if="performanceSummary?.partial" class="text-muted-foreground text-xs" title="Some account values or return evidence are incomplete.">Partial</span>
         </div></component
       >
       <strong
