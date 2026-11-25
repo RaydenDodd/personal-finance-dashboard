@@ -184,11 +184,21 @@ export async function refreshNextInvestmentReadModel(): Promise<boolean> {
     });
     const after = await resolveSelection(row.userId, row.selection);
     if (selectionKey(after) !== row.selectionKey) return true;
+    const serializeStart = Date.now();
+    const payload = JSON.stringify(result);
+    const serializationMs = Date.now() - serializeStart;
+    const persistStart = Date.now();
     await sqlRows(`
       UPDATE "InvestmentAnalyticsReadModels"
       SET payload=CAST(:payload AS jsonb), "sourceRevision"=:revision, "builtAt"=now(), "retryAt"=now()+interval '90 seconds', failures=0
       WHERE "userId"=:userId AND "selectionKey"=:key RETURNING "selectionKey"
-    `, { userId: row.userId, key: row.selectionKey, payload: JSON.stringify(result), revision });
+    `, { userId: row.userId, key: row.selectionKey, payload, revision });
+    logger.info('Investment analytics read-model publication', {
+      payloadBytes: Buffer.byteLength(payload),
+      serializationMs,
+      persistenceMs: Date.now() - persistStart,
+      customRange: Boolean(before.performanceFrom && before.performanceThrough),
+    });
     return true;
   } catch (error) {
     // Retain the last valid payload and retry with bounded backoff.

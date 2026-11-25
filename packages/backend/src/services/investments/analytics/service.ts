@@ -43,6 +43,8 @@ import {
 } from '@services/stats/get-combined-balance-history/security-price-lookup';
 import type { TransactionRow } from '@services/stats/get-combined-balance-history/types';
 import Big from 'big.js';
+import { logger } from '@js/utils/logger';
+import { performance } from 'node:perf_hooks';
 import { Op, literal } from 'sequelize';
 
 import { getAccountGainSources } from './account-gain-sources';
@@ -101,6 +103,14 @@ async function getAnalyticsImpl({
   compact?: boolean;
   overlapPair?: [string, string];
 }): Promise<InvestmentAnalytics> {
+  const timings: Record<string, number> = {};
+  const started = performance.now();
+  let phaseStarted = started;
+  const phase = (name: string) => {
+    const now = performance.now();
+    timings[name] = Math.round(now - phaseStarted);
+    phaseStarted = now;
+  };
   const allPortfolios = await Portfolios.findAll({ where: { userId }, order: [['name', 'ASC']] });
   const ids = visiblePortfolioSelection(
     portfolioIds,
@@ -133,6 +143,8 @@ async function getAnalyticsImpl({
     }),
     getFundSnapshots(userId),
   ]);
+  phase('sourceReadsMs');
+  const transactionsBySecurity = Map.groupBy(transactions, (t) => t.securityId);
   let fundSnapshots = latestFundSnapshots(storedSnapshots, today);
   const brokerById = new Map(brokers.map((b) => [b.portfolioId, b]));
   const portfolioById = new Map<string, Portfolios>(scope.map((p) => [p.id, p]));
@@ -143,6 +155,8 @@ async function getAnalyticsImpl({
     summaries.set(portfolio.id, await getPortfolioSummary({ portfolioId: portfolio.id, userId }));
     allHoldingValues.push(...(await getHoldingValues({ portfolioId: portfolio.id, userId })));
   }
+  phase('nativeHoldingsMs');
+  const nativeHoldingsBySecurity = Map.groupBy(allHoldingValues, (h) => h.securityId);
   const securityIds = [
     ...new Set([...allHoldingValues.map((h) => h.securityId), ...transactions.map((t) => t.securityId)]),
   ];
@@ -179,6 +193,7 @@ async function getAnalyticsImpl({
       usEquityObservationAllowed(p.priceAsOf),
   );
   const pricesBySecurity = new Map<string, (typeof prices)[number][]>(Map.groupBy(prices, (p) => p.securityId));
+  phase('securityPricesMs');
   const health: InvestmentAnalytics['health'] = [];
   const holdingsByIdentity = new Map<string, InvestmentHolding>();
   for (const h of allHoldingValues) {
@@ -497,10 +512,10 @@ async function getAnalyticsImpl({
     reason: 'Recorded trade fees and standalone fee charges; source history may omit other account charges.',
   };
   const dailyCapital = new Map<string, string>();
+  const dividendsBySecurity = Map.groupBy(dividends, (d) => d.securityId);
   for (const h of holdings) {
     const nativeBasis = sum(
-      allHoldingValues
-        .filter((v) => v.securityId === h.securityId)
+      (nativeHoldingsBySecurity.get(h.securityId) ?? [])
         .map((v) => (v.costBasisKnown === false ? null : v.costBasis)),
     );
     h.averageCost =
@@ -509,7 +524,7 @@ async function getAnalyticsImpl({
       h.marketValue !== null && h.costBasis !== null ? new Big(h.marketValue).minus(h.costBasis).toString() : null;
     h.unrealizedPercent = percent(h.unrealizedGain, h.costBasis);
     h.weight = percent(h.marketValue, marketValue ?? new Big(knownSecurities).plus(knownCash).toString());
-    h.dividends = sum(dividends.filter((d) => d.securityId === h.securityId).map((d) => d.amount));
+    h.dividends = sum((dividendsBySecurity.get(h.securityId) ?? []).map((d) => d.amount));
     const series = pricesBySecurity.get(h.securityId) ?? [];
     h.periodReturns = recordedPriceReturns(
       series.map((p) => ({ date: new Date(p.date).toISOString(), price: decimal(p.priceClose) })),
@@ -562,17 +577,16 @@ async function getAnalyticsImpl({
       investmentPriceDate(h.priceDate) === sessionDate &&
       investmentPriceDate(latest.date) === sessionDate
     ) {
-      const dayTrades = transactions.filter(
+      const securityTrades = transactionsBySecurity.get(h.securityId) ?? [];
+      const dayTrades = securityTrades.filter(
         (t) =>
-          t.securityId === h.securityId &&
           investmentPriceDate(t.date) === sessionDate &&
           (t.category === 'buy' || t.category === 'sell'),
       );
       const daily =
         h.marketValue === null ||
-        transactions.some(
+        securityTrades.some(
           (t) =>
-            t.securityId === h.securityId &&
             t.category === 'transfer' &&
             Number(decimal(t.quantity)) !== 0 &&
             investmentPriceDate(t.date) === sessionDate,
@@ -664,9 +678,8 @@ async function getAnalyticsImpl({
       .filter((h) => !activeIds.has(h.securityId) && h.currencyCode === currencyCode)
       .map((h) => h.securityId),
   )) {
-    const trades = transactions.filter(
+    const trades = (transactionsBySecurity.get(id) ?? []).filter(
       (t) =>
-        t.securityId === id &&
         investmentPriceDate(t.date) === currentSession &&
         (t.category === 'buy' || t.category === 'sell'),
     );
@@ -706,6 +719,7 @@ async function getAnalyticsImpl({
     'Change relative to the covered positions’ previous-close value, adjusted for recorded trades; cash and uncovered positions are excluded.';
   if (performanceFrom && performanceThrough && (performanceFrom > performanceThrough || performanceThrough > today))
     throw new ValidationError({ message: 'Choose a date range through today or earlier.' });
+  phase('holdingsAndDailyMetricsMs');
   const periodDates = {
     ...positionPeriodDates(today),
     ...(performanceFrom && performanceThrough
@@ -731,6 +745,7 @@ async function getAnalyticsImpl({
     settlementAmount: decimal(t.settlementAmount),
     settlementCurrencyCode: t.settlementCurrencyCode,
   })) as TransactionRow[];
+  const nativeRowsByPortfolio = Map.groupBy(nativeRows, (t) => t.portfolioId);
   const historyRows = [
     ...nativeRows,
     ...brokers.flatMap(
@@ -739,10 +754,11 @@ async function getAnalyticsImpl({
           b.portfolioId,
           b.data,
           securities,
-          nativeRows.filter((t) => t.portfolioId === b.portfolioId),
+          nativeRowsByPortfolio.get(b.portfolioId) ?? [],
         ).rows,
     ),
   ].sort((a, b) => +a.date - +b.date);
+  phase('positionEvidenceMs');
   const history = buildHistory({
     onHoldingQuantity: (row) => {
       if (baselineDays.has(row.date))
@@ -766,6 +782,7 @@ async function getAnalyticsImpl({
     prices,
     transactions: historyRows,
   });
+  phase('historyReplayMs');
   const firstSecurityEvidence = new Map<string, string>();
   const evidence = (portfolioId: string, securityId: string, date: string) => {
     const key = portfolioId + ':' + securityId;
@@ -783,6 +800,16 @@ async function getAnalyticsImpl({
     const first = firstSecurityEvidence.get(portfolioId + ':' + securityId);
     return first && date < first ? '0' : null;
   };
+  // Normalize each trade exactly once; the same rows feed holding and portfolio totals.
+  const periodTrades = historyRows.map((t) => ({
+    portfolioId: t.portfolioId,
+    securityId: t.securityId,
+    date: investmentPriceDate(t.date),
+    category: t.category,
+    amount: decimal(t.refAmount),
+    quantity: decimal(t.quantity),
+  }));
+  const periodTradesBySecurity = Map.groupBy(periodTrades, (t) => t.securityId);
   for (const h of holdings)
     h.personalReturns = positionPeriodReturns({
       holding: h,
@@ -798,14 +825,7 @@ async function getAnalyticsImpl({
         if (quantity === '0') return '0';
         return positionBaselines.get(`${portfolioId}:${securityId}:${date}`) ?? null;
       },
-      trades: historyRows.map((t) => ({
-        portfolioId: t.portfolioId,
-        securityId: t.securityId,
-        date: investmentPriceDate(t.date),
-        category: t.category,
-        amount: decimal(t.refAmount),
-        quantity: decimal(t.quantity),
-      })),
+      trades: periodTradesBySecurity.get(h.securityId) ?? [],
     });
   const currentPoint = history.find((p) => p.date === today);
   if (currentPoint) {
@@ -858,6 +878,7 @@ async function getAnalyticsImpl({
         new Big(p.marketValue!).minus(exactPoints[0]!.marketValue!).toString(),
         exactPoints[0]!.marketValue!,
       );
+  phase('positionReturnsMs');
   const allocationValue = marketValue ?? new Big(knownSecurities).plus(knownCash).toString();
   const exposure = lookThrough(holdings, fundSnapshots, allocationValue);
   fillMissingCompanyClassifications(exposure.filter(isCompanyExposure), securities);
@@ -1067,6 +1088,7 @@ async function getAnalyticsImpl({
           'Fund classification inferred from an explicit ETF, fund or fund-issuer name. Confirm using a dated source composition.',
       });
   }
+  phase('fundExposureAndHealthMs');
   const priceRisk = currentHoldingsPriceRisk(
     holdings,
     prices.map((p) => ({
@@ -1141,6 +1163,7 @@ async function getAnalyticsImpl({
     p.calculation!.dailyChange = knownDaily.length ? sum(knownDaily.map((a) => a.dailyChange!)) : null;
   }
   const holdingDaily = { gain: metrics.dailyChange?.value ?? null, percent: metrics.dailyChangePercent?.value ?? null };
+  phase('riskBenchmarksAndEventsMs');
   const gainSources = await getAccountGainSources(userId);
   gainSources.valuations.push(
     ...brokers.flatMap((b) =>
@@ -1223,6 +1246,7 @@ async function getAnalyticsImpl({
       amount: decimal(t.refAmount),
     })),
   });
+  phase('accountGainSourcesMs');
   const result: InvestmentAnalytics = {
     accountValueAdjustments,
     performanceTotals: (() => {
@@ -1238,16 +1262,8 @@ async function getAnalyticsImpl({
         gains = new Map<string, Big>(),
         covered = new Map<string, number>();
       const eligible = new Map<string, number>();
-      const txs = historyRows.map((t) => ({
-        portfolioId: t.portfolioId,
-        securityId: t.securityId,
-        date: investmentPriceDate(t.date),
-        category: t.category,
-        amount: decimal(t.refAmount),
-        quantity: decimal(t.quantity),
-      }));
-      const tradesByPair = new Map<string, typeof txs>();
-      for (const trade of txs) {
+      const tradesByPair = new Map<string, typeof periodTrades>();
+      for (const trade of periodTrades) {
         const key = trade.portfolioId + ':' + trade.securityId;
         const existing = tradesByPair.get(key);
         if (existing) existing.push(trade);
@@ -1369,7 +1385,21 @@ async function getAnalyticsImpl({
         'Refresh uses the existing price services with owner-scoped visible holdings and verified benchmarks. Broker transactions are synchronized separately.',
     },
   };
-  return compact ? compactAnalytics(result) : result;
+  const output = compact ? compactAnalytics(result) : result;
+  phase('aggregateTotalsAndOverlapMs');
+  if (process.env.INVESTMENT_WORKER_ROLE === 'true') {
+    logger.info('Investment analytics phase performance', {
+      ...timings,
+      totalMs: Math.round(performance.now() - started),
+      portfolios: scope.length,
+      holdings: holdings.length,
+      transactions: transactions.length,
+      priceRows: prices.length,
+      historyDays: history.length,
+      customRange: Boolean(performanceFrom && performanceThrough),
+    });
+  }
+  return output;
 }
 
 // A dashboard may request several different ranges simultaneously. Serialize the

@@ -83,6 +83,7 @@ export function buildHistory({
     quantity: number;
   }) => void;
 }): InvestmentHistoryPoint[] {
+  const nativeByPortfolio = Map.groupBy(transactions, (t) => t.portfolioId);
   transactions = [
     ...transactions,
     ...brokers.flatMap(
@@ -91,7 +92,7 @@ export function buildHistory({
           b.portfolioId,
           b.data,
           securities,
-          transactions.filter((t) => t.portfolioId === b.portfolioId),
+          nativeByPortfolio.get(b.portfolioId) ?? [],
         ).rows,
     ),
   ].sort((a, b) => +new Date(a.date) - +new Date(b.date));
@@ -119,6 +120,15 @@ export function buildHistory({
   )
     dates.push(d.toISOString().slice(0, 10));
   if (sampleTimes) dates.splice(0, dates.length, ...sampleTimes);
+  const dateSet = new Set(dates);
+  const transactionsByPortfolio = Map.groupBy(transactions, (t) => t.portfolioId);
+  const transfersByDay = Map.groupBy(transfers, (t) => t.date);
+  const observedBrokerDates = new Set<string>();
+  for (const broker of brokers) {
+    if (!ids.includes(broker.portfolioId)) continue;
+    for (const snapshot of broker.data.snapshots) observedBrokerDates.add(investmentPriceDate(snapshot.asOf));
+    for (const observation of broker.data.accountObservations ?? []) observedBrokerDates.add(observation.date);
+  }
   const observationTime = (p: SecurityPriceRow) =>
     p.priceAsOf ? +new Date(p.priceAsOf) : usEquityCloseInstant(investmentPriceDate(p.date));
   const intradayPrices = new Map<string, SecurityPriceRow[]>();
@@ -155,11 +165,13 @@ export function buildHistory({
     const broker = byBroker.get(id);
     const values = new Map<string, string | null>();
     const known = new Map<string, string | null>();
-    const txs = transactions.filter((t) => t.portfolioId === id);
+    const txs = transactionsByPortfolio.get(id) ?? [];
     const snapshots = [...(broker?.data.snapshots ?? [])]
       .filter((s) => s.currencyCode === currencyCode)
       .sort((a, b) => a.asOf.localeCompare(b.asOf));
+    const snapshotsByDay = Map.groupBy(snapshots, (s) => investmentPriceDate(s.asOf));
     const anchors = positionEvidence(snapshots, txs, shareUnitFactor);
+    const firstCompleteAnchor = anchors.filter((a) => a.complete).map((a) => investmentPriceDate(a.asOf)).sort()[0];
     const missing = new Map<string, Set<string>>(),
       unknown = new Map<string, Set<string>>(),
       badFx = new Set<string>();
@@ -188,7 +200,7 @@ export function buildHistory({
       uniqueDates: supportedDates,
       portfolioIds: [id],
       transactionsByPortfolio: new Map([[id, txs]]),
-      securitiesById: new Map(securities.map((s) => [s.id, s])),
+      securitiesById: securityById,
       findPriceForDate: (securityId, date) => {
         if (sampleTimes) {
           const observations = intradayPrices.get(securityId) ?? [];
@@ -218,10 +230,8 @@ export function buildHistory({
             ? findPrice(securityId, prior)
             : null;
         if (price !== null) return price;
-        const snapshot = snapshots.findLast(
-          (s) =>
-            investmentPriceDate(s.asOf) === date &&
-            s.positions?.some((p) => p.securityId === securityId && p.marketValue !== null),
+        const snapshot = snapshotsByDay.get(date)?.findLast(
+          (s) => s.positions?.some((p) => p.securityId === securityId && p.marketValue !== null),
         );
         const p = snapshot?.positions.find((p) => p.securityId === securityId);
         const qty = p ? Number(p.quantity) * shareUnitFactor(securityId, date) : 0;
@@ -281,7 +291,7 @@ export function buildHistory({
       const cash = cashByDate.get(d);
       const subtotal = holdings !== null ? new Big(holdings).plus(cash ?? 0).toString() : (cash ?? null);
       known.set(d, subtotal);
-      const universeKnown = !broker || anchors.some((a) => a.complete && investmentPriceDate(a.asOf) <= d);
+      const universeKnown = !broker || (firstCompleteAnchor !== undefined && firstCompleteAnchor <= d);
       values.set(d, universeKnown && cash !== undefined && !hasUnknown ? subtotal : null);
       onCoverage?.({
         portfolioId: id,
@@ -295,13 +305,13 @@ export function buildHistory({
     }
     for (const s of snapshots) {
       const d = investmentPriceDate(s.asOf);
-      if (dates.includes(d) && s.complete && s.totalValue !== null) {
+      if (dateSet.has(d) && s.complete && s.totalValue !== null) {
         values.set(d, s.totalValue);
         known.set(d, s.totalValue);
       }
     }
     for (const observation of broker?.data.accountObservations ?? []) {
-      if (dates.includes(observation.date)) {
+      if (dateSet.has(observation.date)) {
         values.set(observation.date, observation.totalValue);
         known.set(observation.date, observation.totalValue);
       }
@@ -320,7 +330,7 @@ export function buildHistory({
     else withdrawals = withdrawals.minus(flow);
   }
   return dates.map((date) => {
-    const dailyFlows = transfers.filter((t) => t.date === date).map((t) => new Big(nativeExternalFlow(t, selected)));
+    const dailyFlows = (transfersByDay.get(date) ?? []).map((t) => new Big(nativeExternalFlow(t, selected)));
     const incoming = dailyFlows.filter((v) => v.gt(0)).reduce((n, v) => n.plus(v), new Big(0));
     const outgoing = dailyFlows.filter((v) => v.lt(0)).reduce((n, v) => n.minus(v), new Big(0));
     contributions = contributions.plus(incoming);
@@ -345,11 +355,7 @@ export function buildHistory({
       knownMarketValue: knownValues.length ? sum(knownValues) : null,
       knownNetInvested: transfers.length ? contributions.minus(withdrawals).toString() : null,
       coverage: ids.length ? (Object.values(portfolios).filter((v) => v !== null).length / ids.length) * 100 : 0,
-      source: ids.some(
-        (id) =>
-          byBroker.get(id)?.data.snapshots.some((s) => investmentPriceDate(s.asOf) === date) ||
-          byBroker.get(id)?.data.accountObservations?.some((o) => o.date === date),
-      )
+      source: observedBrokerDates.has(date)
         ? 'Recorded broker observations / native history'
         : 'Native historical valuation; missing prices remain unavailable',
     };
