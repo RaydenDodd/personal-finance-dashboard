@@ -11,8 +11,8 @@ export interface ReviewGroup { id: string; name: string; sourceAccountId: string
 const normalize = (name: string) => name.trim().toLowerCase().replace(/\s+/g, ' ');
 const broker = (name: string) => {
   const v = normalize(name);
-  if (/^m1(?: finance)?$/.test(v)) return 'm1';
-  if (/^robinhood(?: financial| securities)?$/.test(v)) return 'robinhood';
+  if (/^m1(?: finance| group| invest(?: \d+)?| roth ira| traditional ira)?$/.test(v)) return 'm1';
+  if (/^robinhood(?: financial| securities| group| \d+)?$/.test(v)) return 'robinhood';
   if (/^public(?:\.com)?$/.test(v)) return 'public';
   return null;
 };

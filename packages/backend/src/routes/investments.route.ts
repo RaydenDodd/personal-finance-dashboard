@@ -1,5 +1,5 @@
 import { listGroups, createGroup, updateGroup, deleteGroup } from '@controllers/investments/groups';
-import { listFundingReviews, getFundingReviewPurchases, resolveReview, snoozeReviewReminder } from '@controllers/investments/funding-review';
+import { listFundingReviews, getFundingReviewPurchases, resolveReview, snoozeReviewReminder, previewReviewCsv, applyReviewCsv } from '@controllers/investments/funding-review';
 import { isTestSeedingEnabled } from '@common/utils/env';
 import {
   estimateCostController as importEstimateCostController,
@@ -77,6 +77,8 @@ router.get('/funding-reviews', listFundingReviews);
 router.post('/funding-reviews/snooze', blockDemoUsers, snoozeReviewReminder);
 router.get('/funding-reviews/:id/purchases', getFundingReviewPurchases);
 router.post('/funding-reviews/:id/resolve', blockDemoUsers, resolveReview);
+router.post('/funding-reviews/:id/csv/preview', blockDemoUsers, previewReviewCsv);
+router.post('/funding-reviews/:id/csv/apply', blockDemoUsers, checkBaseCurrencyLock, applyReviewCsv);
 router.get('/groups', listGroups);
 router.post('/groups', blockDemoUsers, createGroup);
 router.put('/groups/:id', blockDemoUsers, updateGroup);

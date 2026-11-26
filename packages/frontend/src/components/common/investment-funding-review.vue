@@ -12,6 +12,8 @@ import { useRoute,useRouter } from 'vue-router';
 
 interface Item {id:string;date:string;amount:number;currency:string;label:string;groupName:string;portfolioId:string|null;portfolios:{id:string;name:string}[];fingerprint:string;reason:string}
 interface Purchase {id:string;symbol:string;date:string;quantity:string;amount:number;currency:string;alreadyLinked:boolean}
+interface CsvRow {sourceRowId:string;date:string;symbol:string;quantity:string;amount:string;status:'existing'|'new'|'review';tradeId:string|null;reason:string}
+interface CsvPreview {fileHash:string;totalRows:number;matched:number;newBuys:number;review:number;otherRows:number;depositMatches:number;depositStatus:'unique'|'ambiguous'|'missing';rows:CsvRow[];issues:string[]}
 interface Response {items:Item[];reminderDue:boolean;lookbackFrom:string}
 const props=defineProps<{reminder?:boolean}>();
 const auth=useAuthStore(),root=useRootStore(),user=useUserStore(),route=useRoute(),router=useRouter();
@@ -22,12 +24,16 @@ const items=computed(()=>query.data.value?.items??[]);
 const open=ref(false),shown=ref(false),busy=ref(false),error=ref('');
 const selected=ref<Item|null>(null),portfolio=ref(''),chosen=ref<string[]>([]),cash=ref(false);
 const purchases=useQuery({queryKey:computed(()=>['investment-review-purchases',userId.value,selected.value?.id,portfolio.value]),queryFn:()=>api.get('/investments/funding-reviews/'+selected.value!.id+'/purchases',{portfolioId:portfolio.value}) as Promise<Purchase[]>,enabled:computed(()=>!props.reminder&&!!selected.value&&!!portfolio.value)});
+const csvText=ref(''),csvPreview=ref<CsvPreview|null>(null),csvChosen=ref<string[]>([]),confirmCash=ref(false),csvMessage=ref('');
+function resetCsv(){csvText.value='';csvPreview.value=null;csvChosen.value=[];confirmCash.value=false;csvMessage.value='';}
+async function previewCsv(event:Event){const file=(event.target as HTMLInputElement).files?.[0];if(!file||!selected.value||!portfolio.value)return;resetCsv();busy.value=true;error.value='';try{if(file.size>600000)throw Error('File is too large');csvText.value=await file.text();csvPreview.value=await api.post('/investments/funding-reviews/'+selected.value.id+'/csv/preview',{portfolioId:portfolio.value,fileContent:csvText.value}) as CsvPreview;}catch{error.value='Could not preview the CSV. Use a supported detailed export under 600 KB.';}finally{busy.value=false;}}
+async function applyCsv(){if(!selected.value||!portfolio.value||!csvPreview.value||!confirmCash.value)return;busy.value=true;error.value='';try{const result=await api.post('/investments/funding-reviews/'+selected.value.id+'/csv/apply',{portfolioId:portfolio.value,fileContent:csvText.value,fileHash:csvPreview.value.fileHash,sourceRowIds:csvChosen.value,confirmCash:true}) as {created:number;existing:number;tradeIds:string[]};await purchases.refetch();const available=new Set((purchases.data.value??[]).filter(t=>!t.alreadyLinked).map(t=>t.id));chosen.value=[...new Set([...chosen.value,...result.tradeIds.filter(id=>available.has(id))])];csvMessage.value='Deposit evidence linked. '+result.created+' new purchases imported; '+result.existing+' existing purchases matched. Confirm the review below.';csvPreview.value=null;csvText.value='';csvChosen.value=[];confirmCash.value=false;await client.invalidateQueries({predicate:q=>q.queryKey.some(k=>typeof k==='string'&&/portfolio|holding|investment/i.test(k))});}catch{error.value='Import was not applied. Check the preview, recorded portfolio cash and security holdings, then retry.';}finally{busy.value=false;}}
 const total=computed(()=> (purchases.data.value??[]).filter(t=>chosen.value.includes(t.id)).reduce((n,t)=>n+t.amount,0));
 const money=(n:number,c:string)=>new Intl.NumberFormat(undefined,{style:'currency',currency:c}).format(n);
 watch(userId,()=>{shown.value=false;open.value=false;selected.value=null;});
 watch(()=>query.data.value, result=>{if(props.reminder&&result?.reminderDue&&!shown.value){shown.value=true;open.value=true;}},{immediate:true});
-watch(portfolio,()=>{chosen.value=[];cash.value=false;error.value='';});
-function review(item:Item){selected.value=item;portfolio.value=item.portfolioId??(item.portfolios.length===1?item.portfolios[0]!.id:'');chosen.value=[];cash.value=false;error.value='';open.value=true;}
+watch(portfolio,()=>{chosen.value=[];cash.value=false;error.value='';resetCsv();});
+function review(item:Item){resetCsv();selected.value=item;portfolio.value=item.portfolioId??(item.portfolios.length===1?item.portfolios[0]!.id:'');chosen.value=[];cash.value=false;error.value='';open.value=true;}
 async function later(){busy.value=true;error.value='';try{await api.post('/investments/funding-reviews/snooze');open.value=false;await client.invalidateQueries({queryKey:['investment-funding-reviews']});}catch{error.value='Could not save reminder preference.';}finally{busy.value=false;}}
 async function go(){open.value=false;await router.push({name:ROUTES_NAMES.investments,query:{review:'1'}});}
 watch(()=>route.query.review,value=>{if(!props.reminder&&value==='1')void query.refetch();},{immediate:true});
@@ -77,6 +83,22 @@ async function resolve(){if(!selected.value||!portfolio.value)return;busy.value=
               <div class="flex flex-wrap gap-2">
                 <Button variant="outline" size="sm" as-child><RouterLink :to="{name:ROUTES_NAMES.portfolioDetail,params:{portfolioId:portfolio}}" @click="open=false">Enter purchases</RouterLink></Button>
                 <Button variant="outline" size="sm" @click="purchases.refetch()">Refresh purchases</Button>
+              </div>
+              <div class="space-y-2 rounded border p-3">
+                <p class="font-semibold">Brokerage CSV reconciliation</p>
+                <p class="text-muted-foreground text-xs">Upload your complete M1 or Robinhood activity export. Existing trades are matched; no deposit is added again. Select only purchases for this review.</p>
+                <input type="file" accept=".csv,text/csv" :disabled="busy" class="block w-full text-xs" @change="previewCsv"/>
+                <p v-if="csvMessage" class="text-xs">{{ csvMessage }}</p>
+                <template v-if="csvPreview">
+                  <p>{{ csvPreview.totalRows }} rows · {{ csvPreview.matched }} existing buys · {{ csvPreview.newBuys }} eligible new buys · {{ csvPreview.review }} review buys</p>
+                  <p :class="csvPreview.depositStatus==='unique'?'text-muted-foreground':'text-destructive'">{{ csvPreview.depositStatus==='unique'?'One matching deposit; no additional funding will be created.':csvPreview.depositStatus==='ambiguous'?'Multiple possible deposits — manual review required.':'No matching deposit in the file.' }}</p>
+                  <label v-for="row in csvPreview.rows" :key="row.sourceRowId" class="flex items-start gap-2 rounded border p-2 text-xs" :class="row.status==='review'?'opacity-60':''">
+                    <input v-model="csvChosen" type="checkbox" :value="row.sourceRowId" :disabled="row.status==='review'||busy"/><span class="flex-1">{{ row.date }} · {{ row.symbol }} · {{ row.quantity }} shares<small class="text-muted-foreground block">{{ row.status }} · {{ row.reason }}</small></span><strong>{{ money(Number(row.amount),selected.currency) }}</strong>
+                  </label>
+                  <label class="flex items-start gap-2 text-xs"><input v-model="confirmCash" type="checkbox"/><span>I confirm the CSV belongs to this portfolio, the deposit is already represented in its cash, and selected missing purchases are not already included in holdings.</span></label>
+                  <Button size="sm" :disabled="busy||!confirmCash||csvPreview.depositStatus!=='unique'||csvChosen.length>50" @click="applyCsv">Apply selected rows ({{ csvChosen.length }})</Button>
+                  <p class="text-muted-foreground text-xs">Other activity, ambiguous duplicates, and snapshot-covered executions are not automatically replayed.</p>
+                </template>
               </div>
               <p v-if="purchases.isPending.value">Loading recorded purchases…</p>
               <p v-else-if="purchases.isError.value" class="text-destructive">Could not load purchases.</p>

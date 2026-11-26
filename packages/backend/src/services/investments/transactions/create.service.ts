@@ -4,6 +4,7 @@ import { Money } from '@common/types/money';
 import { findOrThrowNotFound } from '@common/utils/find-or-throw-not-found';
 import { t } from '@i18n/index';
 import { NotFoundError, UnexpectedError, ValidationError } from '@js/errors';
+import { connection } from '@models/connection';
 import Holdings from '@models/investments/holdings.model';
 import InvestmentTransaction from '@models/investments/investment-transaction.model';
 import Portfolios from '@models/investments/portfolios.model';
@@ -33,6 +34,8 @@ interface CreateTxParams {
   name?: string;
   /** Stable identifier from the broker CSV parser. Replaying it returns the original row. */
   sourceRowId?: string;
+  /** Broker reports rounded execution price/quantity and exact cash independently. Internal CSV path only. */
+  brokerRoundedSettlement?: boolean;
   /**
    * Settlement leg — the cash side of the trade when it differs from the
    * security's own currency (single-cash-currency brokers, e.g. a PLN account
@@ -61,6 +64,7 @@ interface CreateTxParams {
 const createInvestmentTransactionImpl = async (params: CreateTxParams) => {
   const { portfolioId, securityId, userId, category, quantity, price, fees, date, preloadedHolding } = params;
 
+  await connection.sequelize.query('SELECT pg_advisory_xact_lock(hashtext(:key))', { replacements: { key: `investment-trade:${userId}:${portfolioId}` } });
   let sourceMarker: string | undefined;
   if (params.sourceRowId) {
     await findOrThrowNotFound({
@@ -164,7 +168,16 @@ const createInvestmentTransactionImpl = async (params: CreateTxParams) => {
     }
   }
 
-  const settlement = resolveSettlement({
+  let settlement: ReturnType<typeof resolveSettlement>;
+  if (params.brokerRoundedSettlement) {
+    if (!params.sourceRowId || category !== INVESTMENT_TRANSACTION_CATEGORY.buy || isCrossCurrency || params.settlementAmount === undefined || !new Big(fees || '0').eq(0) || new Big(params.settlementAmount).lte(0) || new Big(params.settlementAmount).minus(new Big(quantity).times(price)).abs().gt('0.01')) {
+      throw new ValidationError({ message: 'Invalid rounded broker settlement.' });
+    }
+    // Exact reported cash is authoritative; the separate execution price is
+    // preserved and a sub-cent statement rounding difference is not a fee.
+    const actual = new Big(params.settlementAmount).toFixed(10);
+    settlement = { fees: '0', amount: actual, settlementCurrencyCode: holding.currencyCode, settlementAmount: actual, settlementFees: '0', settlementRate: '1' };
+  } else settlement = resolveSettlement({
     category,
     quantity,
     price,
