@@ -1,7 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { calendarRoles, fundingEntries, monthBounds, monthCells, spendingEntries, summarizeDay, summarizeDayTotals, calendarTransactionFilters } from './finance-calendar-model';
+import { calendarRoles, fundingEntries, monthBounds, monthCells, calendarMonths, spendingEntries, summarizeDay, summarizeDayTotals, calendarTransactionFilters } from './finance-calendar-model';
 
 describe('monthly finance calendar', () => {
+  it('uses the exact dashboard dates and splits multi-month ranges without fetching future activity', () => {
+    expect(calendarMonths({ from: '2026-10-28', through: '2026-12-04' }, '2026-11-25')).toEqual([
+      { month: '2026-10', from: '2026-10-28', to: '2026-10-31', active: true },
+      { month: '2026-11', from: '2026-11-01', to: '2026-11-25', active: true },
+      { month: '2026-12', from: '2026-12-01', to: '2026-11-25', active: false },
+    ]);
+    expect(calendarMonths({ from: '2026-11-13', through: '2026-11-19' }, '2026-11-25')).toEqual([
+      { month: '2026-11', from: '2026-11-13', to: '2026-11-19', active: true },
+    ]);
+    expect(calendarMonths({ from: '2024-02-01', through: '2024-02-29' }, '2026-11-25')[0]?.to).toBe('2024-02-29');
+  });
   it('deep links to the selected date with spending filters or all real activity for contributions', () => {
     expect(calendarTransactionFilters('2026-11-16', true)).toEqual({
       start: '2026-11-16', end: '2026-11-16', plannedFilter: 'exclude', transferFilter: 'exclude', transactionType: 'expense',

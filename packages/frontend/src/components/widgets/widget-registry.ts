@@ -373,7 +373,7 @@ for (const [id, name, description] of [
 // Registration leaves every existing dashboard and the default layout untouched.
 Object.assign(WIDGET_REGISTRY, INVESTMENT_WIDGET_DEFINITIONS);
 
-// Read-only monthly calendars; each instance has independent navigation.
+// Read-only calendars follow the shared dashboard period through injection.
 for (const [id, name, description] of [
   ['financial-activity-calendar', 'Income & Contributions Calendar', 'Recorded paydays, investment funding and savings deposits by day.'],
   ['spending-calendar', 'Spending Calendar', 'Daily spending by category with clickable amounts and purchase records.'],

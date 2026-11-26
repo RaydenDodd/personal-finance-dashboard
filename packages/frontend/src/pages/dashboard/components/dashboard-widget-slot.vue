@@ -9,8 +9,8 @@ import { WIDGET_REGISTRY } from '@/components/widgets/widget-registry';
 import { cn } from '@/lib/utils';
 import { GripVerticalIcon, XIcon, ArrowUpIcon, ArrowDownIcon } from '@lucide/vue';
 import { useI18n } from 'vue-i18n';
-import { computed, defineAsyncComponent, provide, toRef } from 'vue';
-import { useMediaQuery } from '@vueuse/core';
+import { computed, defineAsyncComponent, provide, ref, toRef } from 'vue';
+import { useElementSize, useMediaQuery } from '@vueuse/core';
 
 import type { Period } from '../types';
 
@@ -39,6 +39,10 @@ provide(
   computed(() => props.currentPeriod),
 );
 const fixedRows = useMediaQuery('(min-width: 768px)');
+const editToolbar = ref<HTMLElement | null>(null);
+const { height: toolbarHeight } = useElementSize(editToolbar);
+const calendarTile = computed(() => ['financial-activity-calendar', 'spending-calendar'].includes(props.widgetConfig.widgetId));
+const reserveToolbar = computed(() => props.isEditMode && fixedRows.value && !props.naturalHeight && calendarTile.value);
 provide(
   'dashboard-widget-bounded',
   computed(() => !props.naturalHeight && fixedRows.value),
@@ -120,6 +124,7 @@ const isConfigChoiceActive = ({ option, value }: { option: WidgetConfigOption; v
           naturalHeight && isEditMode && 'md:pb-24',
         )
       "
+      :style="reserveToolbar ? { paddingBottom: Math.max(40, toolbarHeight) + 'px' } : undefined"
       :inert="isEditMode"
     >
       <slot><component :is="asyncComponent" v-if="asyncComponent" v-bind="componentProps" /></slot>
@@ -131,7 +136,7 @@ const isConfigChoiceActive = ({ option, value }: { option: WidgetConfigOption; v
       class="border-primary/50 pointer-events-none absolute inset-0 z-(--z-over-default) rounded-lg border-2 border-dashed"
     >
       <!-- Bottom toolbar -->
-      <div
+      <div ref="editToolbar"
         class="bg-background/80 pointer-events-auto absolute right-0 bottom-0 left-0 flex flex-wrap items-center justify-between gap-1 rounded-b-lg border-t px-2 py-1.5 backdrop-blur-sm"
       >
         <!-- Drag handle -->

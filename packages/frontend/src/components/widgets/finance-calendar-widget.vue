@@ -11,11 +11,11 @@ import { useDashboardPeriod } from './composables/use-dashboard-period';
 import { payrollToday } from '@/pages/income-management/payroll/date-range';
 import { type GetPivotReportResponse } from '@bt/shared/types';
 import { useQuery } from '@tanstack/vue-query';
-import { ChevronLeftIcon, ChevronRightIcon } from '@lucide/vue';
-import { addMonths, format, parseISO } from 'date-fns';
-import { computed, inject, ref, watch, type Ref } from 'vue';
+import { format, parseISO } from 'date-fns';
+import { computed, inject, type Ref } from 'vue';
 import WidgetWrapper from './components/widget-wrapper.vue';
-import { calendarRoles, fundingEntries, monthBounds, monthCells, spendingEntries, summarizeDay, summarizeDayTotals, calendarTransactionFilters, type FundingCalendarResponse } from './finance-calendar-model';
+import { ScrollArea } from '@/components/lib/ui/scroll-area';
+import { calendarRoles, fundingEntries, monthBounds, monthCells, calendarMonths, type CalendarEntry, spendingEntries, summarizeDay, summarizeDayTotals, calendarTransactionFilters, type FundingCalendarResponse } from './finance-calendar-model';
 
 const config = inject<Ref<DashboardWidgetConfig>>('dashboard-widget-config')!;
 const spending = computed(() => config.value.widgetId === 'spending-calendar');
@@ -23,40 +23,53 @@ const compact = computed(() => (config.value.rowSpan ?? 1) === 1 || config.value
 const { dashboardRange } = useDashboardPeriod();
 const { bounded } = useModuleLayout();
 const today = payrollToday();
-const month = ref(today.slice(0, 7));
 const router = useRouter();
 const openDate = (date: string, ids: string[]) => router.push({ name: ROUTES_NAMES.transactions, query: calendarTransactionFilters(date, spending.value, ids) });
-watch(() => dashboardRange.value?.from, (date) => {
-  if (date) month.value = date.slice(0, 7);
-}, { immediate: true });
-const bounds = computed(() => monthBounds(month.value));
-const request = computed(() => ({ from: bounds.value.from, to: [bounds.value.to, today].sort()[0]! }));
-const active = computed(() => request.value.from <= request.value.to);
-const prefix = VUE_QUERY_GLOBAL_PREFIXES.transactionChange;
-const spend = useQuery({
-  queryKey: computed(() => [prefix, 'calendar-spending', request.value]),
-  queryFn: () => api.get('/stats/calendar/spending', request.value) as Promise<GetPivotReportResponse>,
-  enabled: computed(() => spending.value && active.value), staleTime: 60000,
+// The dashboard is the only date control. A standalone fallback is used only
+// if the widget is mounted outside the dashboard.
+const range = computed(() => dashboardRange.value ?? { from: today.slice(0, 7) + '-01', through: monthBounds(today.slice(0, 7)).to });
+const months = computed(() => calendarMonths(range.value, today));
+const requests = computed(() => months.value.filter(m => m.active).map(({from,to}) => ({from,to})));
+const multiple = computed(() => months.value.length > 1);
+const query = useQuery({
+  queryKey: computed(() => [VUE_QUERY_GLOBAL_PREFIXES.transactionChange, spending.value ? 'calendar-spending' : 'calendar-funding', requests.value]),
+  queryFn: async ({ signal }) => {
+    const isSpending = spending.value;
+    const periods = requests.value;
+    const rows: CalendarEntry[] = [];
+    // Do not fan out many expensive report requests on a small host.
+    for (const request of periods) {
+      if (signal.aborted) throw new Error('Calendar range changed');
+      if (isSpending) rows.push(...spendingEntries(await api.get('/stats/calendar/spending', request) as GetPivotReportResponse));
+      else rows.push(...fundingEntries(await api.get('/stats/calendar/funding', request) as FundingCalendarResponse));
+    }
+    return rows;
+  },
+  enabled: computed(() => requests.value.length > 0),
+  staleTime: 60000,
 });
-const funding = useQuery({
-  queryKey: computed(() => [prefix, 'calendar-funding', request.value]),
-  queryFn: () => api.get('/stats/calendar/funding', request.value) as Promise<FundingCalendarResponse>,
-  enabled: computed(() => !spending.value && active.value), staleTime: 60000,
+const entriesByDate = computed(() => {
+  const grouped = new Map<string, NonNullable<typeof query.data.value>>();
+  for (const entry of query.data.value ?? []) {
+    if (entry.date < range.value.from || entry.date > range.value.through || entry.date > today) continue;
+    const rows = grouped.get(entry.date) ?? [];
+    rows.push(entry);
+    grouped.set(entry.date, rows);
+  }
+  return grouped;
 });
-const entries = computed(() => !active.value ? [] : (spending.value
-  ? spendingEntries(spend.data.value) : fundingEntries(funding.data.value))
-    .filter((entry) => entry.date >= request.value.from && entry.date <= request.value.to));
-const cells = computed(() => monthCells(month.value).map((cell) => {
-  if (!cell) return null;
-  const rows = entries.value.filter((entry) => entry.date === cell.date);
-  const groups = summarizeDay(rows);
-  return { ...cell, ids: rows.map(row => row.id), groups, totals: summarizeDayTotals(groups) };
-}));
-const pending = computed(() => active.value && (spending.value ? spend.isPending.value : funding.isPending.value));
-const fetching = computed(() => active.value && (spending.value ? spend.isFetching.value : funding.isFetching.value));
-const failed = computed(() => spending.value ? spend.isError.value : funding.isError.value);
-const monthName = computed(() => format(parseISO(month.value + '-01'), 'MMMM yyyy'));
-const move = (delta: number) => { month.value = format(addMonths(parseISO(month.value + '-01'), delta), 'yyyy-MM'); };
+const sections = computed(() => months.value.map(({month}) => ({
+  month,
+  cells: monthCells(month).map(cell => {
+    if (!cell || cell.date < range.value.from || cell.date > range.value.through) return null;
+    const rows = entriesByDate.value.get(cell.date) ?? [];
+    const groups = summarizeDay(rows);
+    return { ...cell, ids: rows.map(row => row.id), groups, totals: summarizeDayTotals(groups) };
+  }),
+})));
+const pending = computed(() => requests.value.length > 0 && query.isPending.value);
+const fetching = computed(() => query.isFetching.value);
+const failed = computed(() => requests.value.length > 0 && query.isError.value);
 const money = (amount: number, currency: string, compact = false) => {
   if (!currency) return 'Unavailable';
   return new Intl.NumberFormat(undefined, {
@@ -64,17 +77,12 @@ const money = (amount: number, currency: string, compact = false) => {
   }).format(amount);
 };
 const share = (activity: number, total: number) => total ? new Intl.NumberFormat(undefined, { style: 'percent', maximumFractionDigits: 1 }).format(activity / total) : '0%';
-const retry = () => { if (spending.value) void spend.refetch(); else void funding.refetch(); };
+const retry = () => { void query.refetch(); };
 </script>
 
 <template>
   <WidgetWrapper :is-fetching="fetching" :compact-header="compact" :content-class="compact ? 'gap-1.5 px-2 pb-2 sm:px-3 sm:pb-3' : 'gap-3'" class="min-w-0 @container/calendar">
     <template #title><span :class="compact ? 'text-sm' : ''" :title="spending ? 'Spending Calendar' : 'Income & Contributions Calendar'">{{ spending ? 'Spending Calendar' : compact ? 'Income & Contributions' : 'Income & Contributions Calendar' }}</span></template>
-    <div class="flex items-center justify-between gap-2">
-      <Button variant="ghost" size="icon-sm" aria-label="Previous calendar month" @click="move(-1)"><ChevronLeftIcon class="size-4" /></Button>
-      <strong class="text-sm" :class="compact ? 'text-xs' : ''">{{ monthName }}</strong>
-      <Button variant="ghost" size="icon-sm" aria-label="Next calendar month" :disabled="month >= today.slice(0, 7)" @click="move(1)"><ChevronRightIcon class="size-4" /></Button>
-    </div>
     <div v-if="!spending" class="flex shrink-0 flex-wrap gap-x-2 gap-y-0.5" :class="compact ? 'text-[10px]' : 'text-xs'">
       <span v-for="role in calendarRoles" :key="role.group" class="inline-flex items-center gap-1">
         <span class="size-2 rounded-full" :style="{ backgroundColor: role.color }" />{{ role.group }}
@@ -86,20 +94,23 @@ const retry = () => { if (spending.value) void spend.refetch(); else void fundin
       <Button size="sm" variant="outline" @click="retry">Retry</Button>
     </div>
     <TooltipProvider :delay-duration="150">
+      <component :is="multiple ? ScrollArea : 'div'" :class="[bounded ? 'min-h-0 flex-1' : '', multiple ? 'max-h-full' : 'flex flex-col']" v-bind="multiple ? { type: 'auto', viewportClass: 'pr-2 overscroll-y-auto' } : {}">
+      <section v-for="section in sections" :key="section.month" :class="multiple ? 'mb-3' : 'flex min-h-0 flex-1 flex-col'">
+      <h4 v-if="multiple" class="mb-1 text-xs font-medium">{{ format(parseISO(section.month + '-01'), 'MMMM yyyy') }}</h4>
       <div class="grid grid-cols-7 text-center"
-        :class="[bounded ? 'min-h-0 flex-1' : 'shrink-0', compact ? 'gap-0.5 text-[10px]' : 'gap-1 text-xs']"
-        :style="{ gridTemplateRows: 'auto repeat(' + cells.length / 7 + ', minmax(' + (compact ? (bounded ? '0' : '2.25rem') : '3rem') + ', 1fr))' }"
+        :class="[bounded && !multiple ? 'min-h-0 flex-1' : 'shrink-0', compact ? 'gap-0.5 text-[10px]' : 'gap-1 text-xs']"
+        :style="{ gridTemplateRows: 'auto repeat(' + section.cells.length / 7 + ', minmax(' + (bounded && !multiple ? '0' : compact ? '2.25rem' : '3rem') + ', 1fr))' }"
         :aria-label="spending ? 'Spending calendar' : 'Income and contributions calendar'">
         <span v-for="day in ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']" :key="day" class="text-muted-foreground">{{ compact ? day.slice(0, 1) : day }}</span>
-        <template v-for="(cell, index) in cells" :key="index">
+        <template v-for="(cell, index) in section.cells" :key="index">
           <Tooltip v-if="cell">
             <TooltipTrigger as-child>
               <button type="button"
                 class="relative flex min-w-0 flex-col overflow-hidden border text-left tabular-nums focus-visible:ring-2 focus-visible:ring-ring"
                 
-                :class="[compact ? 'min-h-0 rounded-sm px-0.5 pb-1 leading-tight' : 'min-h-12 rounded-md px-1 pb-2 pt-1', cell.date <= today ? 'cursor-pointer hover:bg-muted/50' : 'opacity-50', !cell.groups.length ? 'text-muted-foreground' : '']"
+                :class="[compact ? 'min-h-0 rounded-sm px-0.5 pb-1 leading-tight' : 'min-h-0 rounded-md px-1 pb-2 pt-1', cell.date <= today ? 'cursor-pointer hover:bg-muted/50' : 'opacity-50', !cell.groups.length ? 'text-muted-foreground' : '']"
                 :style="cell.groups.length ? { backgroundColor: cell.groups[0]!.color + '18' } : undefined"
-                :disabled="cell.date > today || (!spending && (pending || failed))"
+                :disabled="cell.date > today || pending || failed"
                 :aria-label="cell.date + ': ' + (cell.groups.map(g => g.group + ' ' + money(g.amount, g.currency)).join(', ') || (pending || failed ? 'Activity unavailable' : 'No recorded activity')) + '. View transactions'"
                 @click="openDate(cell.date, cell.ids)">
                 <span class="font-medium">{{ cell.day }}</span>
@@ -137,6 +148,8 @@ const retry = () => { if (spending.value) void spend.refetch(); else void fundin
           <span v-else />
         </template>
       </div>
+      </section>
+      </component>
     </TooltipProvider>
   </WidgetWrapper>
 </template>

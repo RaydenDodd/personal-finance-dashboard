@@ -102,3 +102,23 @@ export function calendarTransactionFilters(date: string, spending: boolean, ids:
     ...(spending ? { transactionType: TRANSACTION_TYPES.expense } : { calendarIds: [...new Set(ids)].join(',') || 'none' }),
   };
 }
+
+/** Split the shared dashboard range into month-sized requests (API maximum 31 days). */
+export function calendarMonths(range: { from: string; through: string }, today: string) {
+  const { from, through } = range;
+  if (from > through) return [];
+  const months: { month: string; from: string; to: string; active: boolean }[] = [];
+  let month = from.slice(0, 7);
+  const last = through.slice(0, 7);
+  while (month <= last) {
+    const bounds = monthBounds(month);
+    const start = from > bounds.from ? from : bounds.from;
+    const end = through < bounds.to ? through : bounds.to;
+    const to = end < today ? end : today;
+    months.push({ month, from: start, to, active: start <= to });
+    const next = new Date(bounds.from + 'T12:00:00Z');
+    next.setUTCMonth(next.getUTCMonth() + 1);
+    month = next.toISOString().slice(0, 7);
+  }
+  return months;
+}
