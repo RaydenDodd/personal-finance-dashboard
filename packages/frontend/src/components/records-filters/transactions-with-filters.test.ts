@@ -1,5 +1,6 @@
 import { api } from '@/api/_api';
-import { loadTransactions } from '@/api/transactions';
+import { loadTransactions, loadTransactionsSummary } from '@/api/transactions';
+import { useFiltersFromQuery } from './use-filters-from-query';
 import { FILTER_OPERATION, TRANSACTION_TRANSFER_NATURE } from '@bt/shared/types';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -195,5 +196,28 @@ describe('parseStoredFilters legacy noteIncludes', () => {
 
   it('keeps an existing search', () => {
     expect(parse({ noteIncludes: 'lidl', search: 'coffee' })).toEqual({ search: 'coffee' });
+  });
+});
+
+ describe('calendar transaction drilldown', () => {
+  it('uses the exact same transaction IDs for the list, summary and bulk selection filters', async () => {
+    const parsed = useFiltersFromQuery().parseFiltersFromQuery({ query: { calendarIds: 'a,b', start: '2026-11-13', end: '2026-11-13' } });
+    const filters = buildFilterParams({ filter: makeFilters(parsed ?? {}) });
+    expect(filters.transactionIds).toEqual(['a','b']);
+    apiGet.mockClear();
+    await loadTransactions(filters);
+    await loadTransactionsSummary(filters);
+    expect(apiGet.mock.calls[0]![1]).toMatchObject({ transactionIds: 'a,b' });
+    expect(apiGet.mock.calls[1]![1]).toMatchObject({ transactionIds: 'a,b' });
+  });
+  it('never widens an empty calendar selection', async () => {
+    const parsed = useFiltersFromQuery().parseFiltersFromQuery({ query: { calendarIds: 'none' } });
+    const filters = buildFilterParams({ filter: makeFilters(parsed ?? {}) });
+    expect(filters.transactionIds).toEqual([]);
+    apiGet.mockClear();
+    await loadTransactions(filters);
+    await loadTransactionsSummary(filters);
+    expect(apiGet.mock.calls[0]![1]).toMatchObject({ transactionIds: 'none' });
+    expect(apiGet.mock.calls[1]![1]).toMatchObject({ transactionIds: 'none' });
   });
 });

@@ -63,6 +63,7 @@ export const loadTransactions = async ({
   /** Pagination row offset. */
   offset?: number;
   limit?: number;
+  transactionIds?: string[];
   trackerIds?: string[];
   excludedTrackerIds?: string[];
   accountType?: ACCOUNT_TYPES;
@@ -119,6 +120,7 @@ export const loadTransactions = async ({
 }): Promise<GetTransactionsResponse> => {
   return api.get('/transactions', {
     ...params,
+    transactionIds: params.transactionIds === undefined ? undefined : params.transactionIds.join(',') || 'none',
     isPlanned: keepFalse({ value: params.isPlanned }),
     hasAttachment: keepFalse({ value: params.hasAttachment }),
     from: from ? new Date(from).toISOString() : undefined,
@@ -136,6 +138,7 @@ export const loadTransactionsSummary = async (
 ): Promise<TransactionsSummaryResponse> => {
   return api.get('/transactions/summary', {
     ...params,
+    transactionIds: params.transactionIds === undefined ? undefined : params.transactionIds.join(',') || 'none',
     isPlanned: keepFalse({ value: params.isPlanned }),
     hasAttachment: keepFalse({ value: params.hasAttachment }),
   });

@@ -51,7 +51,7 @@ export type ExtraFilterKey = (typeof EXTRA_FILTER_KEYS)[number];
 /** Always-visible filters plus query-param-only ones (`categorizationSource`
  * and `batchId` come from dashboard/import-history deep links) – present in
  * every view, so the picker menu doesn't offer them. */
-const BUILTIN_FILTER_KEYS = ['search', 'date', 'accounts', 'categories', 'categorizationSource', 'batchId'] as const;
+const BUILTIN_FILTER_KEYS = ['search', 'date', 'accounts', 'categories', 'categorizationSource', 'batchId', 'calendarIds'] as const;
 
 type BuiltinFilterKey = (typeof BUILTIN_FILTER_KEYS)[number];
 
@@ -143,6 +143,10 @@ const BUILTIN_FILTERS: Record<BuiltinFilterKey, FilterDefinition> = {
   },
   batchId: {
     isActive: (filters) => filters.batchId != null,
+    dissolvesGroups: true,
+  },
+  calendarIds: {
+    isActive: (filters) => filters.calendarIds !== undefined,
     dissolvesGroups: true,
   },
 };

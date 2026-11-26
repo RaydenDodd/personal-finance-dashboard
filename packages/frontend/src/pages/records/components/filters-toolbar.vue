@@ -66,7 +66,7 @@
         <DateRangeFilter
           :start="filters.start"
           :end="filters.end"
-          @update:range="emitFilters({ ...filters, start: $event.start, end: $event.end })"
+          @update:range="emitFilters({ ...filters, start: $event.start, end: $event.end, calendarIds: undefined })"
         />
       </div>
 
@@ -83,6 +83,11 @@
           :category-ids="filters.categoryIds"
           @update:category-ids="emitFilters({ ...filters, categoryIds: $event })"
         />
+      </div>
+
+      <div v-if="filters.calendarIds !== undefined" class="mr-2 mb-2 inline-flex h-10 items-center gap-2 rounded-md border px-3 align-top text-sm">
+        <span>Calendar activity ({{ filters.calendarIds.length }})</span>
+        <button type="button" class="text-muted-foreground hover:text-foreground" aria-label="Clear calendar activity filter" @click="emitFilters({ ...filters, calendarIds: undefined })"><XIcon class="size-4" /></button>
       </div>
 
       <!-- User-added filters: one control per filter, "x" clears it and frees the space -->

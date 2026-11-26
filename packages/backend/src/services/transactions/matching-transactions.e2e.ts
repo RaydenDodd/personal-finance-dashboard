@@ -28,6 +28,30 @@ const expenseOnly = ({ count, expense }: { count: number; expense: number }) => 
   transfers: 0,
 });
 
+describe('exact calendar transaction selection', () => {
+  it('keeps unrelated transactions out of the list, summary and filter-based bulk edits', async () => {
+    const account = await helpers.createAccount({ raw: true });
+    const first = await createTx({ accountId: account.id, amount: 65 });
+    const second = await createTx({ accountId: account.id, amount: 90 });
+    const unrelated = await createTx({ accountId: account.id, amount: 26.91 });
+    const transactionIds = [first.id, second.id];
+    const rows = await helpers.getTransactions({ transactionIds, raw: true });
+    expect(rows.map(t=>t.id).sort()).toEqual([...transactionIds].sort());
+    const summary = await helpers.getTransactionsSummary({ transactionIds, raw: true });
+    expect(summary).toMatchObject({ count: 2, expense: 155 });
+    const result = await helpers.bulkUpdateTransactions({ payload: { selection: { filters: { transactionIds } }, note: 'reviewed' }, raw: true });
+    expect(result.updatedIds.sort()).toEqual([...transactionIds].sort());
+    const unchanged = await helpers.getTransactionById({ id: unrelated.id, raw: true });
+    expect(unchanged?.note).not.toBe('reviewed');
+  });
+  it('matches nothing for an explicit empty selection', async () => {
+    const account = await helpers.createAccount({ raw: true });
+    await createTx({ accountId: account.id, amount: 65 });
+    const result = await helpers.bulkUpdateTransactions({ payload: { selection: { filters: { transactionIds: [] } }, note: 'must not change' }, raw: true });
+    expect(result.updatedIds).toEqual([]);
+  });
+});
+
 describe('GET /transactions/summary', () => {
   it('returns zeros when nothing matches', async () => {
     const account = await helpers.createAccount({ raw: true });

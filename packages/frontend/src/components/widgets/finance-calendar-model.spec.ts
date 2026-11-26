@@ -6,9 +6,12 @@ describe('monthly finance calendar', () => {
     expect(calendarTransactionFilters('2026-11-16', true)).toEqual({
       start: '2026-11-16', end: '2026-11-16', plannedFilter: 'exclude', transferFilter: 'exclude', transactionType: 'expense',
     });
-    expect(calendarTransactionFilters('2026-11-16', false)).toEqual({
-      start: '2026-11-16', end: '2026-11-16', plannedFilter: 'exclude', transferFilter: 'all',
+    expect(calendarTransactionFilters('2026-11-16', false, ['robinhood-65', 'robinhood-90', 'robinhood-65'])).toEqual({
+      start: '2026-11-16', end: '2026-11-16', plannedFilter: 'exclude', transferFilter: 'all', calendarIds: 'robinhood-65,robinhood-90',
     });
+  });
+  it('keeps an empty funding date explicitly empty', () => {
+    expect(calendarTransactionFilters('2026-11-13', false, []).calendarIds).toBe('none');
   });
   it('keeps tooltip totals and percentage denominators separate by currency', () => {
     const groups = summarizeDay([

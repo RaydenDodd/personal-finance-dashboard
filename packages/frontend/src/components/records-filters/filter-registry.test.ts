@@ -22,6 +22,7 @@ const NARROWING_EXAMPLES: Record<FilterKey, Partial<FiltersStruct>> = {
   categories: { categoryIds: ['cat-1'] },
   categorizationSource: { categorizationSource: CATEGORIZATION_SOURCE.ai },
   batchId: { batchId: 'batch-1' },
+  calendarIds: { calendarIds: ['tx-1'] },
   type: { transactionType: TRANSACTION_TYPES.expense },
   tags: { tagIds: ['tag-1'] },
   payees: { payeeIds: ['payee-1'] },

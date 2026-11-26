@@ -24,7 +24,7 @@ const { bounded } = useModuleLayout();
 const today = payrollToday();
 const month = ref(today.slice(0, 7));
 const router = useRouter();
-const openDate = (date: string) => router.push({ name: ROUTES_NAMES.transactions, query: calendarTransactionFilters(date, spending.value) });
+const openDate = (date: string, ids: string[]) => router.push({ name: ROUTES_NAMES.transactions, query: calendarTransactionFilters(date, spending.value, ids) });
 watch(() => dashboardRange.value?.from, (date) => {
   if (date) month.value = date.slice(0, 7);
 }, { immediate: true });
@@ -49,7 +49,7 @@ const cells = computed(() => monthCells(month.value).map((cell) => {
   if (!cell) return null;
   const rows = entries.value.filter((entry) => entry.date === cell.date);
   const groups = summarizeDay(rows);
-  return { ...cell, groups, totals: summarizeDayTotals(groups) };
+  return { ...cell, ids: rows.map(row => row.id), groups, totals: summarizeDayTotals(groups) };
 }));
 const pending = computed(() => active.value && (spending.value ? spend.isPending.value : funding.isPending.value));
 const fetching = computed(() => active.value && (spending.value ? spend.isFetching.value : funding.isFetching.value));
@@ -97,9 +97,9 @@ const retry = () => { if (spending.value) void spend.refetch(); else void fundin
                 class="relative flex min-h-12 min-w-0 flex-col overflow-hidden rounded-md border px-1 pb-2 pt-1 text-left tabular-nums focus-visible:ring-2 focus-visible:ring-ring"
                 :class="[cell.date <= today ? 'cursor-pointer hover:bg-muted/50' : 'opacity-50', !cell.groups.length ? 'text-muted-foreground' : '']"
                 :style="cell.groups.length ? { backgroundColor: cell.groups[0]!.color + '18' } : undefined"
-                :disabled="cell.date > today"
+                :disabled="cell.date > today || (!spending && (pending || failed))"
                 :aria-label="cell.date + ': ' + (cell.groups.map(g => g.group + ' ' + money(g.amount, g.currency)).join(', ') || (pending || failed ? 'Activity unavailable' : 'No recorded activity')) + '. View transactions'"
-                @click="openDate(cell.date)">
+                @click="openDate(cell.date, cell.ids)">
                 <span class="font-medium">{{ cell.day }}</span>
                 <template v-if="spending">
                   <span v-for="total in cell.totals" :key="total.currency" class="truncate text-[10px] font-semibold">{{ money(total.amount, total.currency, true) }}</span>

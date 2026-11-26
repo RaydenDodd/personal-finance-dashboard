@@ -53,7 +53,7 @@ export const buildViewConfig = ({
   sorting,
 }: ViewState): Pick<SavedTransactionView, 'filters' | 'sorting' | 'datePreset'> => ({
   // `batchId` only ever comes from an Import History deep link; a view must not stay scoped to one import.
-  filters: JSON.parse(JSON.stringify({ ...filters, batchId: null })),
+  filters: JSON.parse(JSON.stringify({ ...filters, batchId: null, calendarIds: undefined })),
   sorting,
   datePreset: detectDatePreset({ start: filters.start, end: filters.end }),
 });

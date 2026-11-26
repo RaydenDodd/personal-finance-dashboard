@@ -36,6 +36,8 @@ export interface FiltersStruct {
   categorizationSource: CATEGORIZATION_SOURCE | null;
   /** Exact import batch to scope to (deep link from Import History). Not user-editable via the filter UI. */
   batchId: string | null;
+  /** Exact source records from a calendar drilldown. Undefined = unrestricted; [] = no records. */
+  calendarIds?: string[];
 }
 
 export const DEFAULT_FILTERS: FiltersStruct = {

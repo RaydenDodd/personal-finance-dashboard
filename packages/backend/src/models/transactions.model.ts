@@ -1121,6 +1121,7 @@ export const findWithFilters = async ({
   categorizationSource,
   categorizedAt,
   batchId,
+  transactionIds,
 }: {
   /** How planned rows are treated. `{ visibleTo }` keeps other users' plans out while leaving the caller's own visible. */
   planned: PlannedPolicy;
@@ -1198,6 +1199,8 @@ export const findWithFilters = async ({
   categorizedAt?: string;
   /** Filter to only transactions from one import batch (`externalData.importDetails.batchId`). */
   batchId?: string;
+  /** Explicit transaction IDs, intersected with every other visibility/filter condition. */
+  transactionIds?: string[];
 }) => {
   const cap = capPolicy({ completeness });
   // Created before the first await so the stack still holds the frames of the site that
@@ -1234,6 +1237,8 @@ export const findWithFilters = async ({
     andConditions.push(condition);
     whereClause[Op.and as unknown as string] = andConditions;
   };
+
+  if (transactionIds !== undefined) pushAndCondition({ id: { [Op.in]: transactionIds } });
 
   // When both filters are "only", use OR logic so the user can see
   // "refunds OR transfers" instead of the impossible "refunds AND transfers"

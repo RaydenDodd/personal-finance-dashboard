@@ -89,6 +89,7 @@ export const buildFilterParams = ({ filter }: { filter: FiltersStruct }): Transa
       payeeIds: filter.payeeIds.length ? filter.payeeIds : undefined,
       categorizationSource: filter.categorizationSource ?? undefined,
       batchId: filter.batchId ?? undefined,
+      transactionIds: filter.calendarIds,
       trackerIds: filter.trackerIds.length ? filter.trackerIds : undefined,
       excludedTrackerIds: filter.excludedTrackerIds.length ? filter.excludedTrackerIds : undefined,
     },

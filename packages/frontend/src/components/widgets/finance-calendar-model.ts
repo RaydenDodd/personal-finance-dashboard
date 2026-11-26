@@ -93,12 +93,12 @@ export function summarizeDayTotals(groups: ReturnType<typeof summarizeDay>) {
 }
 
 /** Native Records page consumes these filters and replaces any previously saved view filters. */
-export function calendarTransactionFilters(date: string, spending: boolean) {
+export function calendarTransactionFilters(date: string, spending: boolean, ids: string[] = []) {
   return {
     start: date,
     end: date,
     plannedFilter: FILTER_OPERATION.exclude,
     transferFilter: spending ? FILTER_OPERATION.exclude : FILTER_OPERATION.all,
-    ...(spending ? { transactionType: TRANSACTION_TYPES.expense } : {}),
+    ...(spending ? { transactionType: TRANSACTION_TYPES.expense } : { calendarIds: [...new Set(ids)].join(',') || 'none' }),
   };
 }

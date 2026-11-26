@@ -4,7 +4,7 @@ import { type Period } from '@/composable/use-period-navigation';
 import { CUSTOM_BREAKPOINTS, useWindowBreakpoints } from '@/composable/window-breakpoints';
 import { cn } from '@/lib/utils';
 import { createReusableTemplate } from '@vueuse/core';
-import { isSameMonth } from 'date-fns';
+import { isFirstDayOfMonth, isLastDayOfMonth, isSameDay, isSameMonth } from 'date-fns';
 import { VisuallyHidden } from 'reka-ui';
 import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
@@ -47,15 +47,18 @@ const triggerText = computed(() => {
   const from = props.modelValue.from;
   const to = props.modelValue.to;
 
-  if (isSameMonth(new Date(), to) && isSameMonth(from, to)) {
+  if (isSameDay(from, to)) return format(from, 'dd MMM yyyy');
+
+  const fullMonth = isSameMonth(from, to) && isFirstDayOfMonth(from) && isLastDayOfMonth(to);
+  if (isSameMonth(new Date(), to) && isSameMonth(from, to) && isFirstDayOfMonth(from) && (fullMonth || isSameDay(to, new Date()))) {
     return t('common.dateSelector.currentMonth');
   }
 
-  if (from.getMonth() === 0 && from.getDate() === 1 && to.getMonth() === 11 && to.getDate() === 31) {
+  if (from.getFullYear() === to.getFullYear() && from.getMonth() === 0 && from.getDate() === 1 && to.getMonth() === 11 && to.getDate() === 31) {
     return `${from.getFullYear()}`;
   }
 
-  if (isSameMonth(from, to)) {
+  if (fullMonth) {
     return format(from, 'MMM yyyy');
   }
 

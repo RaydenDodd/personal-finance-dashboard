@@ -76,6 +76,10 @@ export const useFiltersFromQuery = () => {
       filters.search = query.search;
     }
 
+    if (typeof query.calendarIds === 'string') {
+      filters.calendarIds = query.calendarIds === 'none' ? [] : [...new Set(query.calendarIds.split(',').filter(Boolean))];
+    }
+
     if (query.batchId) {
       filters.batchId = query.batchId as string;
     }

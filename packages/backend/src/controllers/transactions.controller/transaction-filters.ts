@@ -30,6 +30,8 @@ export const transactionFilterFields = {
   transactionType: z.enum(TRANSACTION_TYPES).optional(),
   accountType: z.enum(ACCOUNT_TYPES).optional(),
   accountIds: csvArray({ item: recordId() }).optional(),
+  // Explicit empty selections must match nothing, not widen to the whole ledger.
+  transactionIds: z.preprocess((value) => value === 'none' ? [] : typeof value === 'string' ? parseCommaSeparatedStrings(value) : value, z.array(recordId())).optional(),
   trackerIds: csvArray({ item: idOrBlank }).optional(),
   excludedTrackerIds: csvArray({ item: recordId() }).optional(),
   tagIds: csvArray({ item: idOrBlank }).optional(),
