@@ -28,8 +28,8 @@ export async function getFundingReviews(userId: number) {
   const candidates = entries.filter(e=>e.group==='Investments' && e.amount>0);
   if (!candidates.length) return {items:[],reminderDue:false,lookbackFrom:from};
   const ids = candidates.map(e=>e.id);
-  const [transfers, decisions, prefs] = await Promise.all([
-    PortfolioTransfers.findAll({where:{userId,transactionId:{[Op.in]:ids},isAdjustment:false},attributes:['transactionId','toPortfolioId','fromPortfolioId']}),
+  const [transfers, decisions, prefs, associated] = await Promise.all([
+    PortfolioTransfers.findAll({where:{userId,transactionId:{[Op.in]:ids},isAdjustment:false},attributes:['id','transactionId','toPortfolioId','fromPortfolioId','amount','currencyCode']}),
     read<Decision>(`
       SELECT r."transactionId",r."groupId",r."portfolioId",r.fingerprint,r."tradeCount",r."cashRetained",
         COUNT(t.id) FILTER (WHERE t."updatedAt"=a."tradeUpdatedAt" AND t."portfolioId"=r."portfolioId")::int AS "validCount"
@@ -39,18 +39,29 @@ export async function getFundingReviews(userId: number) {
       WHERE r."userId"=:userId AND r."transactionId" IN (:ids) GROUP BY r."transactionId"
     `,{userId,ids}),
     read<{due:boolean}>('SELECT "snoozedUntil"<=NOW() AS due FROM "InvestmentFundingReminderPreferences" WHERE "userId"=:userId',{userId}),
+    read<{transactionId:string;toPortfolioId:string;transferId:string;amount:string;currencyCode:string}>(`
+      SELECT a."transactionId",t."toPortfolioId",t.id AS "transferId",t.amount,t."currencyCode"
+      FROM "InvestmentFundingNativeLinks" a JOIN "PortfolioTransfers" t ON t.id=a."portfolioTransferId" AND t."userId"=a."userId"
+      WHERE a."userId"=:userId AND a."transactionId" IN (:ids) AND NOT t."isAdjustment" AND t."fromPortfolioId" IS NULL AND t."toPortfolioId" IS NOT NULL
+    `,{userId,ids}),
   ]);
   const sources = new Map(groupData.sourceAccounts.map(a=>[a.id,a.name]));
   const items = candidates.flatMap(entry=>{
     const links=transfers.filter(t=>t.transactionId===entry.id && t.toPortfolioId && !t.fromPortfolioId);
-    if(links.length>1) return [];
-    const portfolioId=links[0]?.toPortfolioId ?? undefined;
+    const extra=associated.filter(t=>t.transactionId===entry.id&&!links.some(l=>l.id===t.transferId));
+    if(links.length+extra.length>1) return [];
+    const direct=links[0];
+    const linked=extra[0];
+    const validDirect=direct&&direct.currencyCode===entry.currency&&direct.amount.toCents()===Math.round(entry.amount*100);
+    const validAssociated=linked&&linked.currencyCode===entry.currency&&Math.round(Number(linked.amount)*100)===Math.round(entry.amount*100);
+    const nativeTransferId=validDirect?direct.id:validAssociated?linked.transferId:null;
+    const portfolioId=(validDirect?direct.toPortfolioId:validAssociated?linked.toPortfolioId:null)??undefined;
     const group=matchReviewGroup(entry,groups,sources,portfolioId);
     if(!group) return [];
-    const fingerprint=reviewFingerprint(entry,group);
+    const fingerprint=reviewFingerprint({...entry,id:entry.id+':'+(nativeTransferId??'unlinked')},group);
     const prior=decisions.find(r=>r.transactionId===entry.id);
     if(prior?.fingerprint===fingerprint && prior.groupId===group.id && group.portfolioIds.includes(prior.portfolioId) && prior.validCount===prior.tradeCount) return [];
-    return [{...entry,groupId:group.id,groupName:group.name,portfolioId:portfolioId??null,
+    return [{...entry,groupId:group.id,groupName:group.name,portfolioId:portfolioId??null,nativeTransferId,
       portfolios:groupData.portfolios.filter(p=>group.portfolioIds.includes(p.id)).map(p=>({id:p.id,name:p.name})),
       fingerprint, reason: portfolioId ? 'Review purchases or retained cash' : 'Confirm destination and investment activity'}];
   }).sort((a,b)=>b.date.localeCompare(a.date)||a.id.localeCompare(b.id));
@@ -75,13 +86,13 @@ export async function listReviewPurchases(userId:number,id:string,portfolioId:st
   return rows.map(t=>({id:t.id,symbol:t.security?.symbol??'Security',date:t.date.toISOString().slice(0,10),quantity:t.quantity.toDecimalString(10),amount:t.settlementAmount.toNumber(),currency:t.settlementCurrencyCode,alreadyLinked:taken.has(t.id)}));
 }
 export async function resolveFundingReview(userId:number,id:string,input:{portfolioId:string;fingerprint:string;tradeIds:string[];cashRetained:boolean}) {
-  const item=await getReviewItem(userId,id,input.portfolioId);
-  if(item.fingerprint!==input.fingerprint) fail('Activity changed; refresh the review');
   if(new Set(input.tradeIds).size!==input.tradeIds.length) fail('Select each purchase only once');
   return connection.sequelize.transaction(async transaction=>{
     // Serialize group edits and review writes. Lock source and purchase rows to
     // prevent deletion/edits while the explicit evidence association is saved.
     await write('SELECT pg_advisory_xact_lock(71404,:userId)',{userId},transaction);
+    const item=await getReviewItem(userId,id,input.portfolioId);
+    if(item.fingerprint!==input.fingerprint) fail('Activity changed; refresh the review');
     const owned=await read<{id:string}>(`SELECT p.id FROM "InvestmentAccountGroups" g JOIN "InvestmentAccountGroupMembers" m ON m."groupId"=g.id JOIN "Portfolios" p ON p.id=m."portfolioId" WHERE g.id=:groupId AND g."userId"=:userId AND p."userId"=:userId AND p.id=:portfolioId AND p."deletedAt" IS NULL FOR UPDATE OF p,g`,{userId,groupId:item.groupId,portfolioId:input.portfolioId},transaction);
     if(!owned.length) fail('Portfolio membership changed');
     const source=await read<{amount:string;currencyCode:string}>(`SELECT t.amount,t."currencyCode" FROM "Transactions" t JOIN "Accounts" a ON a.id=t."accountId" WHERE t.id=:id AND a."userId"=:userId AND t."deletedAt" IS NULL AND NOT t."isPlanned" FOR UPDATE OF t`,{id,userId},transaction);

@@ -29,6 +29,8 @@ interface DirectCashTransactionParams {
    * balance still moves either way.
    */
   isAdjustment?: boolean;
+  /** Internal reviewed backfill: the cash was already reflected. */
+  affectsCash?: boolean;
 }
 
 const directCashTransactionImpl = async ({
@@ -41,6 +43,7 @@ const directCashTransactionImpl = async ({
   description,
   sourceRowId,
   isAdjustment = false,
+  affectsCash = true,
 }: DirectCashTransactionParams) => {
   validatePositiveAmount({ amount });
 
@@ -77,11 +80,12 @@ const directCashTransactionImpl = async ({
     date,
     description: sourceMarker ? `${sourceMarker} ${description ?? ''}` : description,
     isAdjustment,
+    affectsCash,
   });
 
   // Update portfolio cash balance
   const delta = isDeposit ? amount : negateAmount({ amount });
-  await updatePortfolioBalance({
+  if (affectsCash) await updatePortfolioBalance({
     userId,
     portfolioId,
     currencyCode,

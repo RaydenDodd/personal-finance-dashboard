@@ -2,6 +2,7 @@ import { TRANSACTION_TRANSFER_NATURE, TRANSACTION_TYPES } from '@bt/shared/types
 import { findOrThrowNotFound } from '@common/utils/find-or-throw-not-found';
 import { t } from '@i18n/index';
 import { ValidationError } from '@js/errors';
+import { connection } from '@models/connection';
 import Currencies from '@models/currencies.model';
 import PortfolioTransfers from '@models/investments/portfolio-transfers.model';
 import Portfolios from '@models/investments/portfolios.model';
@@ -32,6 +33,7 @@ const linkTransactionToPortfolioImpl = async ({
   portfolioId,
   affectsCash = true,
 }: LinkTransactionToPortfolioParams) => {
+  await connection.sequelize.query('SELECT pg_advisory_xact_lock(hashtext(:key))', { replacements: { key: `bank-portfolio-link:${transactionId}` } });
   const tx = await findOrThrowNotFound({
     query: Transactions.getTransactionById({ id: transactionId, userId }),
     message: t({ key: 'transactions.notFound' }),

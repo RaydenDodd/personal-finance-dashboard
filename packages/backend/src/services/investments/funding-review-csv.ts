@@ -71,6 +71,7 @@ export async function applyFundingCsv(userId:number,id:string,input:Input&{fileH
     const {item,portfolio,preview}=await buildPreview(userId,id,input,transaction);
     if(preview.fileHash!==input.fileHash) return fail('CSV changed; preview it again.');
     if(!preview.depositSourceRowId) return fail('The deposit is not uniquely matched in this CSV; review the funding evidence before importing.');
+    if(!item.nativeTransferId&&input.sourceRowIds.length) return fail('Link or record the native contribution before importing selected purchases.');
     const chosen=preview.rows.filter(r=>input.sourceRowIds.includes(r.sourceRowId));
     if(chosen.length!==input.sourceRowIds.length||chosen.some(r=>r.status==='review')) return fail('A selected execution is ambiguous or changed. Refresh the preview.');
     const newRows=chosen.filter(r=>r.status==='new');
