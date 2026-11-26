@@ -1,5 +1,5 @@
 import { FINANCIAL_COLORS } from '@bt/shared/financial-colors';
-import type { GetPivotReportResponse } from '@bt/shared/types';
+import { FILTER_OPERATION, TRANSACTION_TYPES, type GetPivotReportResponse } from '@bt/shared/types';
 
 export interface CalendarEntry {
   id: string;
@@ -78,4 +78,27 @@ export function summarizeDay(entries: CalendarEntry[]) {
   return values.map((row) => ({
     ...row, width: currencies.size > 1 ? 100 / values.length : totalActivity ? row.activity / totalActivity * 100 : 0,
   }));
+}
+
+/** Never sum amounts in different currencies. Percentages use each currency's absolute activity. */
+export function summarizeDayTotals(groups: ReturnType<typeof summarizeDay>) {
+  const totals = new Map<string, { currency: string; amount: number; activity: number }>();
+  for (const group of groups) {
+    const total = totals.get(group.currency) ?? { currency: group.currency, amount: 0, activity: 0 };
+    total.amount += group.amount;
+    total.activity += group.activity;
+    totals.set(group.currency, total);
+  }
+  return [...totals.values()];
+}
+
+/** Native Records page consumes these filters and replaces any previously saved view filters. */
+export function calendarTransactionFilters(date: string, spending: boolean) {
+  return {
+    start: date,
+    end: date,
+    plannedFilter: FILTER_OPERATION.exclude,
+    transferFilter: spending ? FILTER_OPERATION.exclude : FILTER_OPERATION.all,
+    ...(spending ? { transactionType: TRANSACTION_TYPES.expense } : {}),
+  };
 }

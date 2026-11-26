@@ -1,7 +1,26 @@
 import { describe, expect, it } from 'vitest';
-import { calendarRoles, fundingEntries, monthBounds, monthCells, spendingEntries, summarizeDay } from './finance-calendar-model';
+import { calendarRoles, fundingEntries, monthBounds, monthCells, spendingEntries, summarizeDay, summarizeDayTotals, calendarTransactionFilters } from './finance-calendar-model';
 
 describe('monthly finance calendar', () => {
+  it('deep links to the selected date with spending filters or all real activity for contributions', () => {
+    expect(calendarTransactionFilters('2026-11-16', true)).toEqual({
+      start: '2026-11-16', end: '2026-11-16', plannedFilter: 'exclude', transferFilter: 'exclude', transactionType: 'expense',
+    });
+    expect(calendarTransactionFilters('2026-11-16', false)).toEqual({
+      start: '2026-11-16', end: '2026-11-16', plannedFilter: 'exclude', transferFilter: 'all',
+    });
+  });
+  it('keeps tooltip totals and percentage denominators separate by currency', () => {
+    const groups = summarizeDay([
+      { id:'1', date:'2026-11-01', group:'Food', label:'Food', color:'#ff0000', amount:80, currency:'USD' },
+      { id:'2', date:'2026-11-01', group:'Transport', label:'Transport', color:'#00ff00', amount:-20, currency:'USD' },
+      { id:'3', date:'2026-11-01', group:'Other', label:'Other', color:'#0000ff', amount:10, currency:'EUR' },
+    ]);
+    expect(summarizeDayTotals(groups)).toEqual([
+      { currency:'USD', amount:60, activity:100 },
+      { currency:'EUR', amount:10, activity:10 },
+    ]);
+  });
   it('uses calendar days and correct Sunday offsets including leap years', () => {
     expect(monthBounds('2024-02')).toEqual({ from: '2024-02-01', to: '2024-02-29' });
     expect(monthCells('2026-11')[0]).toEqual({ date: '2026-11-01', day: 1 });

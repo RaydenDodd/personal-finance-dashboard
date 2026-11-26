@@ -1,22 +1,21 @@
 <script setup lang="ts">
 import { api } from '@/api/_api';
-import { loadTransactions } from '@/api/transactions';
 import type { DashboardWidgetConfig } from '@/api/user-settings';
 import { VUE_QUERY_GLOBAL_PREFIXES } from '@/common/const';
 import { Button } from '@/components/lib/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/lib/ui/dialog';
-import { ScrollArea } from '@/components/lib/ui/scroll-area';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/lib/ui/tooltip';
+import { ROUTES_NAMES } from '@/routes/constants';
+import { useRouter } from 'vue-router';
 import { useModuleLayout } from './composables/use-module-layout';
-import { useCategoriesStore } from '@/stores/categories/categories';
 import { useDashboardPeriod } from './composables/use-dashboard-period';
 import { payrollToday } from '@/pages/income-management/payroll/date-range';
-import { TRANSACTION_TYPES, type GetPivotReportResponse } from '@bt/shared/types';
+import { type GetPivotReportResponse } from '@bt/shared/types';
 import { useQuery } from '@tanstack/vue-query';
 import { ChevronLeftIcon, ChevronRightIcon } from '@lucide/vue';
-import { addMonths, endOfDay, format, parseISO, startOfDay } from 'date-fns';
+import { addMonths, format, parseISO } from 'date-fns';
 import { computed, inject, ref, watch, type Ref } from 'vue';
 import WidgetWrapper from './components/widget-wrapper.vue';
-import { calendarRoles, fundingEntries, monthBounds, monthCells, spendingEntries, summarizeDay, type FundingCalendarResponse } from './finance-calendar-model';
+import { calendarRoles, fundingEntries, monthBounds, monthCells, spendingEntries, summarizeDay, summarizeDayTotals, calendarTransactionFilters, type FundingCalendarResponse } from './finance-calendar-model';
 
 const config = inject<Ref<DashboardWidgetConfig>>('dashboard-widget-config')!;
 const spending = computed(() => config.value.widgetId === 'spending-calendar');
@@ -24,14 +23,11 @@ const { dashboardRange } = useDashboardPeriod();
 const { bounded } = useModuleLayout();
 const today = payrollToday();
 const month = ref(today.slice(0, 7));
-const selected = ref<string | null>(null);
-const detailLimit = ref(50);
+const router = useRouter();
+const openDate = (date: string) => router.push({ name: ROUTES_NAMES.transactions, query: calendarTransactionFilters(date, spending.value) });
 watch(() => dashboardRange.value?.from, (date) => {
   if (date) month.value = date.slice(0, 7);
-  selected.value = null;
 }, { immediate: true });
-watch(month, () => { selected.value = null; });
-watch(selected, () => { detailLimit.value = 50; });
 const bounds = computed(() => monthBounds(month.value));
 const request = computed(() => ({ from: bounds.value.from, to: [bounds.value.to, today].sort()[0]! }));
 const active = computed(() => request.value.from <= request.value.to);
@@ -46,28 +42,15 @@ const funding = useQuery({
   queryFn: () => api.get('/stats/calendar/funding', request.value) as Promise<FundingCalendarResponse>,
   enabled: computed(() => !spending.value && active.value), staleTime: 60000,
 });
-const categories = useCategoriesStore();
-const records = useQuery({
-  queryKey: computed(() => [prefix, 'calendar-spending-records', selected.value, detailLimit.value]),
-  queryFn: () => loadTransactions({
-    from: startOfDay(parseISO(selected.value!)).toISOString(),
-    to: endOfDay(parseISO(selected.value!)).toISOString(),
-    transactionType: TRANSACTION_TYPES.expense,
-    excludeTransfer: true, excludeBalanceAdjustments: true, isPlanned: false, limit: detailLimit.value, offset: 0,
-  }),
-  enabled: computed(() => spending.value && !!selected.value && active.value), staleTime: 60000,
-});
-const recordedPurchases = computed(() => (records.data.value ?? []).filter((row) => !row.excludeFromStats && !row.isPlanned));
 const entries = computed(() => !active.value ? [] : (spending.value
   ? spendingEntries(spend.data.value) : fundingEntries(funding.data.value))
     .filter((entry) => entry.date >= request.value.from && entry.date <= request.value.to));
 const cells = computed(() => monthCells(month.value).map((cell) => {
   if (!cell) return null;
   const rows = entries.value.filter((entry) => entry.date === cell.date);
-  return { ...cell, rows, groups: summarizeDay(rows) };
+  const groups = summarizeDay(rows);
+  return { ...cell, groups, totals: summarizeDayTotals(groups) };
 }));
-const selectedRows = computed(() => entries.value.filter((entry) => entry.date === selected.value));
-const selectedGroups = computed(() => summarizeDay(selectedRows.value));
 const pending = computed(() => active.value && (spending.value ? spend.isPending.value : funding.isPending.value));
 const fetching = computed(() => active.value && (spending.value ? spend.isFetching.value : funding.isFetching.value));
 const failed = computed(() => spending.value ? spend.isError.value : funding.isError.value);
@@ -79,7 +62,7 @@ const money = (amount: number, currency: string, compact = false) => {
     style: 'currency', currency, ...(compact ? { notation: Math.abs(amount) >= 1000 ? 'compact' : 'standard', maximumFractionDigits: Math.abs(amount) >= 1000 ? 1 : 0, minimumFractionDigits: 0 } : {}),
   }).format(amount);
 };
-const netDay = (groups: ReturnType<typeof summarizeDay>) => groups.reduce((sum, group) => sum + group.amount, 0);
+const share = (activity: number, total: number) => total ? new Intl.NumberFormat(undefined, { style: 'percent', maximumFractionDigits: 1 }).format(activity / total) : '0%';
 const retry = () => { if (spending.value) void spend.refetch(); else void funding.refetch(); };
 </script>
 
@@ -101,70 +84,57 @@ const retry = () => { if (spending.value) void spend.refetch(); else void fundin
       <span class="text-destructive">Some calendar data could not be loaded.</span>
       <Button size="sm" variant="outline" @click="retry">Retry</Button>
     </div>
-    <div class="grid grid-cols-7 gap-1 text-center text-xs"
-      :class="bounded ? 'flex-1' : 'shrink-0'"
-      :style="{ gridTemplateRows: 'auto repeat(' + cells.length / 7 + ', minmax(3rem, 1fr))' }"
-      :aria-label="spending ? 'Spending calendar' : 'Income and contributions calendar'">
-      <span v-for="day in ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']" :key="day" class="text-muted-foreground">{{ day }}</span>
-      <template v-for="(cell, index) in cells" :key="index">
-        <button v-if="cell" type="button"
-          class="relative flex min-h-12 min-w-0 flex-col overflow-hidden rounded-md border px-1 pb-2 pt-1 text-left tabular-nums focus-visible:ring-2 focus-visible:ring-ring"
-          :class="[cell.rows.length ? 'cursor-pointer hover:bg-muted/50' : 'text-muted-foreground', selected === cell.date ? 'ring-2 ring-ring' : '']"
-          :style="cell.groups.length ? { backgroundColor: cell.groups[0]!.color + '18' } : undefined"
-          :disabled="!cell.rows.length" :aria-pressed="selected === cell.date"
-          :aria-label="cell.date + ': ' + (cell.groups.map(g => g.group + ' ' + money(g.amount, g.currency)).join(', ') || 'No recorded activity')"
-          :title="cell.groups.map(g => g.group + ': ' + money(g.amount, g.currency)).join(' · ')"
-          @click="selected = selected === cell.date ? null : cell.date">
-          <span class="font-medium">{{ cell.day }}</span>
-          <span v-if="spending && cell.groups.length" class="truncate text-[10px] font-semibold">{{ money(netDay(cell.groups), cell.groups[0]!.currency, true) }}</span>
-          <template v-else>
-            <span v-for="group in cell.groups" :key="group.group + group.currency" class="truncate text-[10px] font-semibold" :title="group.group + ': ' + money(group.amount, group.currency)">{{ money(group.amount, group.currency, true) }}</span>
-          </template>
-          <span v-if="cell.groups.length" class="absolute inset-x-0 bottom-0 flex h-1.5 overflow-hidden" aria-hidden="true">
-            <span v-for="group in cell.groups" :key="group.group + group.currency" :style="{ width: group.width + '%', backgroundColor: group.color }" />
-          </span>
-        </button>
-        <span v-else />
-      </template>
-    </div>
-    <p class="text-muted-foreground text-xs">
-      {{ spending ? 'Net spending after linked refunds. Colors follow your spending categories.' : 'Recorded bank income and transfers into investments or savings; not additive income.' }}
-      Color bands show relative absolute amounts (equal shares for mixed currencies).
-    </p>
-    <p v-if="!pending && !failed && !entries.length" class="text-muted-foreground text-xs">No recorded activity in this month.</p>
-    <Dialog :open="!!selected" @update:open="open => { if (!open) selected = null; }">
-      <DialogContent v-if="selected" class="max-w-lg">
-        <DialogHeader>
-          <DialogTitle>{{ format(parseISO(selected), 'MMMM d, yyyy') }}</DialogTitle>
-          <DialogDescription>{{ spending ? 'Spending activity' : 'Income and contribution transactions' }}</DialogDescription>
-        </DialogHeader>
-        <ScrollArea class="max-h-[60vh] min-w-0" viewport-class="pr-3">
-          <div class="space-y-2">
-      <div v-for="group in selectedGroups" :key="group.group + group.currency" class="flex items-center justify-between gap-2 text-xs">
-        <span class="flex min-w-0 items-center gap-2"><span class="size-2 shrink-0 rounded-full" :style="{ backgroundColor: group.color }" />{{ group.group }}</span>
-        <strong class="shrink-0 tabular-nums">{{ money(group.amount, group.currency) }}</strong>
+    <TooltipProvider :delay-duration="150">
+      <div class="grid grid-cols-7 gap-1 text-center text-xs"
+        :class="bounded ? 'flex-1' : 'shrink-0'"
+        :style="{ gridTemplateRows: 'auto repeat(' + cells.length / 7 + ', minmax(3rem, 1fr))' }"
+        :aria-label="spending ? 'Spending calendar' : 'Income and contributions calendar'">
+        <span v-for="day in ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']" :key="day" class="text-muted-foreground">{{ day }}</span>
+        <template v-for="(cell, index) in cells" :key="index">
+          <Tooltip v-if="cell">
+            <TooltipTrigger as-child>
+              <button type="button"
+                class="relative flex min-h-12 min-w-0 flex-col overflow-hidden rounded-md border px-1 pb-2 pt-1 text-left tabular-nums focus-visible:ring-2 focus-visible:ring-ring"
+                :class="[cell.date <= today ? 'cursor-pointer hover:bg-muted/50' : 'opacity-50', !cell.groups.length ? 'text-muted-foreground' : '']"
+                :style="cell.groups.length ? { backgroundColor: cell.groups[0]!.color + '18' } : undefined"
+                :disabled="cell.date > today"
+                :aria-label="cell.date + ': ' + (cell.groups.map(g => g.group + ' ' + money(g.amount, g.currency)).join(', ') || (pending || failed ? 'Activity unavailable' : 'No recorded activity')) + '. View transactions'"
+                @click="openDate(cell.date)">
+                <span class="font-medium">{{ cell.day }}</span>
+                <template v-if="spending">
+                  <span v-for="total in cell.totals" :key="total.currency" class="truncate text-[10px] font-semibold">{{ money(total.amount, total.currency, true) }}</span>
+                </template>
+                <template v-else>
+                  <span v-for="group in cell.groups" :key="group.group + group.currency" class="truncate text-[10px] font-semibold">{{ money(group.amount, group.currency, true) }}</span>
+                </template>
+                <span v-if="cell.groups.length" class="absolute inset-x-0 bottom-0 flex h-1.5 overflow-hidden" aria-hidden="true">
+                  <span v-for="group in cell.groups" :key="group.group + group.currency" :style="{ width: group.width + '%', backgroundColor: group.color }" />
+                </span>
+              </button>
+            </TooltipTrigger>
+            <TooltipContent v-if="cell.date <= today" class="min-w-52 max-w-[min(90vw,24rem)] p-3 text-xs" :side-offset="6">
+              <div class="space-y-2">
+                <p class="font-semibold">{{ format(parseISO(cell.date), 'MMMM d, yyyy') }}</p>
+                <div v-for="total in cell.totals" :key="total.currency" class="space-y-1.5 border-t pt-2">
+                  <div class="flex items-center justify-between gap-4 font-semibold">
+                    <span>{{ spending ? 'Total spending' : 'Total activity' }}{{ cell.totals.length > 1 ? ' (' + total.currency + ')' : '' }}</span>
+                    <span class="tabular-nums">{{ money(spending ? total.amount : total.activity, total.currency) }}</span>
+                  </div>
+                  <div v-for="group in cell.groups.filter(g => g.currency === total.currency)" :key="group.group + group.currency" class="flex items-center gap-2">
+                    <span class="size-2 shrink-0 rounded-full" :style="{ backgroundColor: group.color }" />
+                    <span class="min-w-0 flex-1">{{ group.group }}</span>
+                    <span class="shrink-0 tabular-nums">{{ money(group.amount, group.currency) }}</span>
+                    <span class="text-muted-foreground w-12 shrink-0 text-right tabular-nums">{{ share(group.activity, total.activity) }}</span>
+                  </div>
+                  <p v-if="total.activity !== total.amount" class="text-muted-foreground text-[10px]">Percent of absolute activity</p>
+                </div>
+                <p v-if="!cell.groups.length" class="text-muted-foreground">{{ pending ? 'Loading activity…' : failed ? 'Activity unavailable' : 'No recorded activity' }}</p>
+              </div>
+            </TooltipContent>
+          </Tooltip>
+          <span v-else />
+        </template>
       </div>
-      <template v-if="!spending">
-        <div v-for="row in selectedRows" :key="row.id" class="flex items-start justify-between gap-2 border-t py-2 text-xs">
-          <span class="min-w-0"><strong class="block">{{ row.label }}</strong><span class="text-muted-foreground">{{ row.note }}</span></span>
-          <strong class="shrink-0 tabular-nums">{{ money(row.amount, row.currency) }}</strong>
-        </div>
-      </template>
-      <template v-else>
-        <h5 class="border-t pt-2 text-xs font-semibold">Recorded purchases (before refund adjustments)</h5>
-        <p class="text-muted-foreground text-xs">Individual ledger records may differ from the net report above.</p>
-        <p v-if="records.isPending.value" class="text-muted-foreground text-xs">Loading purchases…</p>
-        <Button v-else-if="records.isError.value" size="sm" variant="outline" @click="records.refetch()">Retry purchases</Button>
-        <div v-for="row in recordedPurchases" :key="row.id" class="flex items-start justify-between gap-2 border-t py-2 text-xs">
-          <span class="min-w-0 break-words">{{ row.merchantName || row.note || 'Transaction' }}<span class="text-muted-foreground block">{{ categories.categoriesMap[row.categoryId]?.name || 'Uncategorized' }}</span></span>
-          <strong class="shrink-0 tabular-nums">{{ money(row.amount, row.currencyCode) }}</strong>
-        </div>
-        <Button v-if="(records.data.value?.length ?? 0) >= detailLimit && detailLimit < 100" size="sm" variant="outline" @click="detailLimit = 100">Show more purchases</Button>
-        <p v-if="detailLimit === 100 && (records.data.value?.length ?? 0) >= 100" class="text-muted-foreground text-xs">Showing first 100 records; the net category totals above are complete for the requested scope.</p>
-      </template>
-          </div>
-        </ScrollArea>
-      </DialogContent>
-    </Dialog>
+    </TooltipProvider>
   </WidgetWrapper>
 </template>
