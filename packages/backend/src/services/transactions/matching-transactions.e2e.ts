@@ -46,9 +46,12 @@ describe('exact calendar transaction selection', () => {
   });
   it('matches nothing for an explicit empty selection', async () => {
     const account = await helpers.createAccount({ raw: true });
-    await createTx({ accountId: account.id, amount: 65 });
-    const result = await helpers.bulkUpdateTransactions({ payload: { selection: { filters: { transactionIds: [] } }, note: 'must not change' }, raw: true });
-    expect(result.updatedIds).toEqual([]);
+    const existing = await createTx({ accountId: account.id, amount: 65 });
+    const summary = await helpers.getTransactionsSummary({ transactionIds: 'none', raw: true });
+    expect(summary).toMatchObject({ count: 0, expense: 0 });
+    const result = await helpers.bulkUpdateTransactions({ payload: { selection: { filters: { transactionIds: [] } }, note: 'must not change' } });
+    expect(result.statusCode).toBeGreaterThanOrEqual(400);
+    expect((await helpers.getTransactionById({ id: existing.id, raw: true }))?.note).not.toBe('must not change');
   });
 });
 

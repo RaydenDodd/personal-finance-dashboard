@@ -60,4 +60,5 @@ export const DEFAULT_FILTERS: FiltersStruct = {
   payeeIds: [],
   categorizationSource: null,
   batchId: null,
+  calendarIds: undefined,
 };

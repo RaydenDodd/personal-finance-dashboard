@@ -199,7 +199,7 @@ describe('parseStoredFilters legacy noteIncludes', () => {
   });
 });
 
- describe('calendar transaction drilldown', () => {
+describe('calendar transaction drilldown', () => {
   it('uses the exact same transaction IDs for the list, summary and bulk selection filters', async () => {
     const parsed = useFiltersFromQuery().parseFiltersFromQuery({ query: { calendarIds: 'a,b', start: '2026-11-13', end: '2026-11-13' } });
     const filters = buildFilterParams({ filter: makeFilters(parsed ?? {}) });
