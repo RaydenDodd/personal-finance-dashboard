@@ -3,7 +3,6 @@ import Accounts from '@models/accounts.model';
 import { connection } from '@models/index';
 import { findTransactions } from '@models/transactions-query';
 import { hasSettledStatus } from '@services/bank-data-providers/enablebanking/utils/transaction-metadata';
-import { listInvestmentGroupSources } from '@services/investments/groups';
 import { getFinanceAccounts } from '@services/personal-finance';
 import type { PrincipalTransferRule } from '@services/personal-finance/principal-types';
 import { Op, QueryTypes } from 'sequelize';
@@ -22,7 +21,7 @@ export async function getFundingCalendar({ userId, from, to }: { userId: number;
   const start = new Date(Date.parse(from) - 8 * 86400000);
   const end = new Date(Date.parse(to) + 9 * 86400000);
   const owner = userId === Number(process.env.FINANCE_OWNER_USER_ID || '1');
-  const [native, reporting, rules, mappings, rows, groupSources] = await Promise.all([
+  const [native, reporting, rules, mappings, rows] = await Promise.all([
     Accounts.findAll({ where: { userId }, attributes: ['id', 'name', 'accountCategory'] }),
     owner ? getFinanceAccounts(userId) : Promise.resolve([]),
     owner ? connection.sequelize.query(
@@ -38,9 +37,7 @@ export async function getFundingCalendar({ userId, from, to }: { userId: number;
       where: { time: { [Op.gte]: start, [Op.lt]: end } },
       attributes: ['id', 'accountId', 'time', 'amount', 'currencyCode', 'transactionType', 'transferNature', 'transferId', 'note', 'externalData', 'refundLinked', 'paymentParentId', 'excludeFromStats'],
     }),
-    listInvestmentGroupSources(userId),
   ]);
-  const groupByAccount = new Map(groupSources.map(a => [a.id,a.name]));
   const mapped = new Map<string, Set<FundingAccount['role']>>();
   const reportingById = new Map(reporting.map(a => [a.id, a]));
   const add = (id: string, category: string) => {
@@ -59,9 +56,8 @@ export async function getFundingCalendar({ userId, from, to }: { userId: number;
   const accounts: FundingAccount[] = native.map(a => {
     const roles = mapped.get(a.id);
     const role = a.accountCategory === Category.creditCard ? 'other' :
-      groupByAccount.has(a.id) ? 'Investments' :
       roles?.size === 1 ? [...roles][0]! : roles && roles.size > 1 ? 'other' : roleFor(a.accountCategory);
-    return { id: a.id, name: groupByAccount.get(a.id) ?? a.name, role };
+    return { id: a.id, name: a.name, role };
   });
   const entries = deriveFundingCalendar({
     accounts, rules, from, to,

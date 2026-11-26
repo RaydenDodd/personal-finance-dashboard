@@ -30,8 +30,6 @@
       </DemoRestricted>
     </div>
 
-    <InvestmentGroups v-if="!isDemo" />
-    <InvestmentFundingReview v-if="!isDemo" />
 
     <template v-if="portfoliosQuery.isLoading.value">
       <div class="mb-6 grid grid-cols-[repeat(auto-fill,minmax(min(100%,280px),1fr))] gap-4">
@@ -215,8 +213,6 @@ import { usePortfolios } from '@/composable/data-queries/portfolios';
 import { usePortfolioVisibility } from '@/composable/use-portfolio-visibility';
 import { cn } from '@/lib/utils';
 import PortfolioCardBalance from '@/pages/investments/components/portfolio-card-balance.vue';
-import InvestmentFundingReview from '@/components/common/investment-funding-review.vue';
-import InvestmentGroups from './components/investment-groups.vue';
 import PortfoliosTrash from '@/pages/investments/components/portfolios-trash.vue';
 import { ROUTES_NAMES } from '@/routes/constants';
 import { useCurrenciesStore, useUserStore } from '@/stores';

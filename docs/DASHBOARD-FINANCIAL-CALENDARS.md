@@ -10,3 +10,5 @@ Each day has a dominant-color tint and proportional segmented strip. Funding cat
 Both calendar widgets now also support 1×1. Compact tiles reduce padding, day-cell height, and text size, show one total per currency, and preserve hover breakdowns, color bands and date links. Existing default sizes remain unchanged. On unbounded mobile layouts, compact rows retain a usable minimum height.
 
 In desktop edit mode the calendar tile reserves the measured height of its toolbar instead of allowing the toolbar to obscure the last week. Other widgets retain their existing layout.
+
+Investment groups and group-dependent review are currently deferred. The funding calendar uses native account categories, existing Personal Finance account mappings/rules, and recognized brokerage payments; it does not read investment group mappings. Existing SimpleFIN synchronization is unchanged.

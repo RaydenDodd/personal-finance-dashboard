@@ -1,5 +1,3 @@
-import { listGroups, createGroup, updateGroup, deleteGroup } from '@controllers/investments/groups';
-import { listFundingReviews, getFundingReviewPurchases, resolveReview, snoozeReviewReminder, previewReviewCsv, applyReviewCsv, getNativeFundingOptions, recordReviewFunding } from '@controllers/investments/funding-review';
 import { isTestSeedingEnabled } from '@common/utils/env';
 import {
   estimateCostController as importEstimateCostController,
@@ -73,18 +71,6 @@ const router = Router({});
 // portfolios and deleting existing ones are blocked per-route below; admin-only
 // endpoints enforce their own access checks.
 router.use(authenticateSession);
-router.get('/funding-reviews', listFundingReviews);
-router.post('/funding-reviews/snooze', blockDemoUsers, snoozeReviewReminder);
-router.get('/funding-reviews/:id/purchases', getFundingReviewPurchases);
-router.get('/funding-reviews/:id/funding', getNativeFundingOptions);
-router.post('/funding-reviews/:id/funding', blockDemoUsers, checkBaseCurrencyLock, recordReviewFunding);
-router.post('/funding-reviews/:id/resolve', blockDemoUsers, resolveReview);
-router.post('/funding-reviews/:id/csv/preview', blockDemoUsers, previewReviewCsv);
-router.post('/funding-reviews/:id/csv/apply', blockDemoUsers, checkBaseCurrencyLock, applyReviewCsv);
-router.get('/groups', listGroups);
-router.post('/groups', blockDemoUsers, createGroup);
-router.put('/groups/:id', blockDemoUsers, updateGroup);
-router.delete('/groups/:id', blockDemoUsers, deleteGroup);
 router.get('/analytics', getAnalytics);
 router.get('/analytics/read-model', getAnalyticsReadModel);
 router.get('/analytics/history', getAccountHistoryController);
