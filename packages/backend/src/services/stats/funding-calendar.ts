@@ -25,14 +25,14 @@ export async function getFundingCalendar({ userId, from, to }: { userId: number;
   const [native, reporting, rules, mappings, rows, groupSources] = await Promise.all([
     Accounts.findAll({ where: { userId }, attributes: ['id', 'name', 'accountCategory'] }),
     owner ? getFinanceAccounts(userId) : Promise.resolve([]),
-    owner ? connection.sequelize.query<PrincipalTransferRule>(
+    owner ? connection.sequelize.query(
       'SELECT * FROM "PersonalFinancePrincipalTransferRules" WHERE "userId"=:userId AND "isEnabled"',
       { replacements: { userId }, type: QueryTypes.SELECT, logging: false },
-    ) : Promise.resolve([]),
-    owner ? connection.sequelize.query<{ bankHistoryMappings: { sourceAccountIds: string[]; nativeAccountIds: string[] }[] }>(
+    ) as Promise<PrincipalTransferRule[]> : Promise.resolve([]),
+    owner ? connection.sequelize.query(
       'SELECT "bankHistoryMappings" FROM "PersonalFinanceSettings" WHERE "userId"=:userId',
       { replacements: { userId }, type: QueryTypes.SELECT, logging: false },
-    ) : Promise.resolve([]),
+    ) as Promise<{ bankHistoryMappings: { sourceAccountIds: string[]; nativeAccountIds: string[] }[] }[]> : Promise.resolve([]),
     findTransactions({
       access: { accountOwner: userId }, planned: 'exclude', balanceAdjustments: 'exclude', transfers: 'include', completeness: 'all',
       where: { time: { [Op.gte]: start, [Op.lt]: end } },

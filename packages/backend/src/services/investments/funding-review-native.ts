@@ -24,7 +24,7 @@ async function candidates(userId:number,item:Item,transaction?:Transaction) {
       {transactionId:item.id},
       {toPortfolioId:{[Op.in]:portfolioIds},fromPortfolioId:null,currencyCode:item.currency,date:{[Op.between]:[shift(item.date,-7),shift(item.date,7)]}},
     ]},transaction}),
-    connection.sequelize.query<Link>('SELECT "transactionId","portfolioTransferId" FROM "InvestmentFundingNativeLinks" WHERE "userId"=:userId',{replacements:{userId},type:QueryTypes.SELECT,transaction}),
+    connection.sequelize.query('SELECT "transactionId","portfolioTransferId" FROM "InvestmentFundingNativeLinks" WHERE "userId"=:userId',{replacements:{userId},type:QueryTypes.SELECT,transaction}) as Promise<Link[]>,
   ]);
   const linkedIds=links.filter(l=>l.transactionId===item.id).map(l=>l.portfolioTransferId);
   // A prior association remains visible even if its amount/date was edited.

@@ -21,8 +21,8 @@ interface SourceAccount {
   providerName: string;
   isActive: boolean;
 }
-const read = <T extends object>(sql: string, replacements: Record<string, unknown>, transaction?: Transaction) =>
-  connection.sequelize.query<T>(sql, { replacements, type: QueryTypes.SELECT, transaction });
+const read = <T extends object>(sql: string, replacements: Record<string, unknown>, transaction?: Transaction): Promise<T[]> =>
+  connection.sequelize.query(sql, { replacements, type: QueryTypes.SELECT, transaction });
 const write = (sql: string, replacements: Record<string, unknown>, transaction: Transaction) =>
   connection.sequelize.query(sql, { replacements, transaction });
 const fail = (message: string): never => { throw new ValidationError({ message }); };
