@@ -325,7 +325,7 @@ it('keeps benchmark and custom range requests out of unrelated Dashboard tile ki
 });
 
 
-it('puts signed period returns beside the period toggle and persists the header chart mode', async () => {
+it('shows signed Dashboard period returns and persists the header chart mode', async () => {
   const period = ref({ from: new Date(2026, 9, 1), to: new Date(2026, 9, 31) });
   analytics.value = { currencyCode: 'USD', accountHistory: { gainFrom: '2026-10-01', dates: ['2026-10-31'], accounts: [], periodGains: ['247.82'], periodReturnPercent: ['0.83'] } };
   const widget = ref<DashboardWidgetConfig>({ widgetId: 'investment-performance', instanceId: 'performance-header', colSpan: 2, config: { unit: 'dollars' } });
@@ -337,7 +337,7 @@ it('puts signed period returns beside the period toggle and persists the header 
   const summary = wrapper.get('[data-testid="investment-performance-summary"]');
   expect(summary.text()).toContain('+$247.82');
   expect(summary.text()).toContain('+0.83%');
-  expect(summary.element.previousElementSibling?.getAttribute('aria-label')).toBe('Widget period');
+  expect(wrapper.find('[aria-label="Widget period"]').exists()).toBe(false);
   const modes = wrapper.get('[aria-label="Portfolio performance chart mode"]');
   expect(modes.findAll('button').map((button) => button.text())).toEqual(['$', '+/-', '%']);
   expect(modes.element.nextElementSibling).toBe(wrapper.get('[aria-label="Open Investments page"]').element);
@@ -347,4 +347,51 @@ it('puts signed period returns beside the period toggle and persists the header 
   expect(wrapper.findComponent({ name: 'AnalyticsPanel' }).props('settings').unit).toBe('gains');
   expect(summary.text()).toContain('+$247.82');
   wrapper.unmount();
+});
+
+it.each(['today', 'month'])('ignores legacy %s overrides and follows both Dashboard range boundaries', async (dashboardPeriod) => {
+  const period = ref({ from: new Date(2025, 8, 1), to: new Date(2025, 8, 30) });
+  const persist = vi.fn();
+  const mountKind = (kind: string) => mount(InvestmentWidget, {
+    global: {
+      provide: {
+        'dashboard-widget-config': ref({
+          widgetId: 'investment-' + kind, colSpan: 2,
+          config: { dashboardPeriod, dateRange: '1M', from: '2026-11-01', through: '2026-11-25', unit: 'gains' },
+        }),
+        'dashboard-period': period,
+        'dashboard-save-widget-config': persist,
+      },
+      stubs: { 'router-link': { template: '<a><slot/></a>' } },
+    },
+  });
+  const heatmap = mountKind('heatmap');
+  const performance = mountKind('performance');
+  const comparison = mountKind('portfolio-comparison');
+  const heatmapRequest = queryCalls[0]!;
+  const performanceRequest = historyCalls[1]!;
+  const comparisonRequest = historyCalls[2]!;
+  const settings = (wrapper: typeof heatmap) => wrapper.findComponent({ name: 'AnalyticsPanel' }).props('settings');
+  expect(toValue(heatmapRequest.performanceFrom)).toBe('2025-09-01');
+  expect(toValue(heatmapRequest.performanceThrough)).toBe('2025-09-30');
+  expect(toValue(performanceRequest.gainFrom)).toBe('2025-09-01');
+  expect(toValue(comparisonRequest.gainFrom)).toBe('2025-09-01');
+  for (const wrapper of [heatmap, performance, comparison]) {
+    expect(settings(wrapper)).toMatchObject({dateRange:'custom',from:'2025-09-01',through:'2025-09-30'});
+    expect(wrapper.find('[aria-label="Widget period"]').exists()).toBe(false);
+  }
+  period.value = { from: new Date(2025, 8, 1), to: new Date(2025, 8, 15) };
+  await nextTick();
+  expect(toValue(heatmapRequest.performanceThrough)).toBe('2025-09-15');
+  expect(settings(performance).through).toBe('2025-09-15');
+  period.value = { from: new Date(2025, 9, 2), to: new Date(2025, 9, 12) };
+  await nextTick();
+  expect(toValue(heatmapRequest.performanceFrom)).toBe('2025-10-02');
+  expect(toValue(heatmapRequest.performanceThrough)).toBe('2025-10-12');
+  expect(toValue(performanceRequest.gainFrom)).toBe('2025-10-02');
+  expect(toValue(comparisonRequest.gainFrom)).toBe('2025-10-02');
+  performance.findComponent({name:'AnalyticsPanel'}).vm.$emit('settings-change', {dashboardPeriod:'today'});
+  await nextTick();
+  expect(persist).not.toHaveBeenCalled();
+  for (const wrapper of [heatmap, performance, comparison]) wrapper.unmount();
 });

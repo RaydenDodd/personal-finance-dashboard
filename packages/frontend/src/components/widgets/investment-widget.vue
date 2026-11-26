@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { format, parseISO } from 'date-fns';
 import { computeTrendPeriods } from './cash-flow-widget/helpers';
-import { useMediaQuery, useResizeObserver } from '@vueuse/core';
+import { useResizeObserver } from '@vueuse/core';
 import { useDashboardPeriod } from './composables/use-dashboard-period';
 import { useModuleLayout } from './composables/use-module-layout';
 import type { DashboardWidgetConfig } from '@/api/user-settings';
@@ -22,12 +22,10 @@ import { computed, inject, provide, ref, unref, type Ref } from 'vue';
 import ErrorState from './components/error-state.vue';
 import LoadingState from './components/loading-state.vue';
 import WidgetWrapper from './components/widget-wrapper.vue';
-import WidgetHeaderControls from './components/widget-header-controls.vue';
 import InvestmentWidgetSettings from './investment-widget-settings.vue';
 import { INVESTMENT_WIDGET_DEFINITIONS, investmentWidgetKind, investmentWidgetSettings } from './investment-widgets';
 
 const { dashboardRange } = useDashboardPeriod();
-const mobileHeader = useMediaQuery('(max-width: 639px)');
 const { bounded } = useModuleLayout();
 const widget = inject<Ref<DashboardWidgetConfig>>('dashboard-widget-config')!;
 const persist =
@@ -35,10 +33,7 @@ const persist =
     'dashboard-save-widget-config',
   );
 const kind = computed(() => investmentWidgetKind(widget.value.widgetId) ?? 'overview');
-const hasPeriodControls = computed(
-  () => Boolean(dashboardRange.value) && ['performance', 'portfolio-comparison', 'heatmap'].includes(kind.value),
-);
-const inlinePerformanceHeader = computed(() => hasPeriodControls.value && kind.value === 'performance');
+const inlinePerformanceHeader = computed(() => Boolean(dashboardRange.value) && kind.value === 'performance');
 const chartModes = [
   { value: 'dollars', label: '$', title: 'Account value' },
   { value: 'gains', label: '+/-', title: 'Dollar gain / loss' },
@@ -83,6 +78,8 @@ const settings = computed(() =>
     ...optimisticSettings.value,
     ...(dashboardRange.value
       ? {
+          // Ignore legacy 1D/1M widget overrides whenever the Dashboard owns the range.
+          dashboardPeriod: undefined,
           dateRange: 'custom',
           from: ['contributions', 'dividends'].includes(kind.value)
             ? format(
@@ -98,25 +95,6 @@ const settings = computed(() =>
           colorBy: 'custom',
           performerPeriod: 'custom',
         }
-      : {}),
-    ...(dashboardRange.value &&
-    ['performance', 'portfolio-comparison', 'heatmap'].includes(kind.value) &&
-    ['today', 'month'].includes(
-      String(optimisticSettings.value.dashboardPeriod ?? widget.value.config?.dashboardPeriod),
-    )
-      ? (optimisticSettings.value.dashboardPeriod ?? widget.value.config?.dashboardPeriod) === 'month'
-        ? {
-            dateRange: '1M',
-            from: payrollToday().slice(0, 7) + '-01',
-            through: payrollToday(),
-            colorBy: 'custom',
-          }
-        : {
-            dateRange: '1D',
-            from: payrollToday(),
-            through: payrollToday(),
-            colorBy: 'daily',
-          }
       : {}),
     ...(kind.value === 'performance'
       ? {
@@ -220,7 +198,7 @@ const saveSettings = async (patch: Record<string, unknown>, close = false) => {
   if (dashboardRange.value) {
     patch = Object.fromEntries(
       Object.entries(patch).filter(
-        ([key]) => !['dateRange', 'from', 'through', 'colorBy', 'performerPeriod'].includes(key),
+        ([key]) => !['dashboardPeriod', 'dateRange', 'from', 'through', 'colorBy', 'performerPeriod'].includes(key),
       ),
     );
     if (!Object.keys(patch).length) return;
@@ -265,7 +243,6 @@ const saveSettings = async (patch: Record<string, unknown>, close = false) => {
   <WidgetWrapper
     :is-fetching="isFetching || isPending"
     :data-investment-widget="kind"
-    :compact-header="hasPeriodControls && mobileHeader && !inlinePerformanceHeader"
   >
     <template #title
       >{{ definition?.name ?? 'Investment analytics'
@@ -325,38 +302,13 @@ const saveSettings = async (patch: Record<string, unknown>, close = false) => {
         @save="saveSettings($event, true)"
       />
     </template>
-    <component
-      :is="mobileHeader && !inlinePerformanceHeader ? WidgetHeaderControls : 'div'"
-      :class="inlinePerformanceHeader ? 'mb-2 flex min-w-0 items-center gap-x-3' : mobileHeader ? '' : 'mb-2'"
-    >
-      <div
-        v-if="hasPeriodControls"
-        class="bg-muted/60 inline-flex shrink-0 gap-0.5 rounded-lg p-0.5"
-        data-chart-controls
-        role="group"
-        aria-label="Widget period"
-      >
-        <Button
-          v-for="[value, label] in [
-            ['today', '1D'],
-            ['month', '1M'],
-          ]"
-          :key="value"
-          size="sm"
-          class="h-7 px-2 text-xs"
-          :variant="(settings.dashboardPeriod === 'today' ? 'today' : 'month') === value ? 'secondary' : 'ghost'"
-          :aria-pressed="(settings.dashboardPeriod === 'today' ? 'today' : 'month') === value"
-          @click="saveSettings({ dashboardPeriod: value })"
-          >{{ label }}</Button
-        >
-      </div>
+    <div v-if="inlinePerformanceHeader" class="mb-2 flex min-w-0 items-center gap-x-3">
       <PerformanceSummary
-        v-if="inlinePerformanceHeader"
         :summary="summary"
         :currency="data?.currencyCode ?? 'USD'"
         :loading="isFetching || isPending"
       />
-    </component>
+    </div>
     <component
       ref="bodyRef"
       :is="bounded ? ScrollArea : 'div'"
