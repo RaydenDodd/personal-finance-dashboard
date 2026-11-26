@@ -11,7 +11,7 @@ describe('monthly finance calendar', () => {
     });
   });
   it('keeps an empty funding date explicitly empty', () => {
-    expect(calendarTransactionFilters('2026-11-13', false, []).calendarIds).toBe('none');
+    expect(calendarTransactionFilters('2026-11-13', false, [])).toMatchObject({ calendarIds: 'none' });
   });
   it('keeps tooltip totals and percentage denominators separate by currency', () => {
     const groups = summarizeDay([
