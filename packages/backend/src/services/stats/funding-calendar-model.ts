@@ -28,6 +28,7 @@ export interface FundingEntry {
   amount: number;
   currency: string;
   note: string;
+  destinationAccountId?: string;
 }
 
 const tracked = (role: FundingAccount['role'] | undefined): role is 'Investments' | 'Savings' =>
@@ -58,8 +59,8 @@ export function deriveFundingCalendar({ transactions, accounts, rules, ruleDesti
     if (!tx.eligible || tx.date < from || tx.date > to || !(tx.amount > 0)) continue;
     const source = byId.get(tx.accountId);
     if (!source) continue;
-    const emit = (group: Role, label: string, amount: number, note: string) =>
-      entries.push({ id: tx.id, date: tx.date, group, label, amount, currency: tx.currency, note });
+    const emit = (group: Role, label: string, amount: number, note: string, destinationAccountId?: string) =>
+      entries.push({ id: tx.id, date: tx.date, group, label, amount, currency: tx.currency, note, destinationAccountId });
     if (tx.type === Type.income) {
       // Never count the receiving leg of a transfer or a brokerage dividend as pay.
       if (!tx.transferId && tx.nature === Nature.not_transfer && source.role === 'spendable')
@@ -79,7 +80,7 @@ export function deriveFundingCalendar({ transactions, accounts, rules, ruleDesti
       if (!opposite || tx.currency !== opposite.currency || tx.amount !== opposite.amount) continue;
       const destination = byId.get(opposite.accountId);
       if (destination && tracked(destination.role) && source.role !== destination.role)
-        emit(destination.role, destination.name, tx.amount, 'Linked account transfer · ' + source.name);
+        emit(destination.role, destination.name, tx.amount, 'Linked account transfer · ' + source.name, destination.id);
       else if (destination?.role === 'spendable' && tracked(source.role))
         emit(source.role, source.name, -tx.amount, 'Withdrawal to ' + destination.name);
       continue;

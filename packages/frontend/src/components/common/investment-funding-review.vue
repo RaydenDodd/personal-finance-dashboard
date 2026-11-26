@@ -1,0 +1,98 @@
+<script setup lang="ts">
+import { api } from '@/api/_api';
+import { Button } from '@/components/lib/ui/button';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/lib/ui/dialog';
+import { ScrollArea } from '@/components/lib/ui/scroll-area';
+import { useIdleEnabled } from '@/composable/use-idle-enabled';
+import { ROUTES_NAMES } from '@/routes/constants';
+import { useAuthStore,useRootStore,useUserStore } from '@/stores';
+import { useQuery,useQueryClient } from '@tanstack/vue-query';
+import { computed,ref,watch } from 'vue';
+import { useRoute,useRouter } from 'vue-router';
+
+interface Item {id:string;date:string;amount:number;currency:string;label:string;groupName:string;portfolioId:string|null;portfolios:{id:string;name:string}[];fingerprint:string;reason:string}
+interface Purchase {id:string;symbol:string;date:string;quantity:string;amount:number;currency:string;alreadyLinked:boolean}
+interface Response {items:Item[];reminderDue:boolean;lookbackFrom:string}
+const props=defineProps<{reminder?:boolean}>();
+const auth=useAuthStore(),root=useRootStore(),user=useUserStore(),route=useRoute(),router=useRouter();
+const idle=useIdleEnabled(),client=useQueryClient();
+const userId=computed(()=>user.user?.id);
+const query=useQuery({queryKey:computed(()=>['investment-funding-reviews',userId.value]),queryFn:()=>api.get('/investments/funding-reviews') as Promise<Response>,enabled:computed(()=>!!auth.isLoggedIn&&root.isAppInitialized&&userId.value!=null&&!user.isDemo&&(!props.reminder||idle.value)),staleTime:60000});
+const items=computed(()=>query.data.value?.items??[]);
+const open=ref(false),shown=ref(false),busy=ref(false),error=ref('');
+const selected=ref<Item|null>(null),portfolio=ref(''),chosen=ref<string[]>([]),cash=ref(false);
+const purchases=useQuery({queryKey:computed(()=>['investment-review-purchases',userId.value,selected.value?.id,portfolio.value]),queryFn:()=>api.get('/investments/funding-reviews/'+selected.value!.id+'/purchases',{portfolioId:portfolio.value}) as Promise<Purchase[]>,enabled:computed(()=>!props.reminder&&!!selected.value&&!!portfolio.value)});
+const total=computed(()=> (purchases.data.value??[]).filter(t=>chosen.value.includes(t.id)).reduce((n,t)=>n+t.amount,0));
+const money=(n:number,c:string)=>new Intl.NumberFormat(undefined,{style:'currency',currency:c}).format(n);
+watch(userId,()=>{shown.value=false;open.value=false;selected.value=null;});
+watch(()=>query.data.value, result=>{if(props.reminder&&result?.reminderDue&&!shown.value){shown.value=true;open.value=true;}},{immediate:true});
+watch(portfolio,()=>{chosen.value=[];cash.value=false;error.value='';});
+function review(item:Item){selected.value=item;portfolio.value=item.portfolioId??(item.portfolios.length===1?item.portfolios[0]!.id:'');chosen.value=[];cash.value=false;error.value='';open.value=true;}
+async function later(){busy.value=true;error.value='';try{await api.post('/investments/funding-reviews/snooze');open.value=false;await client.invalidateQueries({queryKey:['investment-funding-reviews']});}catch{error.value='Could not save reminder preference.';}finally{busy.value=false;}}
+async function go(){open.value=false;await router.push({name:ROUTES_NAMES.investments,query:{review:'1'}});}
+watch(()=>route.query.review,value=>{if(!props.reminder&&value==='1')void query.refetch();},{immediate:true});
+async function resolve(){if(!selected.value||!portfolio.value)return;busy.value=true;error.value='';try{await api.post('/investments/funding-reviews/'+selected.value.id+'/resolve',{portfolioId:portfolio.value,fingerprint:selected.value.fingerprint,tradeIds:chosen.value,cashRetained:cash.value});open.value=false;selected.value=null;await client.invalidateQueries({queryKey:['investment-funding-reviews']});}catch{error.value='Could not resolve. A purchase may already be linked, or the activity changed. Refresh and try again.';}finally{busy.value=false;}}
+</script>
+<template>
+  <section v-if="!reminder" class="mb-6 space-y-3">
+    <div class="flex items-center justify-between gap-2">
+      <h2 class="text-lg font-semibold">Investment activity review <span v-if="items.length" class="text-muted-foreground text-sm">({{ items.length }})</span></h2>
+      <Button variant="outline" size="sm" @click="query.refetch()">Refresh</Button>
+    </div>
+    <p class="text-muted-foreground text-xs">Review recent contributions after three days. Purchases are not assumed from deposits; cash may remain uninvested.</p>
+    <p v-if="query.isPending.value" class="text-muted-foreground text-sm">Checking investment activity…</p>
+    <p v-else-if="query.isError.value" class="text-destructive text-sm">Could not load investment reviews.</p>
+    <p v-else-if="!items.length" class="text-muted-foreground text-sm">No outstanding mapped contributions in the last 90 days.</p>
+    <div v-for="item in items" :key="item.id" class="flex flex-wrap items-center justify-between gap-3 rounded-md border p-3">
+      <div><strong>{{ item.groupName }} · {{ money(item.amount,item.currency) }}</strong><p class="text-muted-foreground text-xs">{{ item.date }} · {{ item.reason }}</p></div>
+      <Button size="sm" @click="review(item)">Review</Button>
+    </div>
+  </section>
+  <Dialog v-model:open="open">
+    <DialogContent>
+      <DialogHeader>
+        <DialogTitle>{{ reminder ? 'Investment activity needs review' : 'Review contribution' }}</DialogTitle>
+        <DialogDescription>{{ reminder ? 'Recent investment payments have not been reviewed against purchases or retained cash.' : 'Select the actual destination and link existing purchases. This does not create another deposit or change cash or holdings.' }}</DialogDescription>
+      </DialogHeader>
+      <template v-if="reminder">
+        <ScrollArea class="max-h-[40vh] min-h-0" viewport-class="pr-3">
+          <div class="space-y-2">
+            <div v-for="item in items.slice(0,10)" :key="item.id" class="flex justify-between gap-2 rounded border p-3 text-sm">
+              <span>{{ item.groupName }}<small class="text-muted-foreground block">{{ item.date }}</small></span><strong>{{ money(item.amount,item.currency) }}</strong>
+            </div>
+            <p v-if="items.length>10" class="text-muted-foreground text-xs">And {{ items.length-10 }} more</p>
+          </div>
+        </ScrollArea>
+        <p v-if="error" class="text-destructive text-sm">{{ error }}</p>
+        <DialogFooter><Button variant="outline" :disabled="busy" @click="later">Remind me tomorrow</Button><Button @click="go">Review investment activity</Button></DialogFooter>
+      </template>
+      <template v-else-if="selected">
+        <ScrollArea class="max-h-[60vh] min-h-0" viewport-class="pr-3">
+          <div class="space-y-3 text-sm">
+            <p class="font-semibold">{{ selected.groupName }} · {{ money(selected.amount,selected.currency) }} · {{ selected.date }}</p>
+            <label class="block">Destination portfolio
+              <select v-model="portfolio" :disabled="!!selected.portfolioId" class="bg-background block w-full rounded border p-2"><option value="">Select portfolio</option><option v-for="p in selected.portfolios" :key="p.id" :value="p.id">{{ p.name }}</option></select>
+            </label>
+            <template v-if="portfolio">
+              <div class="flex flex-wrap gap-2">
+                <Button variant="outline" size="sm" as-child><RouterLink :to="{name:ROUTES_NAMES.portfolioDetail,params:{portfolioId:portfolio}}" @click="open=false">Enter purchases</RouterLink></Button>
+                <Button variant="outline" size="sm" @click="purchases.refetch()">Refresh purchases</Button>
+              </div>
+              <p v-if="purchases.isPending.value">Loading recorded purchases…</p>
+              <p v-else-if="purchases.isError.value" class="text-destructive">Could not load purchases.</p>
+              <p v-else-if="!purchases.data.value?.length" class="text-muted-foreground">No recorded purchases in this review window.</p>
+              <label v-for="trade in purchases.data.value??[]" :key="trade.id" class="flex items-center gap-2 rounded border p-2" :class="trade.alreadyLinked?'opacity-50':''">
+                <input v-model="chosen" type="checkbox" :value="trade.id" :disabled="trade.alreadyLinked"/><span class="flex-1">{{ trade.symbol }} · {{ trade.quantity }} shares <small class="text-muted-foreground block">{{ trade.date }}{{ trade.alreadyLinked?' · already linked':'' }}</small></span><strong>{{ money(trade.amount,trade.currency) }}</strong>
+              </label>
+              <p>Selected purchases: <strong>{{ money(total,selected.currency) }}</strong></p>
+              <p class="text-muted-foreground text-xs">Cash is fungible. Only select purchases you have reviewed against this contribution.</p>
+              <label class="flex items-start gap-2"><input v-model="cash" type="checkbox"/> <span>I confirm any remaining contribution was intentionally held in cash.</span></label>
+            </template>
+            <p v-if="error" class="text-destructive" role="alert">{{ error }}</p>
+          </div>
+        </ScrollArea>
+        <DialogFooter><Button variant="outline" @click="open=false">Cancel</Button><Button :disabled="busy||!portfolio||(!cash&&total<selected.amount-0.01)" @click="resolve">Resolve review</Button></DialogFooter>
+      </template>
+    </DialogContent>
+  </Dialog>
+</template>

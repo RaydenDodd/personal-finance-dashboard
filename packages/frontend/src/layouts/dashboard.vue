@@ -38,11 +38,13 @@
     <!-- Share invitation dialog: opens whenever ?invitation_token=… is in the URL.
          Email links + in-app notifications deep-link via this query param. -->
     <ShareInvitationDialog :token="invitationToken" @close="clearInvitationToken" />
+    <InvestmentFundingReview reminder />
   </div>
 </template>
 
 <script lang="ts" setup>
 import { useHead } from '@unhead/vue';
+import InvestmentFundingReview from '@/components/common/investment-funding-review.vue';
 import BottomNavbar from '@/components/bottom-navbar.vue';
 import ShareInvitationDialog from '@/components/dialogs/share-invitation-dialog.vue';
 import { ScrollArea } from '@/components/lib/ui/scroll-area';
