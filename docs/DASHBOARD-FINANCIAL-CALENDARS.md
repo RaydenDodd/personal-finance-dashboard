@@ -6,3 +6,5 @@ Two optional, independently navigable main Dashboard widgets. Both use the actua
 - **Spending Calendar** uses the existing split-aware, refund-netting pivot engine with internal daily buckets and root category colors. Tooltips show net category totals; the Transactions page displays underlying ledger expenses, which can differ from net report totals.
 
 Each day has a dominant-color tint and proportional segmented strip. Funding categories are not additive income. Requests are limited to a month; a padded bank transaction query captures cross-month transfer legs. No provider requests, full investment analytics or Sheets history reads. Read-only; no migration or financial writes. The exact-ID drilldown requires rebuilding both backend and frontend. Verify actual M1 rows and other destinations on the deployed dashboard before claiming coverage.
+
+Both calendar widgets now also support 1×1. Compact tiles reduce padding, day-cell height, and text size, show one total per currency, and preserve hover breakdowns, color bands and date links. Existing default sizes remain unchanged. On unbounded mobile layouts, compact rows retain a usable minimum height.

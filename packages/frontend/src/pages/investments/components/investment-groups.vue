@@ -2,12 +2,12 @@
 import { api } from '@/api/_api';
 import { Button } from '@/components/lib/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/lib/ui/card';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/lib/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/lib/ui/dialog';
 import { ScrollArea } from '@/components/lib/ui/scroll-area';
 import { VUE_QUERY_GLOBAL_PREFIXES } from '@/common/const';
 import { ROUTES_NAMES } from '@/routes/constants';
 import { useQuery, useQueryClient } from '@tanstack/vue-query';
-import { FolderPlusIcon, PencilIcon, Trash2Icon } from '@lucide/vue';
+import { FolderPlusIcon, PencilIcon, Trash2Icon, RefreshCwIcon } from '@lucide/vue';
 import { computed, ref } from 'vue';
 
 interface Group {
@@ -52,6 +52,7 @@ function edit(group?: Group) {
 async function refresh() {
   await Promise.all([
     client.invalidateQueries({ queryKey: ['investment-account-groups'] }),
+    client.invalidateQueries({ queryKey: ['investment-funding-reviews'] }),
     client.invalidateQueries({ queryKey: [VUE_QUERY_GLOBAL_PREFIXES.transactionChange, 'calendar-funding'] }),
   ]);
 }
@@ -80,17 +81,16 @@ async function remove() {
 </script>
 
 <template>
-  <section class="mb-6 space-y-3">
+  <section class="mb-4 space-y-2">
     <div class="flex flex-wrap items-center justify-between gap-2">
       <h2 class="text-lg font-semibold">Investment groups</h2>
-      <Button variant="outline" :disabled="!data" @click="edit()"><FolderPlusIcon class="size-4"/> Create group</Button>
+      <Button variant="outline" size="sm" :disabled="!data" aria-label="Create group" title="Create group" @click="edit()"><FolderPlusIcon class="size-4"/><span class="hidden sm:inline">Create group</span></Button>
     </div>
-    <p class="text-muted-foreground text-xs">Organize portfolios by brokerage and map a shared SimpleFIN account. Grouping does not change balances or existing net-worth exclusions.</p>
     <p v-if="query.isPending.value" class="text-muted-foreground text-sm">Loading investment groups…</p>
     <div v-else-if="query.isError.value" class="flex items-center gap-2 text-sm" role="alert">
-      Unable to load investment groups. <Button size="sm" variant="outline" @click="query.refetch()">Retry</Button>
+      Unable to load groups. <Button size="icon-sm" variant="outline" aria-label="Retry" title="Retry" @click="query.refetch()"><RefreshCwIcon class="size-4"/></Button>
     </div>
-    <p v-else-if="!groups.length" class="text-muted-foreground rounded-md border border-dashed p-4 text-sm">No groups yet. Create a group for a brokerage such as M1 or Robinhood.</p>
+    <p v-else-if="!groups.length" class="text-muted-foreground text-xs">No groups</p>
     <div v-else class="grid grid-cols-[repeat(auto-fit,minmax(min(100%,260px),1fr))] gap-3">
       <Card v-for="group in groups" :key="group.id">
         <CardHeader class="flex flex-row items-center justify-between gap-2 p-4 pb-2">
@@ -105,13 +105,14 @@ async function remove() {
       </Card>
     </div>
     <Dialog v-model:open="open">
-      <DialogContent>
+      <DialogContent class="h-[min(88dvh,44rem)] max-h-[88dvh] min-h-0 gap-3 overflow-hidden p-4 sm:p-6">
         <DialogHeader>
           <DialogTitle>{{ editing ? 'Edit investment group' : 'Create investment group' }}</DialogTitle>
-          <DialogDescription>One source account may represent multiple portfolios. No money moves when you save.</DialogDescription>
+          <DialogDescription class="sr-only">Choose a source account and member portfolios. Balances are unchanged.</DialogDescription>
         </DialogHeader>
-        <ScrollArea class="min-h-0 max-h-[60vh]" viewport-class="pr-3">
-          <form class="space-y-4" @submit.prevent="save">
+        <form class="flex min-h-0 flex-1 flex-col" @submit.prevent="save">
+          <ScrollArea class="min-h-0 flex-1 basis-0" viewport-class="pr-3" type="auto">
+            <div class="space-y-3 pb-2">
             <label class="block space-y-1 text-sm"><span>Group name</span><input v-model="name" required maxlength="100" class="bg-background block w-full rounded-md border p-2" placeholder="M1 Finance"/></label>
             <label class="block space-y-1 text-sm"><span>SimpleFIN account (optional)</span>
               <select v-model="source" class="bg-background block w-full rounded-md border p-2">
@@ -124,22 +125,25 @@ async function remove() {
             </label>
             <fieldset class="space-y-2">
               <legend class="mb-2 text-sm font-medium">Member portfolios</legend>
-              <label v-for="portfolio in data?.portfolios ?? []" :key="portfolio.id" class="flex items-center gap-2 rounded border p-2 text-sm" :class="occupied.has(portfolio.id) ? 'opacity-50' : ''">
-                <input v-model="members" type="checkbox" :value="portfolio.id" :disabled="occupied.has(portfolio.id)" />
+              <label v-for="portfolio in data?.portfolios ?? []" :key="portfolio.id" class="flex cursor-pointer items-center gap-2 rounded border p-2 text-sm" :class="occupied.has(portfolio.id) ? 'opacity-50' : ''">
+                <input v-model="members" type="checkbox" class="size-4 shrink-0 accent-primary" :value="portfolio.id" :disabled="occupied.has(portfolio.id)" />
                 <span>{{ portfolio.name }} <span v-if="!portfolio.isEnabled" class="text-muted-foreground text-xs">(excluded from net worth)</span><span v-if="occupied.has(portfolio.id)" class="text-muted-foreground text-xs"> — already grouped</span></span>
               </label>
             </fieldset>
-            <p v-if="error" class="text-destructive text-sm" role="alert">{{ error }}</p>
+            </div>
+          </ScrollArea>
+          <p v-if="error" class="text-destructive shrink-0 text-sm" role="alert">{{ error }}</p>
+          <DialogFooter class="shrink-0 border-t pt-3">
             <div v-if="deleting" class="space-y-2 rounded border p-3 text-sm">
               <p>Delete this group? Portfolios, transactions and balances are preserved.</p>
               <div class="flex gap-2"><Button type="button" variant="destructive" :disabled="busy" @click="remove">Confirm delete</Button><Button type="button" variant="outline" @click="deleting=false">Cancel</Button></div>
             </div>
-            <div v-else class="flex flex-wrap justify-between gap-2">
-              <Button v-if="editing" type="button" variant="ghost" :disabled="busy" @click="deleting=true"><Trash2Icon class="size-4"/> Delete group</Button>
+            <div v-else class="flex w-full items-center justify-between gap-2">
+              <Button v-if="editing" type="button" variant="ghost" :disabled="busy" aria-label="Delete group" title="Delete group" @click="deleting=true"><Trash2Icon class="size-4"/><span class="hidden sm:inline">Delete group</span></Button>
               <Button type="submit" class="ml-auto" :disabled="busy || !name.trim() || !members.length">Save group</Button>
             </div>
-          </form>
-        </ScrollArea>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   </section>

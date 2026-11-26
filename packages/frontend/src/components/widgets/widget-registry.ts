@@ -382,6 +382,7 @@ for (const [id, name, description] of [
     id, name, description, literalLabels: true, allowMultiple: true,
     defaultColSpan: 2, defaultRowSpan: 2,
     allowedSizes: [
+      { colSpan: 1, rowSpan: 1, label: '1×1' },
       { colSpan: 1, rowSpan: 2, label: '1×2' },
       { colSpan: 2, rowSpan: 2, label: '2×2' },
       { colSpan: 3, rowSpan: 2, label: '3×2' },

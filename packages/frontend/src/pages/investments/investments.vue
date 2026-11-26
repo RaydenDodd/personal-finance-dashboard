@@ -1,28 +1,31 @@
 <template>
   <PageWrapper>
-    <div class="mb-6 flex flex-wrap items-center justify-between gap-x-8 gap-y-4">
+    <div class="mb-4 flex flex-wrap items-center justify-between gap-2 sm:gap-x-8">
       <h1 class="text-2xl tracking-wider">{{ $t('investments.title') }}</h1>
       <UiButton
         v-if="hiddenCount"
         variant="ghost"
         size="sm"
         :aria-pressed="showHidden"
+        :aria-label="showHidden ? 'Hide hidden portfolios' : `Show hidden (${hiddenCount})`"
+        :title="showHidden ? 'Hide hidden portfolios' : `Show hidden (${hiddenCount})`"
         @click="showHidden = !showHidden"
       >
         <EyeOffIcon class="size-4" />
-        {{ showHidden ? 'Hide hidden portfolios' : `Show hidden (${hiddenCount})` }}
+        <span class="hidden sm:inline">{{ showHidden ? 'Hide hidden portfolios' : `Show hidden (${hiddenCount})` }}</span>
+        <span v-if="!showHidden" class="sm:hidden">{{ hiddenCount }}</span>
       </UiButton>
 
       <DemoRestricted feature="create_portfolio_header" :message="$t('demo.featureNotAvailable')">
         <CreatePortfolioDialog v-if="!isDemo">
-          <UiButton>
+          <UiButton :aria-label="$t('investments.createButton')" :title="$t('investments.createButton')">
             <PlusIcon class="size-4" />
-            {{ $t('investments.createButton') }}
+            <span class="hidden sm:inline">{{ $t('investments.createButton') }}</span>
           </UiButton>
         </CreatePortfolioDialog>
         <UiButton v-else disabled>
           <PlusIcon class="size-4" />
-          {{ $t('investments.createButton') }}
+          <span class="hidden sm:inline">{{ $t('investments.createButton') }}</span>
         </UiButton>
       </DemoRestricted>
     </div>
@@ -31,7 +34,7 @@
     <InvestmentFundingReview v-if="!isDemo" />
 
     <template v-if="portfoliosQuery.isLoading.value">
-      <div class="mb-6 grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4">
+      <div class="mb-6 grid grid-cols-[repeat(auto-fill,minmax(min(100%,280px),1fr))] gap-4">
         <Card v-for="i in 3" :key="i" class="overflow-hidden">
           <CardHeader class="p-4 pb-2">
             <div class="flex items-start gap-3">
@@ -61,7 +64,7 @@
     </template>
 
     <template v-else-if="portfolios.length">
-      <div class="mb-6 grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4">
+      <div class="mb-6 grid grid-cols-[repeat(auto-fill,minmax(min(100%,280px),1fr))] gap-4">
         <template v-for="portfolio in portfolios" :key="portfolio.id">
           <Card
             :class="
@@ -71,21 +74,6 @@
               )
             "
           >
-            <!-- Disabled overlay indicator -->
-            <div
-              v-if="!portfolio.isEnabled"
-              class="to-muted/20 pointer-events-none absolute inset-0 z-10 bg-linear-to-br from-transparent via-transparent"
-            >
-              <div class="absolute top-3 left-3">
-                <div
-                  class="bg-secondary text-secondary-foreground inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
-                >
-                  <EyeOffIcon class="mr-1 size-3" />
-                  {{ isHidden(portfolio.id) ? 'Hidden' : 'Excluded from net worth' }}
-                </div>
-              </div>
-            </div>
-
             <!-- Menu button -->
             <div class="absolute top-3 right-3 z-20">
               <DropdownMenu>
@@ -93,7 +81,7 @@
                   <UiButton
                     variant="ghost"
                     size="icon"
-                    class="size-8 opacity-0 transition-opacity group-hover:opacity-100"
+                    class="size-8 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
                     :aria-label="`Actions for ${portfolio.name}`"
                     :class="{ 'opacity-100': !portfolio.isEnabled }"
                   >
@@ -150,7 +138,7 @@
               class="block h-full"
             >
               <CardHeader class="p-4 pb-2">
-                <div class="flex items-start gap-3">
+                <div class="flex items-start gap-3 pr-7">
                   <PortfolioLogo :portfolio="portfolio" class="size-10" />
                   <div class="min-w-0 flex-1">
                     <h3 class="truncate text-base leading-tight font-semibold tracking-tight">
@@ -159,6 +147,7 @@
                     <p class="text-muted-foreground mt-0.5 text-xs">
                       {{ $t('investments.card.portfolioType', { type: formatPortfolioType(portfolio.portfolioType) }) }}
                     </p>
+                    <span v-if="!portfolio.isEnabled" class="text-muted-foreground mt-1 inline-flex items-center gap-1 text-[10px]"><EyeOffIcon class="size-3"/>{{ isHidden(portfolio.id) ? 'Hidden' : 'Excluded from net worth' }}</span>
                   </div>
                 </div>
               </CardHeader>
@@ -167,7 +156,7 @@
                 <PortfolioCardBalance :portfolio-id="portfolio.id" :currencies="currencies" />
 
                 <!-- Description -->
-                <p v-if="portfolio.description" class="text-muted-foreground mt-3 line-clamp-2 text-xs leading-relaxed">
+                <p v-if="portfolio.description && portfolio.isEnabled" class="text-muted-foreground mt-3 line-clamp-2 text-xs leading-relaxed">
                   {{ portfolio.description }}
                 </p>
               </CardContent>

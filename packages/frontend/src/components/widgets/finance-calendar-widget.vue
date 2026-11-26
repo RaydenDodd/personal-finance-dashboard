@@ -19,6 +19,7 @@ import { calendarRoles, fundingEntries, monthBounds, monthCells, spendingEntries
 
 const config = inject<Ref<DashboardWidgetConfig>>('dashboard-widget-config')!;
 const spending = computed(() => config.value.widgetId === 'spending-calendar');
+const compact = computed(() => (config.value.rowSpan ?? 1) === 1 || config.value.colSpan === 1);
 const { dashboardRange } = useDashboardPeriod();
 const { bounded } = useModuleLayout();
 const today = payrollToday();
@@ -67,47 +68,48 @@ const retry = () => { if (spending.value) void spend.refetch(); else void fundin
 </script>
 
 <template>
-  <WidgetWrapper :is-fetching="fetching" content-class="gap-3" class="min-w-0">
-    <template #title>{{ spending ? 'Spending Calendar' : 'Income & Contributions Calendar' }}</template>
+  <WidgetWrapper :is-fetching="fetching" :compact-header="compact" :content-class="compact ? 'gap-1.5 px-2 pb-2 sm:px-3 sm:pb-3' : 'gap-3'" class="min-w-0 @container/calendar">
+    <template #title><span :class="compact ? 'text-sm' : ''" :title="spending ? 'Spending Calendar' : 'Income & Contributions Calendar'">{{ spending ? 'Spending Calendar' : compact ? 'Income & Contributions' : 'Income & Contributions Calendar' }}</span></template>
     <div class="flex items-center justify-between gap-2">
       <Button variant="ghost" size="icon-sm" aria-label="Previous calendar month" @click="move(-1)"><ChevronLeftIcon class="size-4" /></Button>
-      <strong class="text-sm">{{ monthName }}</strong>
+      <strong class="text-sm" :class="compact ? 'text-xs' : ''">{{ monthName }}</strong>
       <Button variant="ghost" size="icon-sm" aria-label="Next calendar month" :disabled="month >= today.slice(0, 7)" @click="move(1)"><ChevronRightIcon class="size-4" /></Button>
     </div>
-    <div v-if="!spending" class="flex flex-wrap gap-x-3 gap-y-1 text-xs">
+    <div v-if="!spending" class="flex shrink-0 flex-wrap gap-x-2 gap-y-0.5" :class="compact ? 'text-[10px]' : 'text-xs'">
       <span v-for="role in calendarRoles" :key="role.group" class="inline-flex items-center gap-1">
         <span class="size-2 rounded-full" :style="{ backgroundColor: role.color }" />{{ role.group }}
       </span>
     </div>
-    <p v-if="pending" class="text-muted-foreground text-xs" role="status">Loading recorded activity…</p>
+    <span v-if="pending" class="sr-only" role="status">Loading activity…</span>
     <div v-if="failed" class="flex flex-wrap items-center gap-2 text-xs" role="alert">
       <span class="text-destructive">Some calendar data could not be loaded.</span>
       <Button size="sm" variant="outline" @click="retry">Retry</Button>
     </div>
     <TooltipProvider :delay-duration="150">
-      <div class="grid grid-cols-7 gap-1 text-center text-xs"
-        :class="bounded ? 'flex-1' : 'shrink-0'"
-        :style="{ gridTemplateRows: 'auto repeat(' + cells.length / 7 + ', minmax(3rem, 1fr))' }"
+      <div class="grid grid-cols-7 text-center"
+        :class="[bounded ? 'min-h-0 flex-1' : 'shrink-0', compact ? 'gap-0.5 text-[10px]' : 'gap-1 text-xs']"
+        :style="{ gridTemplateRows: 'auto repeat(' + cells.length / 7 + ', minmax(' + (compact ? (bounded ? '0' : '2.25rem') : '3rem') + ', 1fr))' }"
         :aria-label="spending ? 'Spending calendar' : 'Income and contributions calendar'">
-        <span v-for="day in ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']" :key="day" class="text-muted-foreground">{{ day }}</span>
+        <span v-for="day in ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']" :key="day" class="text-muted-foreground">{{ compact ? day.slice(0, 1) : day }}</span>
         <template v-for="(cell, index) in cells" :key="index">
           <Tooltip v-if="cell">
             <TooltipTrigger as-child>
               <button type="button"
-                class="relative flex min-h-12 min-w-0 flex-col overflow-hidden rounded-md border px-1 pb-2 pt-1 text-left tabular-nums focus-visible:ring-2 focus-visible:ring-ring"
-                :class="[cell.date <= today ? 'cursor-pointer hover:bg-muted/50' : 'opacity-50', !cell.groups.length ? 'text-muted-foreground' : '']"
+                class="relative flex min-w-0 flex-col overflow-hidden border text-left tabular-nums focus-visible:ring-2 focus-visible:ring-ring"
+                
+                :class="[compact ? 'min-h-0 rounded-sm px-0.5 pb-1 leading-tight' : 'min-h-12 rounded-md px-1 pb-2 pt-1', cell.date <= today ? 'cursor-pointer hover:bg-muted/50' : 'opacity-50', !cell.groups.length ? 'text-muted-foreground' : '']"
                 :style="cell.groups.length ? { backgroundColor: cell.groups[0]!.color + '18' } : undefined"
                 :disabled="cell.date > today || (!spending && (pending || failed))"
                 :aria-label="cell.date + ': ' + (cell.groups.map(g => g.group + ' ' + money(g.amount, g.currency)).join(', ') || (pending || failed ? 'Activity unavailable' : 'No recorded activity')) + '. View transactions'"
                 @click="openDate(cell.date, cell.ids)">
                 <span class="font-medium">{{ cell.day }}</span>
-                <template v-if="spending">
-                  <span v-for="total in cell.totals" :key="total.currency" class="truncate text-[10px] font-semibold">{{ money(total.amount, total.currency, true) }}</span>
+                <template v-if="spending || compact">
+                  <span v-for="total in cell.totals" :key="total.currency" class="truncate font-semibold" :class="compact ? 'text-[9px]' : 'text-[10px]'">{{ money(spending ? total.amount : total.activity, total.currency, true) }}</span>
                 </template>
                 <template v-else>
                   <span v-for="group in cell.groups" :key="group.group + group.currency" class="truncate text-[10px] font-semibold">{{ money(group.amount, group.currency, true) }}</span>
                 </template>
-                <span v-if="cell.groups.length" class="absolute inset-x-0 bottom-0 flex h-1.5 overflow-hidden" aria-hidden="true">
+                <span v-if="cell.groups.length" class="absolute inset-x-0 bottom-0 flex overflow-hidden" :class="compact ? 'h-0.5' : 'h-1.5'" aria-hidden="true">
                   <span v-for="group in cell.groups" :key="group.group + group.currency" :style="{ width: group.width + '%', backgroundColor: group.color }" />
                 </span>
               </button>

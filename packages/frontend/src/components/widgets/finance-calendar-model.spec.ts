@@ -30,6 +30,7 @@ describe('monthly finance calendar', () => {
     expect(monthCells('2024-02').slice(0, 4)).toEqual([null, null, null, null]);
     expect(monthCells('2026-11')).toHaveLength(35);
     expect(monthCells('2026-08')).toHaveLength(42);
+    expect(monthCells('2026-02')).toHaveLength(28);
   });
   it('colors actual funding transactions without a separate payroll or principal source', () => {
     expect(fundingEntries({ entries: [{ id: 'a', date: '2026-11-21', group: 'Investments', label: 'M1', amount: 200, currency: 'USD' }] }))
@@ -58,3 +59,5 @@ describe('monthly finance calendar', () => {
     expect(entries.map(r => r.color)).toEqual(['#ef4444', '#123456']);
   });
 });
+
+// The compact layout must still fit every possible month (including six weeks).
